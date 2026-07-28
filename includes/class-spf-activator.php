@@ -63,3 +63,4 @@ final class SPF_Activator {
 		);
 	}
 }
+

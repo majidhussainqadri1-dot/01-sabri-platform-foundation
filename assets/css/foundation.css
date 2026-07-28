@@ -3,3 +3,4 @@
 @media(max-width:960px){.spf-card-grid-featured{grid-template-columns:repeat(2,minmax(0,1fr))}.spf-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.spf-hero{grid-template-columns:1fr}.spf-account-actions .spf-register{display:none}}
 @media(max-width:782px){.admin-bar .spf-top-nav{top:46px}}
 @media(max-width:620px){.spf-top-nav{padding:7px 8px}.spf-brand{flex-basis:38px;height:38px}.spf-account-actions{display:none}.spf-hero,.spf-module-hero{margin:10px 8px;padding:23px 18px}.spf-section{padding:20px 8px}.spf-card-grid,.spf-card-grid-featured{grid-template-columns:1fr}.spf-section-heading{align-items:start;flex-direction:column}.spf-search{flex-direction:column}.spf-search button{min-height:44px}}
+

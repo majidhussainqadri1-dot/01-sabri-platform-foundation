@@ -121,3 +121,4 @@ final class SPF_Plugin {
 		<?php
 	}
 }
+

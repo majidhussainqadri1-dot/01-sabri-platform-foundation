@@ -1,0 +1,2 @@
+(function(){'use strict';document.addEventListener('click',function(event){var button=event.target.closest('[data-spf-filter]');if(!button){return;}var root=button.closest('.spf-platform');if(!root){return;}var filter=button.getAttribute('data-spf-filter');root.querySelectorAll('[data-spf-filter]').forEach(function(item){item.classList.toggle('is-active',item===button);});root.querySelectorAll('[data-spf-group]').forEach(function(group){group.hidden=filter!=='all'&&group.getAttribute('data-spf-group')!==filter;});});})();
+

@@ -1,8 +1,6 @@
 <?php
 /** Actual WordPress/MySQL runtime smoke and integration tests. */
 
-declare(strict_types=1);
-
 $assertions = 0;
 $failures = [];
 $assert = static function ( bool $condition, string $message ) use ( &$assertions, &$failures ): void {
@@ -132,7 +130,6 @@ $assert( ! empty( $erasure['items_retained'] ), 'Privacy erasure did not truthfu
 $audit_verify = SPF_Audit::verify_chain();
 $assert( is_array( $audit_verify ) && ! empty( $audit_verify['verified'] ), 'Audit chain failed after privacy erasure.' );
 
-// Exercise explicit schema-upgrade path with structured evidence.
 update_option( SPF_Installer::SCHEMA_OPTION, '1.0.0', false );
 add_filter( 'spf_verify_migration_backup_evidence', static fn() => [
 	'verified'=>true,'backup_id'=>'ci-backup-1','restore_tested_at'=>gmdate('c'),'environment'=>'staging','verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600),
@@ -140,7 +137,6 @@ add_filter( 'spf_verify_migration_backup_evidence', static fn() => [
 $upgrade = SPF_Installer::maybe_upgrade();
 $assert( true === $upgrade && '1.1.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Evidence-gated schema upgrade failed.' );
 
-// Reactivation must remain idempotent and must not seed fake manifests.
 SPF_Installer::activate();
 $assert( 1 === count( SPF_Registry::list_modules( [ 'limit'=>100 ] ) ), 'Reactivation created duplicate/placeholder manifests.' );
 $assert( 4 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Reactivation duplicated contracts.' );

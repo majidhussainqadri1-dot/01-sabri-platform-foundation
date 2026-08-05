@@ -1,0 +1,36 @@
+name: Refresh File 01 source checksums
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/refresh-source-checksums.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out corrective branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - name: Recalculate exact tracked source checksums
+        run: |
+          set -euo pipefail
+          sed -E 's/^[0-9a-f]{64}  //' SOURCE-CHECKSUMS.sha256 | while IFS= read -r file; do sha256sum "$file"; done > SOURCE-CHECKSUMS.sha256.new
+          mv SOURCE-CHECKSUMS.sha256.new SOURCE-CHECKSUMS.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add SOURCE-CHECKSUMS.sha256
+          if git diff --cached --quiet; then
+            echo 'Source checksum manifest already current.'
+          else
+            git commit -m 'build: refresh exact File 01 source checksums'
+            git push origin HEAD:codex/file-01-complete-foundation-1.0.0
+          fi

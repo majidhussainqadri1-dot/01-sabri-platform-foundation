@@ -1,5 +1,5 @@
 # Corrective Review/Fix Round 3
 
-Fresh plan-to-code and source review covered authorization, separation of duties, release evidence, atomic idempotency, purge truthfulness, activation/upgrade compensation, legacy reconciliation, manifests, System Check, privacy lifecycle, events, feature flags, package naming and automated tests.
+Fresh review after version 1.0.0 identified authorization bypass, excessive Administrator authority, release-state bypass, non-atomic idempotency, unverifiable purge evidence, incomplete activation compensation, unsafe reconciliation rollback, placeholder manifests, shallow privacy lifecycle, incomplete event/flag governance and static-only QA.
 
-All identified repository-source defects were corrected in version 1.1.0. Runtime and external staging evidence remain separate gates.
+All identified source defects were corrected in 1.1.0 and regression tests were added. This round does not claim Hostinger staging completion.

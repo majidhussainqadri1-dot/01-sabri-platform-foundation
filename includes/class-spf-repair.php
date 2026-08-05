@@ -1,37 +1,56 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Reversible repair of File 01-owned state only.
+ */
 final class SPF_Repair {
+	private const LOCK = 'repair';
+
 	public static function plan() {
 		global $wpdb;
-		$actions = array();
-		foreach ( array( 'modules', 'contracts', 'routes', 'releases', 'release_states', 'amendments', 'health', 'flags', 'audit', 'idempotency', 'outbox' ) as $name ) {
+		$actions  = array();
+		$blockers = array();
+		foreach ( SPF_Installer::table_names() as $name ) {
 			$table = SPF_Installer::table( $name );
-			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				$actions[] = array( 'action' => 'recreate_owned_schema', 'target' => $name );
+			if ( ! SPF_Runtime::table_exists( $table ) ) {
+				$actions[] = array( 'action' => 'recreate_missing_owned_schema', 'target' => $name );
 			}
 		}
-		if ( false !== get_option( 'spf_page_map', false ) ) {
-			$actions[] = array( 'action' => 'remove_legacy_mapping_option', 'target' => 'spf_page_map' );
+		$schema = SPF_Installer::verify_schema();
+		if ( is_wp_error( $schema ) ) {
+			$data = $schema->get_error_data();
+			if ( is_array( $data ) && ! empty( $data['defects'] ) ) {
+				foreach ( $data['defects'] as $defect ) {
+					if ( false === strpos( (string) $defect, ':missing_table' ) ) {
+						$blockers[] = array( 'code' => 'schema_upgrade_required', 'defect' => sanitize_text_field( $defect ) );
+					}
+				}
+			}
 		}
-		if ( false !== get_option( 'spf_founder_user_id', false ) ) {
-			$actions[] = array( 'action' => 'remove_unsafe_founder_option', 'target' => 'spf_founder_user_id' );
+		foreach ( array( 'spf_page_map', 'spf_founder_user_id' ) as $option ) {
+			if ( self::option_exists( $option ) ) {
+				$actions[] = array( 'action' => 'remove_legacy_option', 'target' => $option );
+			}
 		}
-		foreach ( SPF_Registry::list_routes() as $route ) {
-			if ( $route['page_id'] && ! get_post( $route['page_id'] ) ) {
-				$actions[] = array( 'action' => 'clear_missing_owned_page_reference', 'target' => $route['route_key'], 'record_version' => $route['record_version'] );
+		if ( SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
+			foreach ( SPF_Registry::list_routes() as $route ) {
+				if ( 'file-01' === $route['owner_module'] && $route['page_id'] && ! get_post( $route['page_id'] ) ) {
+					$actions[] = array( 'action' => 'clear_missing_owned_page_reference', 'target' => $route['route_key'], 'record_version' => $route['record_version'] );
+				}
 			}
 		}
 		return array(
-			'generated_at' => current_time( 'mysql', true ),
+			'generated_at' => SPF_Runtime::now_mysql(),
 			'actions'      => $actions,
-			'law'          => 'Only File 01-owned schema, mappings, flags and caches may be changed.',
+			'blockers'     => $blockers,
+			'law'          => 'Only File 01-owned schema, legacy options and File 01 route references may be changed. Companion records are never repaired directly.',
 		);
 	}
 
 	public static function plan_hash( array $plan ) {
 		unset( $plan['generated_at'], $plan['plan_hash'] );
-		return hash( 'sha256', wp_json_encode( $plan ) );
+		return SPF_Runtime::hash( $plan );
 	}
 
 	public static function apply( $confirmation, $expected_hash ) {
@@ -39,7 +58,7 @@ final class SPF_Repair {
 		if ( 'REPAIR FILE 01 OWNED STATE' !== $confirmation ) {
 			return new WP_Error( 'spf_confirmation_required', __( 'The exact repair confirmation was not supplied.', 'sabri-platform-foundation' ) );
 		}
-		$allowed = SPF_Authorization::require_action( 'repair_owned_mapping' );
+		$allowed = SPF_Authorization::require_action( 'repair_owned_mapping', array( 'module_key' => 'file-01' ), array( 'purpose' => 'safe_repair' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
@@ -48,105 +67,118 @@ final class SPF_Repair {
 		if ( ! hash_equals( $hash, (string) $expected_hash ) ) {
 			return new WP_Error( 'spf_repair_plan_changed', __( 'The repair plan changed. Generate a new dry run.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
-		$precommit = SPF_Audit::record_required( 'repair_precommit', 'foundation_repair', $hash, 'authorized', array( 'purpose' => 'safe_repair' ) );
-		if ( is_wp_error( $precommit ) ) {
-			return $precommit;
+		if ( ! empty( $plan['blockers'] ) ) {
+			return new WP_Error( 'spf_repair_blocked', __( 'Repair is blocked because a versioned schema upgrade is required.', 'sabri-platform-foundation' ), array( 'status' => 409, 'blockers' => $plan['blockers'] ) );
 		}
-
-		$snapshot = array(
-			'spf_page_map'        => get_option( 'spf_page_map', null ),
-			'spf_founder_user_id' => get_option( 'spf_founder_user_id', null ),
-			'routes'              => array(),
-			'created_tables'      => array(),
-		);
-		foreach ( $plan['actions'] as $action ) {
-			if ( 'clear_missing_owned_page_reference' === $action['action'] ) {
-				$snapshot['routes'][ $action['target'] ] = $wpdb->get_row(
-					$wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' WHERE route_key=%s', $action['target'] ),
-					ARRAY_A
-				);
-			}
-			if ( 'recreate_owned_schema' === $action['action'] ) {
-				$snapshot['created_tables'][] = $action['target'];
-			}
+		$token = SPF_Runtime::acquire_lock( self::LOCK, 900, get_current_user_id() );
+		if ( is_wp_error( $token ) ) {
+			return $token;
 		}
-
-		$changed = array();
-		foreach ( $plan['actions'] as $action ) {
-			$result = self::apply_action( $action );
-			if ( is_wp_error( $result ) ) {
-				self::restore_snapshot( $snapshot );
-				SPF_Audit::record( 'repair_compensated', 'foundation_repair', $hash, 'failed', array( 'purpose' => 'safe_repair', 'error_code' => $result->get_error_code() ) );
-				return $result;
+		$snapshot = self::snapshot( $plan );
+		$changed  = array();
+		try {
+			$pre = SPF_Audit::record_required( 'repair_precommit', 'foundation_repair', $hash, 'authorized', array( 'purpose' => 'safe_repair' ) );
+			if ( is_wp_error( $pre ) ) {
+				throw new RuntimeException( $pre->get_error_message() );
 			}
-			$changed[] = $action;
-		}
-
-		wp_cache_delete( 'module_list', 'sabri_platform_foundation' );
-		wp_cache_delete( 'route_list', 'sabri_platform_foundation' );
-		wp_cache_delete( 'contract_list', 'sabri_platform_foundation' );
-		$trace = SPF_Audit::record_required( 'repair_owned_mapping', 'foundation_repair', $hash, 'success', array( 'purpose' => 'safe_repair', 'changed_count' => count( $changed ) ) );
-		if ( is_wp_error( $trace ) ) {
+			$missing = array_values( array_filter( $plan['actions'], static function ( $action ) { return 'recreate_missing_owned_schema' === $action['action']; } ) );
+			if ( $missing ) {
+				SPF_Installer::install_schema();
+				foreach ( $missing as $action ) {
+					if ( ! SPF_Runtime::table_exists( SPF_Installer::table( $action['target'] ) ) ) {
+						throw new RuntimeException( 'Missing File 01 table could not be recreated: ' . $action['target'] );
+					}
+					$changed[] = $action;
+				}
+			}
+			foreach ( $plan['actions'] as $action ) {
+				if ( 'recreate_missing_owned_schema' === $action['action'] ) {
+					continue;
+				}
+				$result = self::apply_action( $action );
+				if ( is_wp_error( $result ) ) {
+					throw new RuntimeException( $result->get_error_message() );
+				}
+				$changed[] = $action;
+			}
+			$schema = SPF_Installer::verify_schema();
+			if ( is_wp_error( $schema ) ) {
+				throw new RuntimeException( 'Post-repair schema verification failed.' );
+			}
+			$event = SPF_Event_Bus::publish( 'FoundationRepairCompleted.v1', 'foundation_repair', $hash, array( 'changed_count' => count( $changed ) ), 1, 'repair-' . $hash );
+			if ( is_wp_error( $event ) ) {
+				throw new RuntimeException( $event->get_error_message() );
+			}
+			$trace = SPF_Audit::record_required( 'repair_owned_mapping', 'foundation_repair', $hash, 'success', array( 'purpose' => 'safe_repair', 'changed_count' => count( $changed ) ) );
+			if ( is_wp_error( $trace ) ) {
+				throw new RuntimeException( $trace->get_error_message() );
+			}
+			return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'status' => 'applied' );
+		} catch ( Throwable $error ) {
 			self::restore_snapshot( $snapshot );
-			return $trace;
+			SPF_Audit::record( 'repair_compensated', 'foundation_repair', $hash, 'failed', array( 'purpose' => 'safe_repair', 'error' => $error->getMessage() ) );
+			return new WP_Error( 'spf_repair_failed', $error->getMessage(), array( 'status' => 409 ) );
+		} finally {
+			SPF_Runtime::release_lock( self::LOCK, $token );
 		}
-		return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'status' => 'applied' );
 	}
 
 	private static function apply_action( array $action ) {
 		global $wpdb;
-		switch ( $action['action'] ) {
-			case 'recreate_owned_schema':
-				SPF_Installer::install_schema();
-				$table = SPF_Installer::table( $action['target'] );
-				return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table
-					? true
-					: new WP_Error( 'spf_repair_schema_failed', __( 'A File 01 table could not be recreated.', 'sabri-platform-foundation' ) );
-			case 'remove_legacy_mapping_option':
-				delete_option( 'spf_page_map' );
-				return '__missing__' === get_option( 'spf_page_map', '__missing__' )
-					? true
-					: new WP_Error( 'spf_repair_option_failed', __( 'The legacy route-map option could not be removed.', 'sabri-platform-foundation' ) );
-			case 'remove_unsafe_founder_option':
-				delete_option( 'spf_founder_user_id' );
-				return '__missing__' === get_option( 'spf_founder_user_id', '__missing__' )
-					? true
-					: new WP_Error( 'spf_repair_option_failed', __( 'The unsafe legacy Founder option could not be removed.', 'sabri-platform-foundation' ) );
-			case 'clear_missing_owned_page_reference':
-				$updated = $wpdb->update(
-					SPF_Installer::table( 'routes' ),
-					array( 'page_id' => null, 'status' => 'degraded', 'record_version' => (int) $action['record_version'] + 1, 'updated_at' => current_time( 'mysql', true ) ),
-					array( 'route_key' => $action['target'], 'record_version' => (int) $action['record_version'] )
-				);
-				return 1 === $updated
-					? true
-					: new WP_Error( 'spf_repair_stale_route', __( 'The route changed before repair and was not modified.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
+		if ( 'remove_legacy_option' === $action['action'] ) {
+			delete_option( $action['target'] );
+			return self::option_exists( $action['target'] ) ? new WP_Error( 'spf_repair_option_failed', __( 'A legacy File 01 option could not be removed.', 'sabri-platform-foundation' ) ) : true;
+		}
+		if ( 'clear_missing_owned_page_reference' === $action['action'] ) {
+			$updated = $wpdb->update(
+				SPF_Installer::table( 'routes' ),
+				array( 'page_id' => null, 'status' => 'degraded', 'record_version' => (int) $action['record_version'] + 1, 'updated_at' => SPF_Runtime::now_mysql() ),
+				array( 'route_key' => $action['target'], 'owner_module' => 'file-01', 'record_version' => (int) $action['record_version'] ),
+				array( null, '%s', '%d', '%s' ),
+				array( '%s', '%s', '%d' )
+			);
+			return 1 === $updated ? true : new WP_Error( 'spf_repair_stale_route', __( 'The route changed before repair and was not modified.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
 		return new WP_Error( 'spf_unknown_repair_action', __( 'An unknown File 01 repair action was rejected.', 'sabri-platform-foundation' ) );
 	}
 
+	private static function snapshot( array $plan ) {
+		global $wpdb;
+		$snapshot = array( 'options' => array(), 'routes' => array(), 'created_tables' => array() );
+		foreach ( array( 'spf_page_map', 'spf_founder_user_id' ) as $option ) {
+			$snapshot['options'][ $option ] = array( 'exists' => self::option_exists( $option ), 'value' => get_option( $option ) );
+		}
+		foreach ( $plan['actions'] as $action ) {
+			if ( 'clear_missing_owned_page_reference' === $action['action'] ) {
+				$snapshot['routes'][ $action['target'] ] = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' WHERE route_key=%s AND owner_module=%s', $action['target'], 'file-01' ), ARRAY_A );
+			}
+			if ( 'recreate_missing_owned_schema' === $action['action'] ) {
+				$snapshot['created_tables'][] = $action['target'];
+			}
+		}
+		return $snapshot;
+	}
+
 	private static function restore_snapshot( array $snapshot ) {
 		global $wpdb;
-		null === $snapshot['spf_page_map'] ? delete_option( 'spf_page_map' ) : update_option( 'spf_page_map', $snapshot['spf_page_map'], false );
-		null === $snapshot['spf_founder_user_id'] ? delete_option( 'spf_founder_user_id' ) : update_option( 'spf_founder_user_id', $snapshot['spf_founder_user_id'], false );
+		foreach ( $snapshot['options'] as $option => $state ) {
+			$state['exists'] ? update_option( $option, $state['value'], false ) : delete_option( $option );
+		}
 		foreach ( $snapshot['routes'] as $route ) {
-			if ( ! is_array( $route ) || empty( $route['id'] ) ) {
-				continue;
+			if ( is_array( $route ) && ! empty( $route['id'] ) && SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
+				$wpdb->replace( SPF_Installer::table( 'routes' ), $route );
 			}
-			$wpdb->update(
-				SPF_Installer::table( 'routes' ),
-				array(
-					'page_id'        => $route['page_id'],
-					'status'         => $route['status'],
-					'record_version' => $route['record_version'],
-					'updated_at'     => $route['updated_at'],
-				),
-				array( 'id' => (int) $route['id'] )
-			);
 		}
 		foreach ( $snapshot['created_tables'] as $name ) {
 			$table = SPF_Installer::table( $name );
-			$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted File 01 table.
+			if ( SPF_Runtime::table_exists( $table ) ) {
+				$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted File 01 table.
+			}
 		}
+	}
+
+	private static function option_exists( $option ) {
+		global $wpdb;
+		return null !== $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name=%s LIMIT 1", $option ) );
 	}
 }

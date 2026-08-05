@@ -1,26 +1,32 @@
 {
-  "schema": "sabri-foundation-dependencies/v1",
-  "module": "file-01",
+  "manifest_version": "1.0.0",
+  "module_key": "file-01",
   "software_version": "1.1.0",
-  "required_runtime": {
-    "wordpress": ">=6.0",
-    "php": ">=8.1",
-    "database": "MySQL-compatible InnoDB"
-  },
-  "authoritative_dependencies": [
+  "contract_version": "1.1.0",
+  "hard_dependencies": [],
+  "optional_dependencies": [
     {
-      "module": "file-00",
-      "contract": "membership.authorization-claim@1.x",
-      "required_for": ["release", "amendment", "migration", "purge", "production_cutover"],
-      "failure_mode": "fail_closed"
+      "module_key": "file-00",
+      "minimum_version": "1.2.3",
+      "purpose": "Versioned authorization and institutional-role claims",
+      "fail_mode": "Sensitive actions fail closed"
+    },
+    {
+      "module_key": "file-20",
+      "minimum_version": "1.2.0",
+      "purpose": "Canonical shell placement and route presentation",
+      "fail_mode": "No duplicate shell; admin-only status remains"
+    },
+    {
+      "module_key": "file-24",
+      "minimum_version": "0.25.0",
+      "purpose": "Independent backup/restore and destructive-operation assurance",
+      "fail_mode": "Destructive purge remains disabled"
     }
   ],
-  "integration_boundaries": {
-    "file-20": "global shell and navigation owner",
-    "file-21": "Home/News/feed owner",
-    "file-24": "central assurance and backup-evidence verifier",
-    "file-25": "public visual/component owner"
-  },
-  "conditional_future_modules": ["CF-01", "CF-02", "CF-03", "CF-04", "CF-05", "CF-06"],
-  "law": "Catalog entries are not runtime manifests; each module must register a signed/versioned owner manifest."
+  "canonical_catalog": {
+    "first_file": "00",
+    "last_file": "26",
+    "registration_law": "Only each owner module may register its real versioned manifest; File 01 does not seed placeholder truth."
+  }
 }

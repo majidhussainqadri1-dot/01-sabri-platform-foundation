@@ -1,25 +1,17 @@
-# File 01 Corrective QA Report
+# QA Report — File 01 1.1.0 Corrective Candidate
 
-Date: 2026-08-05 (Asia/Karachi)
-Version: 1.0.0 corrective candidate
+## Automated suites
 
-## Automated local evidence
+- PHP syntax on PHP 8.1 and 8.3.
+- Pure unit tests for canonical hashing, semantic versions, structured claims, separation of duties, release transitions and evidence validation.
+- Source-security tests for removed bypasses, dangerous primitives, ownership boundaries and purge assurance.
+- Schema tests for all 14 InnoDB tables, keys, locks, evidence, privacy and migration fields.
+- Contract/traceability tests for every F01-FR-001–012 and F01-NFR-001–010.
+- Actual WordPress/MySQL fresh activation, reactivation, schema verification, capabilities, manifests, contracts, routes, release lifecycle, flags, privacy, reconciliation and System Check.
+- Concurrent identical mutation test proving one callback execution.
+- Upgrade/rollback and destructive-purge smoke tests in disposable CI databases.
+- Deterministic double-build, source manifest, ZIP integrity and package/source parity.
 
-| Check | Result |
-|---|---:|
-| PHP syntax — all runtime and test PHP | PASS |
-| Plan/contract assertions | 61/61 PASS |
-| Security/boundary assertions | 36/36 PASS |
-| Schema/integrity assertions | 33/33 PASS |
-| Total static assertions | 130/130 PASS |
-| Forbidden legacy public shell/feed artifacts | PASS |
-| Dangerous PHP execution primitive scan | PASS |
-| Deterministic double-build | PASS — byte-identical |
-| ZIP integrity and single top-level folder | PASS |
-| Source manifest embedded | PASS |
+## Truth boundary
 
-The exact package SHA-256 is stored beside the archive in `dist/*.zip.sha256`; it is intentionally external to the archive to avoid a self-referential checksum.
-
-## Acceptance boundary
-
-These results prove source-level corrective implementation, static policy/security/schema checks and reproducible packaging. They do not prove Hostinger staging, WordPress/MySQL runtime, real companion integrations, browser/accessibility, backup restore, live deployment or operational acceptance.
+Green CI proves only the automated environment and exact commit. Hostinger staging, real cross-file adapters, browser/accessibility/RTL, production-size load, backup/restore, Founder approval and live monitoring remain mandatory.

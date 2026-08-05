@@ -1,28 +1,6 @@
-# Local build workspace
-build/
-dist/
-
-# Dependencies and caches
-vendor/
-node_modules/
-.cache/
-coverage/
-.phpunit.result.cache
-
-# Secrets and local environment
-.env
-.env.*
-!.env.example
-*.key
-*.pem
-*.p12
-*.pfx
-auth.json
-
-# Logs/editors/OS
+/build/
+/dist/
+/.wordpress/
+/wp-tests-config.php
 *.log
 .DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp

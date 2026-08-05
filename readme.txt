@@ -1,37 +1,32 @@
 === Sabri Platform Foundation ===
-Contributors: sabrihomeopathy
-Tags: platform foundation, governance, registry, contracts, health
+Contributors: majidhussainqadri1-dot
 Requires at least: 6.0
-Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 
-File 01-B provides the canonical public-safe foundation registry, versioned contract catalog, dependency resolver, foundational route governance, redacted System Check, legacy reconciliation, File 01-only repair, feature flags, event outbox and immutable release-evidence records.
+Canonical File 01-B governance, registry, route, privacy, health, reconciliation, repair and release-evidence runtime for the Sabri Social Homeopathy Platform.
 
-== Ownership boundary ==
+== Description ==
 
-This plugin does not own or render the global shell, navigation, Home/News feed, profiles, identity, membership, security center, public visual design, clinical records, payments or global search truth. Those remain with their canonical owners.
+This plugin is a governance and compatibility plane. It does not create a second public shell, feed, profile, identity system, Security Center or search backend.
+
+Version 1.1.0 corrects authorization, release lifecycle, idempotency, activation compensation, reconciliation rollback, privacy lifecycle, feature-flag operations, purge assurance and QA depth. Production use still requires the separate staging and Founder-acceptance gates recorded in STAGING-ACCEPTANCE.md.
 
 == Installation ==
 
-1. Verify backup and restore evidence on Hostinger staging.
-2. Upload the deterministic File 01 package.
-3. Activate on staging.
-4. Open Sabri Foundation in wp-admin.
-5. Run System Check.
-6. Review the legacy reconciliation dry run before applying it.
-7. Complete STAGING-ACCEPTANCE.md before any live deployment.
-
-== Completion truth ==
-
-Version 1.0.0 source/package/automated QA evidence does not by itself prove Hostinger staging acceptance, live deployment or operational completion.
+1. Verify the package SHA-256 and SOURCE-MANIFEST.sha256.
+2. Install only on isolated staging after a verified backup and restore test.
+3. Activate as an authorized operator.
+4. Run the redacted System Check.
+5. Register real owner manifests from companion modules; do not create placeholder manifests.
+6. Complete STAGING-ACCEPTANCE.md before any production approval.
 
 == Changelog ==
 
-= 1.0.0 =
-* Rebuilt File 01 as the canonical registry/governance runtime.
-* Removed legacy ownership of shell, navigation, Home and News.
-* Added safe activation, schema locks, snapshots, compensation and non-destructive uninstall.
-* Added module, contract, route, release, amendment, health, feature-flag, audit, idempotency and outbox records.
-* Added dependency resolution, System Check, reconciliation, repair, REST contracts and deterministic packaging.
+= 1.1.0 =
+* Enforced structured File 00 claims and separation of duties.
+* Added atomic idempotency, privacy lifecycle and operational feature flags.
+* Added shadow-table activation/upgrade compensation.
+* Added evidence-enforced release lifecycle and independent destructive-purge assurance.
+* Added WordPress/MySQL runtime, concurrency, migration and deterministic package CI.

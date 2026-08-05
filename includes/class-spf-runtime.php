@@ -1,0 +1,150 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Low-level, File 01-owned runtime primitives.
+ *
+ * This class deliberately contains no domain business authority. It only offers
+ * deterministic locking, canonical hashing, transaction checks and evidence
+ * verification used by the canonical owners above it.
+ */
+final class SPF_Runtime {
+	const LOCK_PREFIX = 'spf_lock_';
+
+	public static function now_mysql() {
+		return current_time( 'mysql', true );
+	}
+
+	public static function canonicalize( $value ) {
+		if ( is_array( $value ) ) {
+			if ( self::is_list( $value ) ) {
+				return array_map( array( __CLASS__, 'canonicalize' ), $value );
+			}
+			ksort( $value, SORT_STRING );
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = self::canonicalize( $item );
+			}
+			return $value;
+		}
+		if ( is_object( $value ) ) {
+			return self::canonicalize( get_object_vars( $value ) );
+		}
+		return $value;
+	}
+
+	public static function canonical_json( $value ) {
+		return wp_json_encode( self::canonicalize( $value ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	}
+
+	public static function hash( $value ) {
+		return hash( 'sha256', self::canonical_json( $value ) );
+	}
+
+	public static function acquire_lock( $name, $ttl = 300, $owner = 0 ) {
+		$name = sanitize_key( $name );
+		$option = self::LOCK_PREFIX . $name;
+		$token = wp_generate_uuid4();
+		$payload = array(
+			'token'   => $token,
+			'created' => time(),
+			'owner'   => absint( $owner ),
+		);
+		if ( add_option( $option, $payload, '', 'no' ) ) {
+			return $token;
+		}
+		$current = get_option( $option, array() );
+		if ( is_array( $current ) && isset( $current['created'] ) && ( time() - (int) $current['created'] ) > max( 30, absint( $ttl ) ) ) {
+			// Compare before delete to avoid deleting a renewed lock.
+			$latest = get_option( $option, array() );
+			if ( $latest === $current ) {
+				delete_option( $option );
+				if ( add_option( $option, $payload, '', 'no' ) ) {
+					return $token;
+				}
+			}
+		}
+		return new WP_Error( 'spf_operation_locked', __( 'The requested File 01 operation is already running.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
+	}
+
+	public static function release_lock( $name, $token ) {
+		$option = self::LOCK_PREFIX . sanitize_key( $name );
+		$current = get_option( $option, array() );
+		if ( is_array( $current ) && isset( $current['token'] ) && hash_equals( (string) $current['token'], (string) $token ) ) {
+			delete_option( $option );
+			return true;
+		}
+		return false;
+	}
+
+	public static function begin() {
+		global $wpdb;
+		$result = $wpdb->query( 'START TRANSACTION' );
+		return false === $result ? new WP_Error( 'spf_transaction_start_failed', __( 'A database transaction could not be started.', 'sabri-platform-foundation' ) ) : true;
+	}
+
+	public static function commit() {
+		global $wpdb;
+		$result = $wpdb->query( 'COMMIT' );
+		return false === $result ? new WP_Error( 'spf_transaction_commit_failed', __( 'The database transaction could not be committed.', 'sabri-platform-foundation' ) ) : true;
+	}
+
+	public static function rollback() {
+		global $wpdb;
+		$wpdb->query( 'ROLLBACK' );
+	}
+
+	public static function table_exists( $table ) {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+	}
+
+	public static function table_engine( $table ) {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ), ARRAY_A );
+		return is_array( $row ) && ! empty( $row['ENGINE'] ) ? strtoupper( (string) $row['ENGINE'] ) : '';
+	}
+
+	public static function verify_owned_tables_transactional() {
+		$failures = array();
+		foreach ( SPF_Installer::table_names() as $name ) {
+			$table = SPF_Installer::table( $name );
+			if ( ! self::table_exists( $table ) ) {
+				$failures[ $name ] = 'missing';
+				continue;
+			}
+			$engine = self::table_engine( $table );
+			if ( 'INNODB' !== $engine ) {
+				$failures[ $name ] = $engine ? strtolower( $engine ) : 'unknown_engine';
+			}
+		}
+		return empty( $failures ) ? true : new WP_Error( 'spf_non_transactional_schema', __( 'File 01 requires all owned tables to use InnoDB.', 'sabri-platform-foundation' ), array( 'tables' => $failures ) );
+	}
+
+	/**
+	 * Verify a structured external evidence claim. A plain string/boolean never
+	 * satisfies a destructive or production-grade evidence gate.
+	 */
+	public static function verify_evidence( $filter, array $context, array $required_fields ) {
+		$claim = apply_filters( $filter, null, $context );
+		if ( ! is_array( $claim ) || empty( $claim['verified'] ) ) {
+			return new WP_Error( 'spf_evidence_unverified', __( 'Required external evidence has not been independently verified.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
+		}
+		foreach ( $required_fields as $field ) {
+			if ( ! array_key_exists( $field, $claim ) || '' === (string) $claim[ $field ] ) {
+				return new WP_Error( 'spf_evidence_incomplete', sprintf( /* translators: %s evidence field */ __( 'Verified evidence is missing field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+			}
+		}
+		if ( ! empty( $claim['expires_at'] ) && strtotime( (string) $claim['expires_at'] ) <= time() ) {
+			return new WP_Error( 'spf_evidence_expired', __( 'The external evidence verification has expired.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
+		}
+		$claim['evidence_hash'] = self::hash( $claim );
+		return $claim;
+	}
+
+	public static function is_list( array $array ) {
+		if ( function_exists( 'array_is_list' ) ) {
+			return array_is_list( $array );
+		}
+		return array_keys( $array ) === range( 0, count( $array ) - 1 );
+	}
+}

@@ -6,127 +6,233 @@ final class SPF_Reconciler {
 		$legacy_map = get_option( 'spf_page_map', array() );
 		$legacy_founder = get_option( 'spf_founder_user_id', null );
 		$actions = array();
+		$blockers = array();
 		if ( is_array( $legacy_map ) && $legacy_map ) {
 			foreach ( $legacy_map as $key => $page_id ) {
 				$page_id = absint( $page_id );
 				$owned = $page_id && '1' === get_post_meta( $page_id, '_spf_managed_page', true );
+				$owner_plan = apply_filters(
+					'spf_owner_reconciliation_plan',
+					null,
+					array(
+						'legacy_key' => sanitize_key( $key ),
+						'page_id' => $page_id,
+						'owned_by_file01_legacy' => $owned,
+						'target_owners' => array( 'file-20','file-21' ),
+					)
+				);
+				if ( ! is_array( $owner_plan ) || empty( $owner_plan['accepted'] ) || empty( $owner_plan['owner_module'] ) || empty( $owner_plan['command_version'] ) ) {
+					$blockers[] = array( 'code'=>'owner_reconciliation_adapter_missing','legacy_key'=>sanitize_key($key),'page_id'=>$page_id );
+				}
 				$actions[] = array(
-					'action'     => 'quarantine_legacy_mapping',
+					'action' => 'reconcile_legacy_mapping',
 					'legacy_key' => sanitize_key( $key ),
-					'page_id'    => $page_id,
-					'owned'      => $owned,
-					'apply'      => $owned ? 'mark_quarantined_and_remove_map' : 'report_only_foreign_page',
+					'page_id' => $page_id,
+					'owned' => $owned,
+					'owner_plan' => is_array( $owner_plan ) ? SPF_Runtime::canonicalize( $owner_plan ) : null,
+					'local_apply' => $owned ? 'mark_quarantined_after_owner_ack' : 'remove_mapping_after_owner_ack_only',
 				);
 			}
 		}
 		if ( null !== $legacy_founder ) {
 			$actions[] = array(
 				'action' => 'remove_unsafe_founder_option',
-				'value'  => absint( $legacy_founder ),
-				'apply'  => 'delete_file01_legacy_option_only',
+				'value_hash' => hash( 'sha256', (string) absint( $legacy_founder ) ),
+				'apply' => 'delete_file01_legacy_option_only',
 			);
 		}
 		return array(
-			'generated_at' => current_time( 'mysql', true ),
-			'actions'      => $actions,
-			'counts'       => array(
-				'create'     => 0,
-				'update'     => 0,
-				'quarantine' => count( $actions ),
-				'delete'     => 0,
-				'skip'       => 0,
+			'generated_at' => SPF_Runtime::now_mysql(),
+			'actions' => $actions,
+			'blockers' => $blockers,
+			'counts' => array(
+				'create'=>0,
+				'update'=>0,
+				'reconcile'=>count($actions),
+				'quarantine'=>count(array_filter($actions,static fn($a)=>!empty($a['owned']))),
+				'delete'=>0,
+				'skip'=>0,
 			),
-			'law'           => 'No companion data, foreign pages, shell, feed or profile truth will be modified.',
+			'law' => 'File 20/21 owner commands must acknowledge canonical routes/content before File 01 removes any legacy mapping; no foreign page or companion table is directly mutated.',
 		);
 	}
 
 	public static function plan_hash( array $plan ) {
 		unset( $plan['generated_at'], $plan['plan_hash'] );
-		return hash( 'sha256', wp_json_encode( $plan ) );
+		return SPF_Runtime::hash( $plan );
 	}
 
 	public static function apply( $confirmation, $expected_hash ) {
 		if ( 'APPLY FILE 01 RECONCILIATION' !== $confirmation ) {
-			return new WP_Error( 'spf_confirmation_required', __( 'The exact reconciliation confirmation was not supplied.', 'sabri-platform-foundation' ) );
+			return new WP_Error( 'spf_confirmation_required', __( 'The exact reconciliation confirmation was not supplied.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
-		$allowed = SPF_Authorization::require_action( 'run_reconciliation' );
+		$allowed = SPF_Authorization::require_action( 'run_reconciliation', array( 'object_id'=>'file-01-legacy-cutover' ), array( 'purpose'=>'legacy_cutover' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
 		$plan = self::plan();
 		$hash = self::plan_hash( $plan );
 		if ( ! hash_equals( $hash, (string) $expected_hash ) ) {
-			return new WP_Error( 'spf_reconciliation_plan_changed', __( 'The reconciliation plan changed. Generate and review a new dry run.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
+			return new WP_Error( 'spf_reconciliation_plan_changed', __( 'The reconciliation plan changed. Generate and review a new dry run.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
 		}
-		$precommit = SPF_Audit::record_required( 'reconciliation_precommit', 'foundation_reconciliation', $hash, 'authorized', array( 'purpose' => 'legacy_cutover' ) );
+		if ( ! empty( $plan['blockers'] ) ) {
+			return new WP_Error( 'spf_reconciliation_blocked', __( 'Owner reconciliation adapters are missing or have not accepted the plan.', 'sabri-platform-foundation' ), array( 'status'=>412, 'blockers'=>$plan['blockers'] ) );
+		}
+		$lock = SPF_Runtime::acquire_lock( 'reconciliation', 1800, get_current_user_id() );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		$precommit = SPF_Audit::record_required( 'reconciliation_precommit', 'foundation_reconciliation', $hash, 'authorized', array( 'purpose'=>'legacy_cutover' ) );
 		if ( is_wp_error( $precommit ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
 			return $precommit;
 		}
-		$snapshot = array(
-			'created_at'          => current_time( 'mysql', true ),
-			'plan_hash'           => $hash,
-			'spf_page_map'        => get_option( 'spf_page_map', null ),
-			'spf_founder_user_id' => get_option( 'spf_founder_user_id', null ),
-		);
+		$snapshot = self::capture_snapshot( $hash, $plan );
 		update_option( 'spf_reconciliation_snapshot', $snapshot, false );
-
 		$changed = array();
-		foreach ( $plan['actions'] as $action ) {
-			if ( 'quarantine_legacy_mapping' === $action['action'] && ! empty( $action['owned'] ) && $action['page_id'] ) {
-				update_post_meta( $action['page_id'], '_spf_legacy_quarantined', '1' );
-				update_post_meta( $action['page_id'], '_spf_legacy_quarantined_at', current_time( 'mysql', true ) );
-				if ( '1' !== get_post_meta( $action['page_id'], '_spf_legacy_quarantined', true ) ) {
-					self::restore_snapshot( $snapshot );
-					return new WP_Error( 'spf_reconciliation_write_failed', __( 'A legacy page could not be quarantined; the snapshot was restored.', 'sabri-platform-foundation' ) );
+		$receipts = array();
+		try {
+			foreach ( $plan['actions'] as $action ) {
+				if ( 'reconcile_legacy_mapping' !== $action['action'] ) {
+					continue;
 				}
-				$changed[] = array( 'page_id' => $action['page_id'], 'change' => 'marked_quarantined' );
+				$receipt = apply_filters( 'spf_execute_owner_reconciliation', null, $action, $hash );
+				if ( ! is_array( $receipt ) || empty( $receipt['success'] ) || empty( $receipt['receipt_id'] ) || empty( $receipt['owner_module'] ) || empty( $receipt['rollback_command'] ) ) {
+					throw new RuntimeException( 'A canonical owner did not return a reversible reconciliation receipt.' );
+				}
+				$receipts[] = SPF_Runtime::canonicalize( $receipt );
+				if ( ! empty( $action['owned'] ) && $action['page_id'] ) {
+					update_post_meta( $action['page_id'], '_spf_legacy_quarantined', '1' );
+					update_post_meta( $action['page_id'], '_spf_legacy_quarantined_at', SPF_Runtime::now_mysql() );
+					update_post_meta( $action['page_id'], '_spf_legacy_owner_receipt', sanitize_text_field( $receipt['receipt_id'] ) );
+					if ( '1' !== get_post_meta( $action['page_id'], '_spf_legacy_quarantined', true ) ) {
+						throw new RuntimeException( 'A legacy page could not be quarantined after owner acknowledgement.' );
+					}
+				}
+				$changed[] = array( 'legacy_key'=>$action['legacy_key'],'page_id'=>$action['page_id'],'owner_module'=>sanitize_key($receipt['owner_module']),'receipt_id'=>sanitize_text_field($receipt['receipt_id']) );
 			}
-		}
-		delete_option( 'spf_page_map' );
-		delete_option( 'spf_founder_user_id' );
-		if ( '__missing__' !== get_option( 'spf_page_map', '__missing__' ) || '__missing__' !== get_option( 'spf_founder_user_id', '__missing__' ) ) {
+			delete_option( 'spf_page_map' );
+			delete_option( 'spf_founder_user_id' );
+			if ( '__missing__' !== get_option( 'spf_page_map', '__missing__' ) || '__missing__' !== get_option( 'spf_founder_user_id', '__missing__' ) ) {
+				throw new RuntimeException( 'Legacy options could not be removed.' );
+			}
+			$snapshot['owner_receipts'] = $receipts;
+			update_option( 'spf_reconciliation_snapshot', $snapshot, false );
+			update_option( 'spf_reconciliation_state', array( 'status'=>'applied','plan_hash'=>$hash,'applied_at'=>SPF_Runtime::now_mysql(),'receipt_count'=>count($receipts) ), false );
+			$trace = SPF_Audit::record_required( 'run_reconciliation', 'foundation_reconciliation', $hash, 'success', array( 'purpose'=>'legacy_cutover','changed_count'=>count($changed),'receipt_count'=>count($receipts) ) );
+			if ( is_wp_error( $trace ) ) {
+				throw new RuntimeException( $trace->get_error_message() );
+			}
+			$event = SPF_Event_Bus::publish( 'FoundationLegacyReconciled.v1', 'foundation_reconciliation', $hash, array( 'changed_count'=>count($changed),'owner_receipts'=>array_map(static fn($r)=>$r['receipt_id'],$receipts) ), 1, 'reconcile-'.$hash );
+			if ( is_wp_error( $event ) ) {
+				throw new RuntimeException( $event->get_error_message() );
+			}
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return array( 'trace_id'=>$trace,'plan_hash'=>$hash,'changed'=>$changed,'owner_receipts'=>$receipts,'status'=>'applied' );
+		} catch ( Throwable $error ) {
+			self::rollback_owner_receipts( $receipts, $hash );
 			self::restore_snapshot( $snapshot );
-			return new WP_Error( 'spf_reconciliation_option_failed', __( 'Legacy options could not be quarantined; the snapshot was restored.', 'sabri-platform-foundation' ) );
+			update_option( 'spf_reconciliation_state', array( 'status'=>'compensated','plan_hash'=>$hash,'failed_at'=>SPF_Runtime::now_mysql(),'error_code'=>'reconciliation_compensated' ), false );
+			SPF_Audit::record( 'reconciliation_compensated', 'foundation_reconciliation', $hash, 'failed', array( 'purpose'=>'legacy_cutover','receipt_count'=>count($receipts) ) );
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return new WP_Error( 'spf_reconciliation_failed', $error->getMessage(), array( 'status'=>409 ) );
 		}
-		update_option( 'spf_reconciliation_state', array( 'status' => 'applied', 'plan_hash' => $hash, 'applied_at' => current_time( 'mysql', true ) ), false );
-		$trace = SPF_Audit::record_required( 'run_reconciliation', 'foundation_reconciliation', $hash, 'success', array( 'purpose' => 'legacy_cutover', 'changed_count' => count( $changed ) ) );
-		if ( is_wp_error( $trace ) ) {
-			self::restore_snapshot( $snapshot );
-			return $trace;
-		}
-		return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'status' => 'applied' );
 	}
 
 	public static function rollback( $confirmation ) {
 		if ( 'ROLL BACK FILE 01 RECONCILIATION' !== $confirmation ) {
-			return new WP_Error( 'spf_confirmation_required', __( 'The exact rollback confirmation was not supplied.', 'sabri-platform-foundation' ) );
+			return new WP_Error( 'spf_confirmation_required', __( 'The exact rollback confirmation was not supplied.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
-		$allowed = SPF_Authorization::require_action( 'run_reconciliation' );
+		$allowed = SPF_Authorization::require_action( 'run_reconciliation', array( 'object_id'=>'file-01-legacy-cutover' ), array( 'purpose'=>'legacy_cutover_rollback' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
 		$snapshot = get_option( 'spf_reconciliation_snapshot', array() );
-		if ( ! is_array( $snapshot ) || empty( $snapshot['created_at'] ) ) {
-			return new WP_Error( 'spf_no_reconciliation_snapshot', __( 'No reconciliation snapshot is available.', 'sabri-platform-foundation' ) );
+		if ( ! is_array( $snapshot ) || empty( $snapshot['created_at'] ) || empty( $snapshot['plan_hash'] ) ) {
+			return new WP_Error( 'spf_no_reconciliation_snapshot', __( 'No reconciliation snapshot is available.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
 		}
-		$precommit = SPF_Audit::record_required( 'rollback_reconciliation_precommit', 'foundation_reconciliation', $snapshot['plan_hash'], 'authorized', array( 'purpose' => 'rollback' ) );
+		$lock = SPF_Runtime::acquire_lock( 'reconciliation', 1800, get_current_user_id() );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		$precommit = SPF_Audit::record_required( 'rollback_reconciliation_precommit', 'foundation_reconciliation', $snapshot['plan_hash'], 'authorized', array( 'purpose'=>'legacy_cutover_rollback' ) );
 		if ( is_wp_error( $precommit ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
 			return $precommit;
 		}
+		$receipts = is_array( $snapshot['owner_receipts'] ?? null ) ? $snapshot['owner_receipts'] : array();
+		$owner_result = self::rollback_owner_receipts( $receipts, $snapshot['plan_hash'] );
+		if ( is_wp_error( $owner_result ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return $owner_result;
+		}
 		self::restore_snapshot( $snapshot );
-		update_option( 'spf_reconciliation_state', array( 'status' => 'rolled_back', 'rolled_back_at' => current_time( 'mysql', true ) ), false );
-		$trace = SPF_Audit::record_required( 'rollback_reconciliation', 'foundation_reconciliation', $snapshot['plan_hash'], 'success', array( 'purpose' => 'rollback' ) );
-		return is_wp_error( $trace ) ? $trace : array( 'trace_id' => $trace, 'status' => 'rolled_back' );
+		update_option( 'spf_reconciliation_state', array( 'status'=>'rolled_back','plan_hash'=>$snapshot['plan_hash'],'rolled_back_at'=>SPF_Runtime::now_mysql() ), false );
+		$trace = SPF_Audit::record_required( 'rollback_reconciliation', 'foundation_reconciliation', $snapshot['plan_hash'], 'success', array( 'purpose'=>'legacy_cutover_rollback','receipt_count'=>count($receipts) ) );
+		SPF_Event_Bus::publish( 'FoundationLegacyReconciliationRolledBack.v1', 'foundation_reconciliation', $snapshot['plan_hash'], array( 'receipt_count'=>count($receipts) ), 1, 'reconcile-rollback-'.$snapshot['plan_hash'] );
+		SPF_Runtime::release_lock( 'reconciliation', $lock );
+		return is_wp_error( $trace ) ? $trace : array( 'trace_id'=>$trace,'status'=>'rolled_back','owner_receipts'=>count($receipts) );
 	}
+
+	private static function capture_snapshot( $hash, array $plan ) {
+		$snapshot = array(
+			'created_at' => SPF_Runtime::now_mysql(),
+			'plan_hash' => $hash,
+			'spf_page_map' => self::option_state( 'spf_page_map' ),
+			'spf_founder_user_id' => self::option_state( 'spf_founder_user_id' ),
+			'page_meta' => array(),
+			'owner_receipts' => array(),
+		);
+		foreach ( $plan['actions'] as $action ) {
+			if ( 'reconcile_legacy_mapping' !== $action['action'] || empty( $action['page_id'] ) ) {
+				continue;
+			}
+			$page_id = absint( $action['page_id'] );
+			foreach ( array( '_spf_legacy_quarantined','_spf_legacy_quarantined_at','_spf_legacy_owner_receipt' ) as $key ) {
+				$exists = metadata_exists( 'post', $page_id, $key );
+				$snapshot['page_meta'][ $page_id ][ $key ] = array( 'exists'=>$exists,'values'=>$exists?get_post_meta($page_id,$key,false):array() );
+			}
+		}
+		return $snapshot;
+	}
+
 	private static function restore_snapshot( array $snapshot ) {
-		array_key_exists( 'spf_page_map', $snapshot ) && null !== $snapshot['spf_page_map'] ? update_option( 'spf_page_map', $snapshot['spf_page_map'], false ) : delete_option( 'spf_page_map' );
-		array_key_exists( 'spf_founder_user_id', $snapshot ) && null !== $snapshot['spf_founder_user_id'] ? update_option( 'spf_founder_user_id', $snapshot['spf_founder_user_id'], false ) : delete_option( 'spf_founder_user_id' );
-		if ( isset( $snapshot['spf_page_map'] ) && is_array( $snapshot['spf_page_map'] ) ) {
-			foreach ( $snapshot['spf_page_map'] as $page_id ) {
-				delete_post_meta( absint( $page_id ), '_spf_legacy_quarantined' );
-				delete_post_meta( absint( $page_id ), '_spf_legacy_quarantined_at' );
+		self::restore_option_state( 'spf_page_map', $snapshot['spf_page_map'] ?? array( 'exists'=>false ) );
+		self::restore_option_state( 'spf_founder_user_id', $snapshot['spf_founder_user_id'] ?? array( 'exists'=>false ) );
+		foreach ( $snapshot['page_meta'] ?? array() as $page_id => $keys ) {
+			foreach ( $keys as $key => $state ) {
+				delete_post_meta( absint( $page_id ), $key );
+				if ( ! empty( $state['exists'] ) ) {
+					foreach ( (array) $state['values'] as $value ) {
+						add_post_meta( absint( $page_id ), $key, $value );
+					}
+				}
 			}
 		}
 	}
 
+	private static function rollback_owner_receipts( array $receipts, $plan_hash ) {
+		$errors = array();
+		foreach ( array_reverse( $receipts ) as $receipt ) {
+			$result = apply_filters( 'spf_rollback_owner_reconciliation', null, $receipt, $plan_hash );
+			if ( ! is_array( $result ) || empty( $result['success'] ) ) {
+				$errors[] = $receipt['receipt_id'] ?? 'unknown';
+			}
+		}
+		return empty( $errors ) ? true : new WP_Error( 'spf_owner_rollback_failed', __( 'One or more canonical owners could not roll back their reconciliation receipt.', 'sabri-platform-foundation' ), array( 'status'=>500,'receipts'=>$errors ) );
+	}
+
+	private static function option_state( $name ) {
+		$sentinel = new stdClass();
+		$value = get_option( $name, $sentinel );
+		return array( 'exists'=>$value!==$sentinel,'value'=>$value!==$sentinel?$value:null );
+	}
+
+	private static function restore_option_state( $name, array $state ) {
+		if ( ! empty( $state['exists'] ) ) {
+			update_option( $name, $state['value'], false );
+		} else {
+			delete_option( $name );
+		}
+	}
 }

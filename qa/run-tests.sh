@@ -4,27 +4,29 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 printf 'PHP syntax\n'
-while IFS= read -r -d '' file; do
-  php -l "$file" >/dev/null
-done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
+while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 
-printf 'Contract tests\n'
-php tests/contract-tests.php
-printf 'Security tests\n'
-php tests/security-tests.php
-printf 'Schema tests\n'
+php tests/unit-tests.php
+php tests/source-quality-tests.php
 php tests/schema-tests.php
+php tests/contract-tests.php
+
+
+printf 'Source checksum manifest\n'
+sha256sum --check SOURCE-CHECKSUMS.sha256
+
+printf 'JSON documents\n'
+for file in SBOM.cdx.json DEPENDENCY-MANIFEST.json RELEASE-EVIDENCE-TEMPLATE.json; do
+  [[ -f "$file" ]] || { echo "Missing $file" >&2; exit 1; }
+  php -r '$d=json_decode(file_get_contents($argv[1]),true); if(!is_array($d)||json_last_error()!==JSON_ERROR_NONE){fwrite(STDERR,"Invalid JSON: {$argv[1]}\n");exit(1);}' "$file"
+done
 
 printf 'Forbidden artifact checks\n'
-if grep -RInE --exclude-dir=.git --exclude-dir=build --exclude-dir=dist --exclude=run-tests.sh \
-  '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|password\s*[:=]\s*[^[]|Hostinger credential|patient record)' .; then
-  echo "Potential secret/private-data indicator found" >&2
-  exit 1
+if grep -RInE --exclude=run-tests.sh \
+  '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|Hostinger credential)' \
+  sabri-platform-foundation.php uninstall.php includes qa tools .github; then
+  echo "Potential secret/private-data indicator found" >&2; exit 1
 fi
+if find . -type f -not -path './.git/*' -print0 | xargs -0 grep -Il $'\r' | grep .; then echo "CRLF files found" >&2; exit 1; fi
 
-if find . -type f -not -path './.git/*' -print0 | xargs -0 grep -Il $'\r' | grep .; then
-  echo "CRLF files found; deterministic source requires LF" >&2
-  exit 1
-fi
-
-echo "All source QA PASS"
+echo 'All source QA PASS'

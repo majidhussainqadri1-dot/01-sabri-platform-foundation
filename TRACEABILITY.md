@@ -1,32 +1,26 @@
-# File 01 Plan-to-Code Traceability
+# File 01 Requirements-to-Code Traceability
 
-Governing specification: `SSH-F01-PLAN-2026-v1.0`
-
-| Requirement | Implementation | Automated evidence |
-|---|---|---|
-| F01-FR-001 Master constitution registry | `SPF_Installer::seed_governance()` and `spf_amendments` | `tests/contract-tests.php` |
-| F01-FR-002 Module manifest registry | `SPF_Registry::register_manifest()` and `spf_modules` | contract/schema tests |
-| F01-FR-003 Dependency resolution | `SPF_Dependency_Resolver` | dependency static tests |
-| F01-FR-004 Foundational route registry | `SPF_Registry::map_route()` and `spf_routes` | collision/owner boundary tests |
-| F01-FR-005 Safe activation protocol | `SPF_Installer` lock, snapshot, compensation, audit | security/schema tests |
-| F01-FR-006 System Check contract | `SPF_System_Check` and `spf_health` | contract tests |
-| F01-FR-007 Legacy reconciliation | `SPF_Reconciler` dry-run/apply/rollback | boundary tests |
-| F01-FR-008 Contract versioning | `SPF_Registry::register_contract()/acknowledge_contract()` and `spf_contracts` | semver/schema tests |
-| F01-FR-009 Safe repair | `SPF_Repair` dry-run/hash/confirmation | boundary tests |
-| F01-FR-010 Release evidence manifest | `SPF_Governance::record_release()/transition_release()`, immutable checksum and append-only `spf_release_states` | release tests |
-| F01-FR-011 Feature-flag registry | `SPF_Governance::set_flag()` | availability-not-authorization test |
-| F01-FR-012 Uninstall/purge governance | non-destructive `uninstall.php`; guarded `SPF_Purge` | purge guard tests |
-| F01-NFR-001 Authorization | `SPF_Authorization`; REST/admin permissions | security tests |
-| F01-NFR-002 Privacy lifecycle | DTO allowlists, redacted health/audit, no PII registry | privacy static tests |
-| F01-NFR-003 Reliability | outbox, dedupe, retry/dead-letter, idempotency | security/contract tests |
-| F01-NFR-004 Performance | bounded lists, cached probes, no public rendering | static tests |
-| F01-NFR-005 Accessibility | wp-admin native semantics; no competing public UI | ownership tests; staging manual |
-| F01-NFR-006 Observability | audit trace IDs, health snapshots, event outbox | contract tests |
-| F01-NFR-007 Migration/rollback | activation and reconciliation snapshots; rollback | schema/boundary tests |
-| F01-NFR-008 Operability | System Check, reconciliation, repair, purge plan | contract tests |
-| F01-NFR-009 Compatibility | WP 6+/PHP 8.1+ metadata; CI PHP 8.1/8.3 | GitHub Actions |
-| F01-NFR-010 Localization | text domain and translatable admin/API messages | static tests |
-
-## External acceptance boundary
-
-Hostinger staging, active-theme coexistence, File 00/20/24/25 real contracts, LiteSpeed behavior, backup/restore, browser/accessibility and Founder acceptance require the real staging environment and cannot be proved by repository-only automation.
+| Requirement | Implementation | Automated evidence | External acceptance |
+|---|---|---|---|
+| F01-FR-001 Master Constitution Registry | `SPF_Installer::seed_governance`, `SPF_Governance::record_amendment` | contract/source/runtime tests | Founder change-control review |
+| F01-FR-002 Module Manifest Registry | `SPF_Registry::register_manifest`, real File 01 manifest, canonical catalog | runtime manifest/schema tests | real owner manifests 00–26 |
+| F01-FR-003 Dependency Resolver | `SPF_Dependency_Resolver` | unit/runtime readiness tests | companion version matrix |
+| F01-FR-004 Foundational Route Registry | `SPF_Registry::map_route` | route collision/same-origin/runtime tests | File 20 placement |
+| F01-FR-005 Safe Activation Protocol | `SPF_Installer::activate`, shadow snapshots, lock, compensation | activation/runtime/failure-point tests | Hostinger fresh install |
+| F01-FR-006 System Check Contract | `SPF_System_Check` | runtime MySQL/cron/cache/audit tests | provider/SMTP/Hostinger evidence |
+| F01-FR-007 Legacy Reconciliation | `SPF_Reconciler` owner plans/receipts/exact rollback | runtime adapter/metadata rollback tests | real File 20/21 adapters and sampled data |
+| F01-FR-008 Contract Versioning | contract registry, acknowledgements, deprecation event | contract/runtime tests | consumer acknowledgements |
+| F01-FR-009 Safe Repair | `SPF_Repair` lock/dry-run/owner scope/compensation | source/runtime repair tests | staging operator acceptance |
+| F01-FR-010 Release Evidence Manifest | `SPF_Governance` state/evidence ledger | unit/runtime lifecycle tests | staging/Founder/production evidence |
+| F01-FR-011 Feature-Flag Registry | set/evaluate/expire/reconcile events | runtime flag tests | production kill-switch rehearsal |
+| F01-FR-012 Uninstall/Purge Governance | non-destructive uninstall; `SPF_Purge` evidence gates/quarantine | source/runtime purge tests | independent File 24/restore proof |
+| F01-NFR-001 Object/Field Authorization | structured File 00 claims, SoD, fail closed | unit/runtime authorization tests | real File 00 contract |
+| F01-NFR-002 Privacy Lifecycle | exporter/eraser/holds/retention | runtime privacy tests | policy/legal review |
+| F01-NFR-003 Reliability | InnoDB, transactions, locks, idempotency, outbox/dead letter | runtime/concurrency tests | outage/soak tests |
+| F01-NFR-004 Performance | bounded lists, indexes, background jobs | query/static checks | production-size p75/p95 load test |
+| F01-NFR-005 Accessibility | semantic admin controls/no public UI ownership | source/runtime markup checks | browser/screen-reader/zoom/RTL |
+| F01-NFR-006 Observability | redacted health, audit, outbox, reason codes | runtime system check | File 24 dashboards/alerts |
+| F01-NFR-007 Migration/Rollback | evidence-gated shadow upgrade and reconciliation rollback | runtime upgrade/rollback tests | full Hostinger drill |
+| F01-NFR-008 Operability | System Check, repair, flags, queues, runbooks | runtime/operational tests | operator rehearsal |
+| F01-NFR-009 Compatibility | PHP 8.1/8.3 and live WordPress/MySQL CI | matrix CI | actual WordPress 7.0.1/PHP 8.3.30 recheck |
+| F01-NFR-010 Localization | translatable strings, no second visual UI, UTC evidence | source tests | Urdu/Arabic/RTL staging acceptance |

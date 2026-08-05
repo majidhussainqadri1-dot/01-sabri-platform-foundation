@@ -1,13 +1,12 @@
-# Known Limitations and External Gates
+# Known External Acceptance Boundaries
 
-This candidate deliberately does not claim the following without real environment evidence:
+No unresolved source-level Critical/High defect is knowingly accepted in this corrective candidate. The following are external evidence gates, not claims of completed deployment:
 
-- Hostinger staging installation, upgrade and rollback;
-- actual WordPress `dbDelta`, MySQL/InnoDB transaction and concurrent-lock behavior;
-- active-theme, File 20 shell, File 21 Home/News, File 00 identity and File 24/25 contract coexistence;
-- LiteSpeed/object-cache invalidation behavior;
-- SMTP, cron and infrastructure-provider availability;
-- real backup restore, browser/device, keyboard, screen-reader, zoom and RTL acceptance;
-- Founder staging sign-off, live deployment, monitoring or operational SLOs.
+- Hostinger fresh install and upgrade on the actual WordPress/PHP/MySQL/LiteSpeed environment.
+- Real File 00 structured claims and File 20/21/24/25 owner/assurance adapters.
+- Browser/device, keyboard, screen reader, 200–400% zoom, RTL and weak-network acceptance.
+- Production-size data/load/soak measurements.
+- Independent backup/restore and full rollback rehearsal.
+- Founder staging acceptance, production change approval and post-deployment monitoring.
 
-The code fails closed for privileged integration when File 00 is present without its current assertion adapter. File 01 never substitutes for domain-native authorization.
+Until those gates pass, status remains source/package/automated-QA candidate—not staging-accepted, live or operational.

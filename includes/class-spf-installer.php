@@ -2,39 +2,79 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_Installer {
-	const LOCK_OPTION = 'spf_activation_lock';
+	const LOCK_OPTION     = 'spf_activation_lock';
 	const SNAPSHOT_OPTION = 'spf_activation_snapshot';
-	const VERSION_OPTION = 'spf_version';
-	const SCHEMA_OPTION = 'spf_schema_version';
+	const VERSION_OPTION  = 'spf_version';
+	const SCHEMA_OPTION   = 'spf_schema_version';
 	const CONTRACT_OPTION = 'spf_contract_version';
+
+	private static $internal_seed_depth = 0;
+
+	public static function table_names() {
+		return array(
+			'modules', 'contracts', 'routes', 'releases', 'release_states', 'amendments',
+			'health', 'flags', 'audit', 'idempotency', 'outbox', 'privacy_requests',
+			'privacy_holds', 'migrations',
+		);
+	}
 
 	public static function table( $name ) {
 		global $wpdb;
-		$allowed = array( 'modules', 'contracts', 'routes', 'releases', 'release_states', 'amendments', 'health', 'flags', 'audit', 'idempotency', 'outbox' );
-		if ( ! in_array( $name, $allowed, true ) ) {
+		if ( ! in_array( $name, self::table_names(), true ) ) {
 			wp_die( 'Invalid File 01 table.' );
 		}
 		return $wpdb->prefix . 'spf_' . $name;
 	}
 
+	public static function with_internal_seed( callable $callback ) {
+		self::$internal_seed_depth++;
+		try {
+			return $callback();
+		} finally {
+			self::$internal_seed_depth--;
+		}
+	}
+
+	public static function is_internal_seed() {
+		return self::$internal_seed_depth > 0;
+	}
+
 	public static function activate() {
 		if ( ! current_user_can( 'activate_plugins' ) ) {
-			return;
+			wp_die( esc_html__( 'You are not allowed to activate File 01.', 'sabri-platform-foundation' ) );
 		}
-		$lock = self::acquire_lock();
+		$lock = SPF_Runtime::acquire_lock( 'activation', 900, get_current_user_id() );
 		if ( is_wp_error( $lock ) ) {
 			wp_die( esc_html( $lock->get_error_message() ) );
 		}
 		$trace = SPF_Audit::trace_id();
+		$snapshot = array();
 		try {
-			self::capture_activation_snapshot();
+			$snapshot = self::capture_runtime_snapshot( $lock );
 			self::install_schema();
+			$verified = self::verify_schema();
+			if ( is_wp_error( $verified ) ) {
+				throw new RuntimeException( $verified->get_error_message() );
+			}
 			SPF_Authorization::install_capabilities();
 			self::seed_governance();
 			update_option( self::VERSION_OPTION, SPF_VERSION, false );
 			update_option( self::SCHEMA_OPTION, SPF_SCHEMA_VERSION, false );
 			update_option( self::CONTRACT_OPTION, SPF_CONTRACT_VERSION, false );
-			update_option( 'spf_activation_state', array( 'status' => 'active', 'trace_id' => $trace, 'activated_at' => current_time( 'mysql', true ) ), false );
+			update_option(
+				'spf_activation_state',
+				array(
+					'status'       => 'active',
+					'trace_id'     => $trace,
+					'activated_at' => SPF_Runtime::now_mysql(),
+					'version'      => SPF_VERSION,
+				),
+				false
+			);
+			$scheduled = self::schedule_jobs();
+			if ( is_wp_error( $scheduled ) ) {
+				throw new RuntimeException( $scheduled->get_error_message() );
+			}
 			$audit = SPF_Audit::record_required( 'activation', 'foundation', 'file-01', 'success', array( 'purpose' => 'plugin_activation', 'version' => SPF_VERSION ), $trace );
 			if ( is_wp_error( $audit ) ) {
 				throw new RuntimeException( $audit->get_error_message() );
@@ -43,34 +83,132 @@ final class SPF_Installer {
 			if ( is_wp_error( $event ) ) {
 				throw new RuntimeException( $event->get_error_message() );
 			}
-			if ( ! wp_next_scheduled( 'spf_dispatch_outbox' ) ) {
-				wp_schedule_event( time() + 120, 'spf_five_minutes', 'spf_dispatch_outbox' );
-			}
+			self::discard_shadow_backups( $snapshot );
+			SPF_Plugin::instance()->register_restricted_routes();
 			flush_rewrite_rules( false );
 		} catch ( Throwable $error ) {
-			self::restore_activation_snapshot();
-			update_option( 'spf_activation_state', array( 'status' => 'failed', 'trace_id' => $trace, 'failed_at' => current_time( 'mysql', true ) ), false );
-			self::release_lock( $lock );
-			wp_die( esc_html( 'File 01 activation failed safely: ' . $error->getMessage() ) );
+			$compensation = self::restore_runtime_snapshot( $snapshot );
+			$compensated = ! is_wp_error( $compensation );
+			update_option( 'spf_activation_state', array( 'status' => 'failed', 'trace_id' => $trace, 'failed_at' => SPF_Runtime::now_mysql(), 'error_code' => $compensated ? 'activation_compensated' : 'activation_compensation_incomplete' ), false );
+			SPF_Runtime::release_lock( 'activation', $lock );
+			$message = 'File 01 activation failed: ' . $error->getMessage();
+			if ( is_wp_error( $compensation ) ) {
+				$message .= ' Compensation verification also failed: ' . $compensation->get_error_message();
+			}
+			wp_die( esc_html( $message ) );
 		}
-		self::release_lock( $lock );
+		SPF_Runtime::release_lock( 'activation', $lock );
 	}
 
 	public static function deactivate() {
-		$timestamp = wp_next_scheduled( 'spf_dispatch_outbox' );
-		if ( $timestamp ) {
-			wp_unschedule_event( $timestamp, 'spf_dispatch_outbox' );
+		self::unschedule_jobs();
+		update_option( 'spf_activation_state', array( 'status' => 'inactive', 'deactivated_at' => SPF_Runtime::now_mysql(), 'version' => SPF_VERSION ), false );
+		if ( class_exists( 'SPF_Audit', false ) && SPF_Runtime::table_exists( self::table( 'audit' ) ) ) {
+			SPF_Audit::record( 'deactivation', 'foundation', 'file-01', 'success', array( 'purpose' => 'plugin_deactivation' ) );
+			SPF_Event_Bus::publish( 'FoundationModuleDeactivated.v1', 'foundation_module', 'file-01', array( 'version' => SPF_VERSION ), 1, 'file-01-deactivation-' . gmdate( 'YmdHi' ) );
 		}
-		update_option( 'spf_activation_state', array( 'status' => 'inactive', 'deactivated_at' => current_time( 'mysql', true ) ), false );
 		flush_rewrite_rules( false );
+	}
+
+	/**
+	 * Explicit, evidence-gated schema upgrade. It never runs as an unaudited
+	 * background mutation. Staging may opt into the internal shadow backup gate
+	 * with SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE=true; production should supply a
+	 * File 24/operations verification claim.
+	 */
+	public static function maybe_upgrade() {
+		$current = get_option( self::SCHEMA_OPTION, '0.0.0' );
+		if ( ! SPF_Registry::valid_semver( (string) $current ) || version_compare( $current, SPF_SCHEMA_VERSION, '>=' ) ) {
+			return true;
+		}
+		if ( ! SPF_Authorization::can( 'run_schema_upgrade', array( 'module_key' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION ), array( 'purpose' => 'schema_upgrade' ) ) ) {
+			update_option( 'spf_upgrade_state', array( 'status' => 'authorization_required', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'checked_at' => SPF_Runtime::now_mysql() ), false );
+			return new WP_Error( 'spf_upgrade_authorization_required', __( 'File 01 schema upgrade requires an authorized operator.', 'sabri-platform-foundation' ) );
+		}
+		$evidence = SPF_Runtime::verify_evidence(
+			'spf_verify_migration_backup_evidence',
+			array( 'module' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'environment' => self::environment() ),
+			array( 'backup_id', 'restore_tested_at', 'environment', 'verifier' )
+		);
+		if ( is_wp_error( $evidence ) && ! ( defined( 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE' ) && true === SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE ) ) {
+			update_option( 'spf_upgrade_state', array( 'status' => 'backup_evidence_required', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'checked_at' => SPF_Runtime::now_mysql() ), false );
+			return $evidence;
+		}
+		if ( is_wp_error( $evidence ) ) {
+			$evidence = array( 'verified' => true, 'mode' => 'internal_shadow_snapshot', 'environment' => self::environment(), 'verifier' => 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE', 'evidence_hash' => 'internal' );
+		}
+		return self::run_upgrade( $current, SPF_SCHEMA_VERSION, $evidence );
+	}
+
+	private static function run_upgrade( $from, $to, array $evidence ) {
+		global $wpdb;
+		$lock = SPF_Runtime::acquire_lock( 'schema_upgrade', 1800, get_current_user_id() );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		$snapshot = array();
+		$migration_id = wp_generate_uuid4();
+		try {
+			$snapshot = self::capture_runtime_snapshot( $lock );
+			self::install_schema();
+			$verified = self::verify_schema();
+			if ( is_wp_error( $verified ) ) {
+				throw new RuntimeException( $verified->get_error_message() );
+			}
+			self::seed_governance();
+			$inserted = $wpdb->insert(
+				self::table( 'migrations' ),
+				array(
+					'migration_id' => $migration_id,
+					'from_version' => sanitize_text_field( $from ),
+					'to_version'   => sanitize_text_field( $to ),
+					'status'       => 'completed',
+					'snapshot_ref' => sanitize_text_field( $snapshot['snapshot_id'] ?? '' ),
+					'evidence_json'=> wp_json_encode( SPF_Runtime::canonicalize( $evidence ) ),
+					'started_at'   => $snapshot['captured_at'] ?? SPF_Runtime::now_mysql(),
+					'completed_at' => SPF_Runtime::now_mysql(),
+					'record_version'=> 1,
+				),
+				array( '%s','%s','%s','%s','%s','%s','%s','%s','%d' )
+			);
+			if ( false === $inserted ) {
+				throw new RuntimeException( 'Migration evidence could not be stored.' );
+			}
+			update_option( self::SCHEMA_OPTION, $to, false );
+			update_option( self::VERSION_OPTION, SPF_VERSION, false );
+			update_option( self::CONTRACT_OPTION, SPF_CONTRACT_VERSION, false );
+			update_option( 'spf_upgrade_state', array( 'status' => 'completed', 'migration_id' => $migration_id, 'from' => $from, 'to' => $to, 'completed_at' => SPF_Runtime::now_mysql() ), false );
+			$audit = SPF_Audit::record_required( 'schema_upgrade', 'foundation_migration', $migration_id, 'success', array( 'purpose' => 'schema_upgrade', 'from' => $from, 'to' => $to, 'evidence_hash' => $evidence['evidence_hash'] ?? '' ) );
+			if ( is_wp_error( $audit ) ) {
+				throw new RuntimeException( $audit->get_error_message() );
+			}
+			$event = SPF_Event_Bus::publish( 'FoundationSchemaMigrated.v1', 'foundation_migration', $migration_id, array( 'from' => $from, 'to' => $to ), 1, 'schema-' . $to );
+			if ( is_wp_error( $event ) ) {
+				throw new RuntimeException( $event->get_error_message() );
+			}
+			self::discard_shadow_backups( $snapshot );
+			SPF_Runtime::release_lock( 'schema_upgrade', $lock );
+			return true;
+		} catch ( Throwable $error ) {
+			$compensation = self::restore_runtime_snapshot( $snapshot );
+			$compensated = ! is_wp_error( $compensation );
+			update_option( 'spf_upgrade_state', array( 'status' => $compensated ? 'rolled_back' : 'rollback_incomplete', 'migration_id' => $migration_id, 'from' => $from, 'to' => $to, 'failed_at' => SPF_Runtime::now_mysql(), 'error_code' => $compensated ? 'upgrade_compensated' : 'upgrade_compensation_incomplete' ), false );
+			SPF_Runtime::release_lock( 'schema_upgrade', $lock );
+			$message = $error->getMessage();
+			if ( is_wp_error( $compensation ) ) {
+				$message .= ' Compensation verification failed: ' . $compensation->get_error_message();
+			}
+			return new WP_Error( 'spf_upgrade_failed', $message, array( 'status' => 500, 'migration_id' => $migration_id, 'compensated' => $compensated ) );
+		}
 	}
 
 	public static function install_schema() {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$charset = $wpdb->get_charset_collate();
-
+		$engine = ' ENGINE=InnoDB ';
 		$sql = array();
+
 		$sql[] = "CREATE TABLE " . self::table( 'modules' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			module_key varchar(64) NOT NULL,
@@ -87,9 +225,8 @@ final class SPF_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY module_key (module_key),
-			KEY owner_file (owner_file),
-			KEY state (state)
-		) {$charset};";
+			KEY owner_file (owner_file), KEY state (state)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'contracts' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			contract_key varchar(128) NOT NULL,
@@ -105,9 +242,8 @@ final class SPF_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY contract_version (contract_key,contract_version),
-			KEY owner_module (owner_module),
-			KEY status (status)
-		) {$charset};";
+			KEY owner_module (owner_module), KEY status (status)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'routes' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			route_key varchar(128) NOT NULL,
@@ -122,11 +258,9 @@ final class SPF_Installer {
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY route_key (route_key),
-			UNIQUE KEY route_path (route_path),
-			KEY owner_module (owner_module),
-			KEY status (status)
-		) {$charset};";
+			UNIQUE KEY route_key (route_key), UNIQUE KEY route_path (route_path),
+			KEY owner_module (owner_module), KEY status (status)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'releases' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			release_id char(36) NOT NULL,
@@ -136,26 +270,29 @@ final class SPF_Installer {
 			checksum_sha256 char(64) NOT NULL,
 			schema_version varchar(32) NOT NULL,
 			evidence_json longtext NOT NULL,
-			status varchar(32) NOT NULL DEFAULT 'built',
+			evidence_hash char(64) NOT NULL,
+			status varchar(32) NOT NULL DEFAULT 'planned',
+			approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
+			approved_at datetime NULL,
+			deployed_at datetime NULL,
+			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY release_id (release_id),
-			UNIQUE KEY checksum_sha256 (checksum_sha256),
-			KEY status (status)
-		) {$charset};";
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id), UNIQUE KEY release_id (release_id), UNIQUE KEY checksum_sha256 (checksum_sha256),
+			KEY status (status), KEY software_version (software_version)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'release_states' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			release_id char(36) NOT NULL,
 			sequence_no int(10) unsigned NOT NULL,
 			status varchar(32) NOT NULL,
 			evidence_json longtext NOT NULL,
+			evidence_hash char(64) NOT NULL,
 			actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY release_sequence (release_id,sequence_no),
-			KEY release_id (release_id),
-			KEY status (status)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY release_sequence (release_id,sequence_no),
+			KEY release_id (release_id), KEY status (status)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'amendments' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			amendment_id varchar(64) NOT NULL,
@@ -164,41 +301,35 @@ final class SPF_Installer {
 			decision_json longtext NOT NULL,
 			approver_ref varchar(191) NOT NULL,
 			status varchar(32) NOT NULL DEFAULT 'approved',
+			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY amendment_id (amendment_id),
-			KEY status (status)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY amendment_id (amendment_id), KEY status (status)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'health' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			trace_id char(36) NOT NULL,
 			overall_status varchar(32) NOT NULL,
 			results_json longtext NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY trace_id (trace_id),
-			KEY overall_status (overall_status),
-			KEY created_at (created_at)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY trace_id (trace_id), KEY overall_status (overall_status), KEY created_at (created_at)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'flags' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-			flag_key varchar(128) NOT NULL,
 			owner_module varchar(64) NOT NULL,
-			environment varchar(32) NOT NULL DEFAULT 'all',
+			flag_key varchar(128) NOT NULL,
+			environment varchar(32) NOT NULL,
 			enabled tinyint(1) NOT NULL DEFAULT 0,
 			expires_at datetime NULL,
 			reason varchar(500) NOT NULL,
 			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY owner_flag (owner_module,flag_key,environment),
-			KEY enabled (enabled)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY owner_flag (owner_module,flag_key,environment), KEY expires_at (expires_at)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'audit' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			trace_id char(36) NOT NULL,
-			action_name varchar(64) NOT NULL,
+			action_name varchar(128) NOT NULL,
 			object_type varchar(64) NOT NULL,
 			object_id varchar(191) NOT NULL,
 			actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
@@ -208,31 +339,30 @@ final class SPF_Installer {
 			previous_hash char(64) NOT NULL,
 			entry_hash char(64) NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			KEY trace_id (trace_id),
-			UNIQUE KEY entry_hash (entry_hash),
-			KEY object_ref (object_type,object_id),
-			KEY actor_id (actor_id),
-			KEY created_at (created_at)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY entry_hash (entry_hash), KEY trace_id (trace_id), KEY actor_id (actor_id), KEY created_at (created_at)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'idempotency' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			idempotency_key varchar(191) NOT NULL,
 			scope_hash char(64) NOT NULL,
-			actor_id bigint(20) unsigned NOT NULL,
-			action_name varchar(64) NOT NULL,
+			actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			action_name varchar(128) NOT NULL,
 			request_hash char(64) NOT NULL,
+			status varchar(32) NOT NULL DEFAULT 'processing',
+			owner_token char(36) NOT NULL,
 			response_json longtext NOT NULL,
+			response_status smallint(5) unsigned NOT NULL DEFAULT 0,
+			attempts int(10) unsigned NOT NULL DEFAULT 1,
+			locked_at datetime NOT NULL,
 			expires_at datetime NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY scope_hash (scope_hash),
-			KEY expires_at (expires_at)
-		) {$charset};";
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id), UNIQUE KEY scope_hash (scope_hash), KEY expires_at (expires_at), KEY status (status)
+		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'outbox' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			event_id char(36) NOT NULL,
-			event_name varchar(128) NOT NULL,
+			event_name varchar(191) NOT NULL,
 			event_version int(10) unsigned NOT NULL,
 			aggregate_type varchar(64) NOT NULL,
 			aggregate_id varchar(191) NOT NULL,
@@ -244,198 +374,344 @@ final class SPF_Installer {
 			sent_at datetime NULL,
 			last_error varchar(191) NOT NULL DEFAULT '',
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY event_id (event_id),
-			UNIQUE KEY dedupe_key (dedupe_key),
-			KEY due (status,available_at)
-		) {$charset};";
+			PRIMARY KEY  (id), UNIQUE KEY event_id (event_id), UNIQUE KEY dedupe_key (dedupe_key), KEY due (status,available_at), KEY created_at (created_at)
+		) {$engine} {$charset};";
+		$sql[] = "CREATE TABLE " . self::table( 'privacy_requests' ) . " (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			request_id char(36) NOT NULL,
+			user_id bigint(20) unsigned NOT NULL,
+			request_type varchar(32) NOT NULL,
+			status varchar(32) NOT NULL DEFAULT 'received',
+			purpose varchar(191) NOT NULL,
+			legal_basis varchar(191) NOT NULL,
+			result_json longtext NOT NULL,
+			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
+			requested_at datetime NOT NULL,
+			due_at datetime NOT NULL,
+			completed_at datetime NULL,
+			PRIMARY KEY  (id), UNIQUE KEY request_id (request_id), KEY user_status (user_id,status), KEY due_at (due_at)
+		) {$engine} {$charset};";
+		$sql[] = "CREATE TABLE " . self::table( 'privacy_holds' ) . " (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			hold_id char(36) NOT NULL,
+			subject_type varchar(64) NOT NULL,
+			subject_id varchar(191) NOT NULL,
+			reason varchar(500) NOT NULL,
+			authority_ref varchar(191) NOT NULL,
+			active tinyint(1) NOT NULL DEFAULT 1,
+			created_at datetime NOT NULL,
+			released_at datetime NULL,
+			PRIMARY KEY  (id), UNIQUE KEY hold_id (hold_id), KEY subject_active (subject_type,subject_id,active)
+		) {$engine} {$charset};";
+		$sql[] = "CREATE TABLE " . self::table( 'migrations' ) . " (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			migration_id char(36) NOT NULL,
+			from_version varchar(32) NOT NULL,
+			to_version varchar(32) NOT NULL,
+			status varchar(32) NOT NULL,
+			snapshot_ref varchar(191) NOT NULL,
+			evidence_json longtext NOT NULL,
+			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
+			started_at datetime NOT NULL,
+			completed_at datetime NULL,
+			PRIMARY KEY  (id), UNIQUE KEY migration_id (migration_id), KEY status (status)
+		) {$engine} {$charset};";
 
 		foreach ( $sql as $statement ) {
 			dbDelta( $statement );
 		}
+		// dbDelta does not always change an existing engine. Enforce the
+		// transactional invariant explicitly on File 01-owned tables.
+		foreach ( self::table_names() as $name ) {
+			$table = self::table( $name );
+			if ( SPF_Runtime::table_exists( $table ) && 'INNODB' !== SPF_Runtime::table_engine( $table ) ) {
+				$wpdb->query( "ALTER TABLE {$table} ENGINE=InnoDB" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted File 01 table.
+			}
+		}
+	}
+
+	public static function verify_schema() {
+		global $wpdb;
+		$missing = array();
+		foreach ( self::table_names() as $name ) {
+			$table = self::table( $name );
+			if ( ! SPF_Runtime::table_exists( $table ) ) {
+				$missing[ $name ] = 'missing_table';
+				continue;
+			}
+			if ( 'INNODB' !== SPF_Runtime::table_engine( $table ) ) {
+				$missing[ $name ] = 'non_transactional_engine';
+			}
+		}
+		$required_columns = array(
+			'idempotency' => array( 'scope_hash','request_hash','status','owner_token','response_status','locked_at','expires_at' ),
+			'releases' => array( 'evidence_hash','record_version','approved_by','approved_at','deployed_at' ),
+			'release_states' => array( 'evidence_hash','sequence_no' ),
+			'privacy_requests' => array( 'request_id','request_type','legal_basis','due_at' ),
+			'privacy_holds' => array( 'hold_id','subject_type','subject_id','active' ),
+		);
+		foreach ( $required_columns as $name => $columns ) {
+			$table = self::table( $name );
+			if ( ! SPF_Runtime::table_exists( $table ) ) {
+				continue;
+			}
+			$actual = $wpdb->get_col( "DESCRIBE {$table}", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+			foreach ( $columns as $column ) {
+				if ( ! in_array( $column, $actual, true ) ) {
+					$missing[ $name . '.' . $column ] = 'missing_column';
+				}
+			}
+		}
+		return empty( $missing ) ? true : new WP_Error( 'spf_schema_verification_failed', __( 'File 01 schema verification failed.', 'sabri-platform-foundation' ), array( 'defects' => $missing ) );
 	}
 
 	private static function seed_governance() {
 		global $wpdb;
-		$now = current_time( 'mysql', true );
+		$now = SPF_Runtime::now_mysql();
 		$amendments = array(
-			array(
-				'amendment_id' => 'SSH-PMP-2026-v3.0',
-				'effective_at' => '2026-07-31 00:00:00',
-				'supersedes'   => 'Foundation 0.25; Comprehensive Master Plan 2.0',
-				'decision'     => array( 'type' => 'governing_constitution', 'numbering' => '00-25', 'runtime' => '01-B' ),
-			),
-			array(
-				'amendment_id' => 'SSH-DIRECTIVES-2026-v2.1',
-				'effective_at' => '2026-08-05 10:47:00',
-				'supersedes'   => 'conflicting earlier chat directives',
-				'decision'     => array( 'type' => 'directive_register', 'primary_color' => 'green', 'navigation_owner' => '20', 'visual_owner' => '25', 'file_26' => 'approved' ),
-			),
+			array( 'amendment_id' => 'SSH-PMP-2026-v3.0', 'effective_at' => '2026-07-31 00:00:00', 'supersedes' => 'Foundation 0.25; Comprehensive Master Plan 2.0', 'decision' => array( 'type' => 'governing_constitution', 'numbering' => '00-26', 'runtime' => '01-B' ) ),
+			array( 'amendment_id' => 'SSH-DIRECTIVES-2026-v2.1', 'effective_at' => '2026-08-05 10:47:00', 'supersedes' => 'conflicting earlier chat directives', 'decision' => array( 'type' => 'directive_register', 'primary_color' => 'green', 'navigation_owner' => '20', 'visual_owner' => '25', 'file_26' => 'approved' ) ),
+			array( 'amendment_id' => 'F01-REPOSITORY-ALIAS-2026-08-06', 'effective_at' => '2026-08-06 00:00:00', 'supersedes' => 'plan repository label only', 'decision' => array( 'type' => 'repository_alias', 'canonical_repository' => '01-sabri-platform-foundation', 'package_folder' => 'sabri-platform-foundation-01', 'reason' => 'Founder-selected repository retained; runtime slug unchanged.' ) ),
 		);
 		foreach ( $amendments as $item ) {
-			$wpdb->query(
+			$result = $wpdb->query(
 				$wpdb->prepare(
-					"INSERT IGNORE INTO " . self::table( 'amendments' ) . " (amendment_id,effective_at,supersedes,decision_json,approver_ref,status,created_at) VALUES (%s,%s,%s,%s,%s,'approved',%s)",
-					$item['amendment_id'],
-					$item['effective_at'],
-					$item['supersedes'],
-					wp_json_encode( $item['decision'] ),
-					'Founder-approved governing source',
-					$now
+					"INSERT IGNORE INTO " . self::table( 'amendments' ) . " (amendment_id,effective_at,supersedes,decision_json,approver_ref,status,record_version,created_at) VALUES (%s,%s,%s,%s,%s,'approved',1,%s)",
+					$item['amendment_id'], $item['effective_at'], $item['supersedes'], wp_json_encode( $item['decision'] ), 'Founder-approved governing source', $now
 				)
 			);
-		}
-		foreach ( self::seed_manifests() as $manifest ) {
-			$existing = SPF_Registry::get_module( $manifest['module_key'] );
-			if ( $existing && 'file-01' !== $manifest['module_key'] ) {
-				continue;
-			}
-			$result = SPF_Registry::register_manifest( $manifest, array( 'system_seed' => true, 'purpose' => 'activation_seed' ) );
-			if ( is_wp_error( $result ) ) {
-				throw new RuntimeException( $result->get_error_message() );
+			if ( false === $result ) {
+				throw new RuntimeException( 'A governing amendment could not be seeded.' );
 			}
 		}
-		$route_result = SPF_Registry::map_route(
-			array(
-				'route_key'      => 'file01-system-check',
-				'route_path'     => '/platform-system-check/',
-				'owner_module'   => 'file-01',
-				'layout_context' => 'minimal',
-				'status'         => 'active',
-				'destination'    => admin_url( 'admin.php?page=sabri-foundation' ),
-			),
-			array( 'system_seed' => true, 'purpose' => 'activation_seed' )
+
+		self::with_internal_seed(
+			static function () {
+				$manifest = self::file01_manifest();
+				$result = SPF_Registry::register_manifest( $manifest, array( 'purpose' => 'activation_seed' ) );
+				if ( is_wp_error( $result ) ) {
+					throw new RuntimeException( $result->get_error_message() );
+				}
+				foreach ( self::foundation_routes() as $route ) {
+					$result = SPF_Registry::map_route( $route, array( 'purpose' => 'activation_seed' ) );
+					if ( is_wp_error( $result ) ) {
+						throw new RuntimeException( $result->get_error_message() );
+					}
+				}
+				foreach ( SPF_Plugin::builtin_contract_definitions() as $contract ) {
+					$result = SPF_Registry::register_contract( $contract, array( 'purpose' => 'activation_seed' ) );
+					if ( is_wp_error( $result ) ) {
+						throw new RuntimeException( $result->get_error_message() );
+					}
+				}
+			}
 		);
-		if ( is_wp_error( $route_result ) ) {
-			throw new RuntimeException( $route_result->get_error_message() );
-		}
-		$route_result = SPF_Registry::map_route(
-			array(
-				'route_key'      => 'file01-foundation-status',
-				'route_path'     => '/platform-foundation/status/',
-				'owner_module'   => 'file-01',
-				'layout_context' => 'minimal',
-				'status'         => 'active',
-				'destination'    => admin_url( 'admin.php?page=sabri-foundation' ),
-			),
-			array( 'system_seed' => true, 'purpose' => 'activation_seed' )
-		);
-		if ( is_wp_error( $route_result ) ) {
-			throw new RuntimeException( $route_result->get_error_message() );
-		}
 	}
 
-	public static function seed_manifests() {
+	public static function file01_manifest() {
+		return array(
+			'module_key'       => 'file-01',
+			'owner_file'       => '01',
+			'owner_name'       => 'Platform Foundation and Master Governance',
+			'slug'             => 'sabri-platform-foundation',
+			'namespace_prefix' => 'SPF_',
+			'software_version' => SPF_VERSION,
+			'contract_version' => SPF_CONTRACT_VERSION,
+			'state'            => 'active',
+			'required'         => array(),
+			'optional'         => array(
+				array( 'module_key' => 'file-00', 'minimum_version' => '1.2.3', 'maximum_version' => '', 'purpose' => 'versioned authorization claims' ),
+				array( 'module_key' => 'file-20', 'minimum_version' => '1.2.0', 'maximum_version' => '', 'purpose' => 'shell provider and route placement' ),
+				array( 'module_key' => 'file-24', 'minimum_version' => '0.25.0', 'maximum_version' => '', 'purpose' => 'assurance evidence' ),
+			),
+			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle' ),
+			'commands'         => array( 'RegisterFoundationManifest.v1', 'RegisterFoundationContract.v1', 'MapFoundationRoute.v1', 'TransitionFoundationRelease.v1' ),
+			'queries'          => array( 'GetFoundationReadiness.v1', 'ListFoundationContracts.v1', 'GetFoundationStatus.v1' ),
+			'events'           => array( 'FoundationModuleActivated.v1', 'FoundationModuleDeactivated.v1', 'FoundationContractDeprecated.v1', 'FoundationHealthChanged.v1', 'FoundationReleaseStateChanged.v1', 'ReleaseApproved.v1' ),
+			'routes'           => array( '/platform-system-check/', '/platform-foundation/status/' ),
+			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
+			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),
+			'source'           => 'SSH-F01-PLAN-2026-v1.0',
+		);
+	}
+
+	public static function canonical_module_catalog() {
 		$names = array(
-			'00' => array( 'membership-core', 'Sabri Membership Core' ),
-			'01' => array( 'platform-foundation', 'Platform Foundation and Master Governance' ),
-			'02' => array( 'authentication', 'Authentication and Accounts' ),
-			'03' => array( 'profiles-doctors', 'Profiles and Doctors' ),
-			'04' => array( 'legacy-news-publishing', 'Legacy News Feed and Publishing Compatibility' ),
-			'05' => array( 'learn-homeopathy', 'Learn Sabri Classical Homeopathy' ),
-			'06' => array( 'homeopathy-encyclopedia', 'Homeopathy Encyclopedia' ),
-			'07' => array( 'doctors-directory', 'Doctors Directory and Discovery' ),
-			'08' => array( 'worldwide-clinic', 'Worldwide Clinic and Appointments' ),
-			'09' => array( 'doctor-verification', 'Global Doctor Onboarding and Verification' ),
-			'10' => array( 'video-wall', 'Video Wall and Educational Broadcasting' ),
-			'11' => array( 'reels', 'Reels and Short Video Discovery' ),
-			'12' => array( 'pdf-library', 'PDF Library and Digital Reading' ),
-			'13' => array( 'welcome-intro', 'Welcome Intro Animation' ),
-			'14' => array( 'clinic-usp', 'Global Clinic USP and Conversion Sections' ),
-			'15' => array( 'radar', 'Radar, Symptom and Remedy Research' ),
-			'16' => array( 'ai-study-guide', 'Sabri Classical Homeopathy AI' ),
-			'17' => array( 'communication-network', 'Communication Network' ),
-			'18' => array( 'marketplace', 'Marketplace' ),
-			'19' => array( 'notifications', 'Unified Notifications' ),
-			'20' => array( 'application-shell', 'Unified Application Shell' ),
-			'21' => array( 'home-news-feed', 'Complete Home and News Feed' ),
-			'22' => array( 'universal-composer', 'Universal Post Composer' ),
-			'23' => array( 'publishing-dashboard', 'Doctor and Founder Publishing Dashboard' ),
-			'24' => array( 'security-center', 'Security, Privacy, Compliance and Resilience Center' ),
-			'25' => array( 'public-ui', 'Complete Public UI, Profile Timeline and Visual Experience' ),
-			'26' => array( 'search-discovery', 'Search, Discovery, Recommendations, Knowledge Graph and Classification' ),
+			'00'=>'Sabri Membership Core','01'=>'Platform Foundation and Master Governance','02'=>'Authentication and Accounts','03'=>'Profiles and Doctors','04'=>'News Feed and Publishing — Legacy Foundation Adapter','05'=>'Learn Sabri Classical Homeopathy','06'=>'Homeopathy Encyclopedia','07'=>'Doctors Directory and Discovery','08'=>'Worldwide Clinic and Appointments','09'=>'Global Doctor Onboarding and Verification','10'=>'Video Wall and Educational Broadcasting','11'=>'Reels and Short Video Discovery','12'=>'PDF Library and Digital Reading','13'=>'Welcome Intro Animation','14'=>'Global Clinic USP and Conversion Sections','15'=>'Radar, Symptom and Remedy Research','16'=>'Sabri Classical Homeopathy AI','17'=>'Communication Network','18'=>'Marketplace','19'=>'Unified Notifications','20'=>'Unified Application Shell','21'=>'Complete Home and News Feed','22'=>'Universal Post Composer','23'=>'Doctor and Founder Publishing Dashboard','24'=>'Security, Privacy, Compliance and Resilience Center','25'=>'Complete Public UI, Profile Timeline and Visual Experience','26'=>'Search, Discovery, Recommendations, Knowledge Graph and Classification',
 		);
 		$result = array();
-		foreach ( $names as $file => $data ) {
-			$result[] = array(
-				'module_key'       => 'file-' . $file,
-				'owner_file'       => $file,
-				'owner_name'       => $data[1],
-				'slug'             => $data[0],
-				'namespace_prefix' => 'file' . $file,
-				'software_version' => '0.0.0',
-				'contract_version' => '1.0.0',
-				'state'            => '01' === $file ? 'active' : 'unregistered',
-				'required'         => array(),
-				'optional'         => array(),
-				'capabilities'     => array(),
-				'source'           => 'governing-plan-seed',
-			);
+		foreach ( $names as $file => $name ) {
+			$result[] = array( 'module_key' => 'file-' . $file, 'owner_file' => $file, 'owner_name' => $name, 'registration_state' => 'owner_manifest_required' );
 		}
 		return $result;
 	}
 
-	private static function capture_activation_snapshot() {
-		global $wpdb;
-		$preexisting_tables = array();
-		foreach ( array( 'modules', 'contracts', 'routes', 'releases', 'release_states', 'amendments', 'health', 'flags', 'audit', 'idempotency', 'outbox' ) as $name ) {
-			$table = self::table( $name );
-			$preexisting_tables[ $name ] = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
-		}
-		$snapshot = array(
-			'captured_at'          => current_time( 'mysql', true ),
-			'preexisting_tables'   => $preexisting_tables,
-			'spf_page_map'         => get_option( 'spf_page_map', null ),
-			'spf_founder_user_id'  => get_option( 'spf_founder_user_id', null ),
-			'spf_version'          => get_option( self::VERSION_OPTION, null ),
-			'spf_schema_version'   => get_option( self::SCHEMA_OPTION, null ),
-			'spf_contract_version' => get_option( self::CONTRACT_OPTION, null ),
+	private static function foundation_routes() {
+		return array(
+			array( 'route_key'=>'file01-system-check','route_path'=>'/platform-system-check/','owner_module'=>'file-01','layout_context'=>'minimal','status'=>'active','destination'=>admin_url( 'tools.php?page=sabri-foundation' ),'redirects'=>array() ),
+			array( 'route_key'=>'file01-foundation-status','route_path'=>'/platform-foundation/status/','owner_module'=>'file-01','layout_context'=>'minimal','status'=>'active','destination'=>admin_url( 'tools.php?page=sabri-foundation' ),'redirects'=>array() ),
 		);
-		update_option( self::SNAPSHOT_OPTION, $snapshot, false );
 	}
 
-	public static function restore_activation_snapshot() {
-		$snapshot = get_option( self::SNAPSHOT_OPTION, array() );
-		if ( ! is_array( $snapshot ) ) {
-			return false;
-		}
-		foreach ( array( 'spf_page_map', 'spf_founder_user_id', 'spf_version', 'spf_schema_version', 'spf_contract_version' ) as $key ) {
-			if ( array_key_exists( $key, $snapshot ) ) {
-				null === $snapshot[ $key ] ? delete_option( $key ) : update_option( $key, $snapshot[ $key ], false );
+
+	private static function schedule_jobs() {
+		$jobs = array(
+			array( 'hook' => 'spf_dispatch_outbox', 'time' => time() + 120, 'recurrence' => 'spf_five_minutes' ),
+			array( 'hook' => 'spf_privacy_retention', 'time' => time() + HOUR_IN_SECONDS, 'recurrence' => 'daily' ),
+			array( 'hook' => 'spf_reconcile_expired_flags', 'time' => time() + 300, 'recurrence' => 'hourly' ),
+		);
+		foreach ( $jobs as $job ) {
+			if ( wp_next_scheduled( $job['hook'] ) ) {
+				continue;
 			}
-		}
-		if ( ! empty( $snapshot['preexisting_tables'] ) && is_array( $snapshot['preexisting_tables'] ) ) {
-			global $wpdb;
-			foreach ( $snapshot['preexisting_tables'] as $name => $existed ) {
-				if ( ! $existed ) {
-					$table = self::table( $name );
-					$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted File 01 table.
-				}
+			$result = wp_schedule_event( $job['time'], $job['recurrence'], $job['hook'], array(), true );
+			if ( is_wp_error( $result ) || false === $result ) {
+				return is_wp_error( $result ) ? $result : new WP_Error( 'spf_schedule_failed', __( 'A File 01 scheduled job could not be registered.', 'sabri-platform-foundation' ) );
 			}
 		}
 		return true;
 	}
 
-	private static function acquire_lock() {
-		$token = wp_generate_uuid4();
-		$payload = array( 'token' => $token, 'created' => time(), 'owner' => get_current_user_id() );
-		if ( add_option( self::LOCK_OPTION, $payload, '', 'no' ) ) {
-			return $token;
-		}
-		$existing = get_option( self::LOCK_OPTION, array() );
-		if ( is_array( $existing ) && isset( $existing['created'] ) && ( time() - (int) $existing['created'] ) > 900 ) {
-			delete_option( self::LOCK_OPTION );
-			if ( add_option( self::LOCK_OPTION, $payload, '', 'no' ) ) {
-				return $token;
+	private static function unschedule_jobs() {
+		foreach ( array( 'spf_dispatch_outbox', 'spf_privacy_retention', 'spf_reconcile_expired_flags' ) as $hook ) {
+			$timestamp = wp_next_scheduled( $hook );
+			while ( $timestamp ) {
+				wp_unschedule_event( $timestamp, $hook );
+				$timestamp = wp_next_scheduled( $hook );
 			}
 		}
-		return new WP_Error( 'spf_activation_locked', __( 'File 01 activation is already running. Try again after the lock expires.', 'sabri-platform-foundation' ) );
 	}
 
-	private static function release_lock( $token ) {
-		$current = get_option( self::LOCK_OPTION, array() );
-		if ( is_array( $current ) && isset( $current['token'] ) && hash_equals( (string) $current['token'], (string) $token ) ) {
-			delete_option( self::LOCK_OPTION );
+	private static function capture_runtime_snapshot( $token ) {
+		global $wpdb;
+		$snapshot_id = wp_generate_uuid4();
+		$snapshot = array(
+			'snapshot_id' => $snapshot_id,
+			'captured_at' => SPF_Runtime::now_mysql(),
+			'options'     => array(),
+			'admin_caps'  => array(),
+			'schedules'   => array(),
+			'preexisting_tables' => array(),
+			'shadow_tables' => array(),
+		);
+		foreach ( self::owned_options() as $option ) {
+			$sentinel = new stdClass();
+			$value = get_option( $option, $sentinel );
+			$snapshot['options'][ $option ] = array( 'exists' => $value !== $sentinel, 'value' => $value !== $sentinel ? $value : null );
 		}
+		$role = get_role( 'administrator' );
+		if ( $role ) {
+			foreach ( array( SPF_Authorization::CAP_VIEW, SPF_Authorization::CAP_MANAGE, SPF_Authorization::CAP_RELEASE, SPF_Authorization::CAP_FOUNDER, SPF_Authorization::CAP_PURGE ) as $cap ) {
+				$snapshot['admin_caps'][ $cap ] = $role->has_cap( $cap );
+			}
+		}
+		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags' ) as $hook ) {
+			$snapshot['schedules'][ $hook ] = wp_next_scheduled( $hook );
+		}
+		$shadow_prefix = $wpdb->prefix . 'spf_shadow_' . substr( md5( $token . $snapshot_id ), 0, 8 ) . '_';
+		try {
+			foreach ( self::table_names() as $name ) {
+				$table = self::table( $name );
+				$exists = SPF_Runtime::table_exists( $table );
+				$snapshot['preexisting_tables'][ $name ] = $exists;
+				if ( $exists ) {
+					$shadow = $shadow_prefix . $name;
+					$wpdb->query( "DROP TABLE IF EXISTS {$shadow}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated allowlisted shadow.
+					if ( false === $wpdb->query( "CREATE TABLE {$shadow} LIKE {$table}" ) || false === $wpdb->query( "INSERT INTO {$shadow} SELECT * FROM {$table}" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+						throw new RuntimeException( 'A File 01 shadow backup could not be created.' );
+					}
+					$snapshot['shadow_tables'][ $name ] = $shadow;
+				}
+			}
+		} catch ( Throwable $error ) {
+			foreach ( $snapshot['shadow_tables'] as $shadow ) {
+				$wpdb->query( "DROP TABLE IF EXISTS {$shadow}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated shadow.
+			}
+			throw $error;
+		}
+		update_option( self::SNAPSHOT_OPTION, $snapshot, false );
+		return $snapshot;
+	}
+
+
+	private static function restore_runtime_snapshot( array $snapshot ) {
+		global $wpdb;
+		if ( empty( $snapshot ) ) {
+			return new WP_Error( 'spf_snapshot_unavailable', __( 'No File 01 runtime snapshot was available for compensation.', 'sabri-platform-foundation' ) );
+		}
+		$failures = array();
+		foreach ( self::table_names() as $name ) {
+			$table = self::table( $name );
+			$existed = ! empty( $snapshot['preexisting_tables'][ $name ] );
+			$shadow = $snapshot['shadow_tables'][ $name ] ?? '';
+			if ( $existed ) {
+				if ( ! $shadow || ! SPF_Runtime::table_exists( $shadow ) ) {
+					$failures[] = $name . ':shadow_missing';
+					continue;
+				}
+				$failed = $table . '_failed_' . substr( md5( $snapshot['snapshot_id'] . $name ), 0, 6 );
+				$wpdb->query( "DROP TABLE IF EXISTS {$failed}" ); // phpcs:ignore
+				$result = SPF_Runtime::table_exists( $table )
+					? $wpdb->query( "RENAME TABLE {$table} TO {$failed}, {$shadow} TO {$table}" ) // phpcs:ignore
+					: $wpdb->query( "RENAME TABLE {$shadow} TO {$table}" ); // phpcs:ignore
+				if ( false === $result || ! SPF_Runtime::table_exists( $table ) || SPF_Runtime::table_exists( $shadow ) ) {
+					$failures[] = $name . ':restore_failed';
+					continue;
+				}
+				$wpdb->query( "DROP TABLE IF EXISTS {$failed}" ); // phpcs:ignore
+			} elseif ( SPF_Runtime::table_exists( $table ) ) {
+				$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore
+				if ( SPF_Runtime::table_exists( $table ) ) {
+					$failures[] = $name . ':new_table_drop_failed';
+				}
+			}
+		}
+		foreach ( $snapshot['options'] ?? array() as $option => $state ) {
+			if ( ! empty( $state['exists'] ) ) {
+				update_option( $option, $state['value'], false );
+			} else {
+				delete_option( $option );
+			}
+		}
+		$role = get_role( 'administrator' );
+		if ( $role ) {
+			foreach ( $snapshot['admin_caps'] ?? array() as $cap => $had ) {
+				$had ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
+			}
+		}
+		self::unschedule_jobs();
+		foreach ( $snapshot['schedules'] ?? array() as $hook => $timestamp ) {
+			if ( $timestamp ) {
+				$recurrence = 'spf_dispatch_outbox' === $hook ? 'spf_five_minutes' : ( 'spf_privacy_retention' === $hook ? 'daily' : 'hourly' );
+				$result = wp_schedule_event( (int) $timestamp, $recurrence, $hook, array(), true );
+				if ( is_wp_error( $result ) || false === $result ) {
+					$failures[] = $hook . ':schedule_restore_failed';
+				}
+			}
+		}
+		return empty( $failures ) ? true : new WP_Error( 'spf_compensation_incomplete', __( 'File 01 compensation could not be fully verified.', 'sabri-platform-foundation' ), array( 'failures' => $failures ) );
+	}
+
+	private static function discard_shadow_backups( array $snapshot ) {
+		global $wpdb;
+		foreach ( $snapshot['shadow_tables'] ?? array() as $shadow ) {
+			if ( $shadow ) {
+				$wpdb->query( "DROP TABLE IF EXISTS {$shadow}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated shadow table.
+			}
+		}
+		delete_option( self::SNAPSHOT_OPTION );
+	}
+
+	public static function owned_options() {
+		return array(
+			self::LOCK_OPTION, self::SNAPSHOT_OPTION, self::VERSION_OPTION, self::SCHEMA_OPTION, self::CONTRACT_OPTION,
+			'spf_activation_state','spf_upgrade_state','spf_builtin_contracts_registered','spf_reconciliation_snapshot',
+			'spf_reconciliation_state','spf_external_purge_receipt','spf_audit_chain_lock','spf_outbox_dispatch_lock',
+			'spf_page_map','spf_founder_user_id',
+		);
+	}
+
+	private static function environment() {
+		return function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production';
 	}
 }

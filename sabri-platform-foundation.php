@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Sabri Platform Foundation
  * Plugin URI: https://www.sabrihomeopathy.com/
- * Description: Canonical File 01-B foundation registry, dependency discovery, route governance, system health, reconciliation, repair and release-evidence runtime for the Sabri Social Homeopathy Platform.
- * Version: 1.0.0
+ * Description: Canonical File 01-B governance, registry, dependency, route, privacy, health, reconciliation, repair and release-evidence runtime for the Sabri Social Homeopathy Platform.
+ * Version: 1.1.0
  * Requires at least: 6.0
  * Requires PHP: 8.1
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,28 +13,38 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SPF_VERSION', '1.0.0' );
-define( 'SPF_SCHEMA_VERSION', '1.0.0' );
-define( 'SPF_CONTRACT_VERSION', '1.0.0' );
+define( 'SPF_VERSION', '1.1.0' );
+define( 'SPF_SCHEMA_VERSION', '1.1.0' );
+define( 'SPF_CONTRACT_VERSION', '1.1.0' );
 define( 'SPF_PLAN_ID', 'SSH-F01-PLAN-2026-v1.0' );
 define( 'SPF_FILE', __FILE__ );
 define( 'SPF_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SPF_URL', plugin_dir_url( __FILE__ ) );
 
+require_once SPF_DIR . 'includes/class-spf-runtime.php';
 require_once SPF_DIR . 'includes/class-spf-authorization.php';
 require_once SPF_DIR . 'includes/class-spf-audit.php';
 require_once SPF_DIR . 'includes/class-spf-event-bus.php';
 require_once SPF_DIR . 'includes/class-spf-installer.php';
 require_once SPF_DIR . 'includes/class-spf-registry.php';
 require_once SPF_DIR . 'includes/class-spf-dependency-resolver.php';
+require_once SPF_DIR . 'includes/class-spf-idempotency.php';
+require_once SPF_DIR . 'includes/class-spf-governance.php';
+require_once SPF_DIR . 'includes/class-spf-privacy.php';
 require_once SPF_DIR . 'includes/class-spf-system-check.php';
 require_once SPF_DIR . 'includes/class-spf-reconciler.php';
 require_once SPF_DIR . 'includes/class-spf-repair.php';
 require_once SPF_DIR . 'includes/class-spf-purge.php';
-require_once SPF_DIR . 'includes/class-spf-governance.php';
 require_once SPF_DIR . 'includes/class-spf-rest.php';
 require_once SPF_DIR . 'includes/class-spf-admin.php';
 require_once SPF_DIR . 'includes/class-spf-plugin.php';
+
+
+function spf_foundation_cron_schedules( $schedules ) {
+	$schedules['spf_five_minutes'] = array( 'interval' => 300, 'display' => __( 'Every five minutes (Sabri Foundation)', 'sabri-platform-foundation' ) );
+	return $schedules;
+}
+add_filter( 'cron_schedules', 'spf_foundation_cron_schedules' );
 
 register_activation_hook( SPF_FILE, array( 'SPF_Installer', 'activate' ) );
 register_deactivation_hook( SPF_FILE, array( 'SPF_Installer', 'deactivate' ) );
@@ -45,8 +55,8 @@ function spf_start_plugin() {
 add_action( 'plugins_loaded', 'spf_start_plugin', 5 );
 
 /**
- * Public versioned integration helpers.
- * These wrappers intentionally expose DTOs and commands, never internal table schemas.
+ * Versioned public integration helpers. These expose DTOs/commands only; no
+ * internal table schema is an integration contract.
  */
 function spf_register_module_manifest( array $manifest, array $context = array() ) {
 	return SPF_Registry::register_manifest( $manifest, $context );
@@ -86,4 +96,8 @@ function spf_record_amendment( array $amendment, array $context = array() ) {
 
 function spf_transition_release( $release_id, $next_status, array $evidence = array(), array $context = array() ) {
 	return SPF_Governance::transition_release( $release_id, $next_status, $evidence, $context );
+}
+
+function spf_is_feature_enabled( $owner_module, $flag_key, $environment = '' ) {
+	return SPF_Governance::is_flag_enabled( sanitize_key( $owner_module ), sanitize_key( $flag_key ), sanitize_key( $environment ) );
 }

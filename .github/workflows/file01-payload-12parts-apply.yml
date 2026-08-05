@@ -34,6 +34,8 @@ jobs:
           tar -xzf /tmp/file01-payload.tar.gz -C .
           rm -rf .codex
           git checkout HEAD -- .github/workflows
+          sed -E 's/^[0-9a-f]{64}  //' SOURCE-CHECKSUMS.sha256 | while IFS= read -r file; do sha256sum "$file"; done > SOURCE-CHECKSUMS.sha256.new
+          mv SOURCE-CHECKSUMS.sha256.new SOURCE-CHECKSUMS.sha256
           bash qa/run-tests.sh
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

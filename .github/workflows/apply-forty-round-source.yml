@@ -6,7 +6,7 @@ on:
       - codex/file-01-complete-foundation-1.0.0
     paths:
       - .codex/review40.chunk07
-      - .github/workflows/apply-forty-round-source.yml
+      - .codex/review40.trigger
 
 permissions:
   contents: write
@@ -35,6 +35,7 @@ jobs:
           echo '2f1db0b1c09920d821ee518666cbd27c7e8666eb541898d9ebb6198d3c73447d  /tmp/file01-review40.tar.gz' | sha256sum --check -
           tar -xzf /tmp/file01-review40.tar.gz -C .
           rm -rf .codex
+          rm -f .github/workflows/apply-forty-round-source.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A

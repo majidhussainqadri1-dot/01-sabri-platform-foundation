@@ -47,5 +47,5 @@ d60c99e3ec839ad92a4b6cefa1cd901e8b77b62c6a4b261976d3b5d52129f60b  ./tests/contra
 a372c3340fdb2051fdd00ff2d954af58672f2e3f2ced959db55048ff88632d49  ./tests/schema-tests.php
 466afe7849c5e423963c6825497076089193c8ae936b6ac4f98b17d1b0b5c47c  ./tests/source-quality-tests.php
 571d5d3910aa36b2d2c526660911fffb564655a1497616efcde7fc7353ee5b86  ./tests/unit-tests.php
-01a108e53896c6e4e2a7b78d5f9bb5767d265f54c86ba4b0192dc9d13591fe6c  ./tools/build-package.sh
+0d4503bf3f5c3682c45b5e867db375398c32d25276af3d7f82276e37e622db2c  ./tools/build-package.sh
 e1f0b1d07b0c8aac9f0b9ae998d3fef24ab187e81492dfa673729087286cef4e  ./uninstall.php

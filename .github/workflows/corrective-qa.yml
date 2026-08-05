@@ -1,0 +1,64 @@
+name: File 01 Corrective QA
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: file-01-corrective-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-qa:
+    name: PHP ${{ matrix.php }} source QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.3']
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Run File 01 source QA
+        run: bash qa/run-tests.sh
+
+  deterministic-package:
+    name: Deterministic package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: source-qa
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Run source QA
+        run: bash qa/run-tests.sh
+      - name: Build twice and compare
+        run: bash tools/build-package.sh
+      - name: Verify generated package checksum
+        run: sha256sum --check dist/01-sabri-platform-foundation-1.0.0-CORRECTIVE-CANDIDATE.zip.sha256
+      - name: Upload package evidence
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: file-01-corrective-package
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30

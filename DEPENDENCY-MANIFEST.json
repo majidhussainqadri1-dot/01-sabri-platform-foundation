@@ -1,0 +1,26 @@
+{
+  "schema": "sabri-foundation-dependencies/v1",
+  "module": "file-01",
+  "software_version": "1.1.0",
+  "required_runtime": {
+    "wordpress": ">=6.0",
+    "php": ">=8.1",
+    "database": "MySQL-compatible InnoDB"
+  },
+  "authoritative_dependencies": [
+    {
+      "module": "file-00",
+      "contract": "membership.authorization-claim@1.x",
+      "required_for": ["release", "amendment", "migration", "purge", "production_cutover"],
+      "failure_mode": "fail_closed"
+    }
+  ],
+  "integration_boundaries": {
+    "file-20": "global shell and navigation owner",
+    "file-21": "Home/News/feed owner",
+    "file-24": "central assurance and backup-evidence verifier",
+    "file-25": "public visual/component owner"
+  },
+  "conditional_future_modules": ["CF-01", "CF-02", "CF-03", "CF-04", "CF-05", "CF-06"],
+  "law": "Catalog entries are not runtime manifests; each module must register a signed/versioned owner manifest."
+}

@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 wp_set_current_user( 1 );
 add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $request ) {
 	return [

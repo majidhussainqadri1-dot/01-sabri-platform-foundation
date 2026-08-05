@@ -6,6 +6,7 @@ on:
       - codex/file-01-complete-foundation-1.0.0
     paths:
       - .codex/review40.chunk07
+      - .github/workflows/apply-forty-round-source.yml
 
 permissions:
   contents: write
@@ -28,7 +29,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sha256sum .codex/review40.chunk{00..07}
           cat .codex/review40.chunk{00..07} | base64 -d > /tmp/file01-review40.tar.gz
+          sha256sum /tmp/file01-review40.tar.gz
           echo '2f1db0b1c09920d821ee518666cbd27c7e8666eb541898d9ebb6198d3c73447d  /tmp/file01-review40.tar.gz' | sha256sum --check -
           tar -xzf /tmp/file01-review40.tar.gz -C .
           rm -rf .codex

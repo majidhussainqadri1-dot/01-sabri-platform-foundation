@@ -45,7 +45,11 @@ make_zip "$BUILD/two" "$DIST/${NAME}-build2.zip"
 cmp "$DIST/${NAME}-build1.zip" "$DIST/${NAME}-build2.zip"
 mv "$DIST/${NAME}-build1.zip" "$DIST/${NAME}.zip"
 rm "$DIST/${NAME}-build2.zip"
-sha256sum "$DIST/${NAME}.zip" > "$DIST/${NAME}.zip.sha256"
+(
+  cd "$DIST"
+  sha256sum "${NAME}.zip" > "${NAME}.zip.sha256"
+  sha256sum --check "${NAME}.zip.sha256"
+)
 unzip -t "$DIST/${NAME}.zip" >/dev/null
 if unzip -Z1 "$DIST/${NAME}.zip" | grep -Ev '^sabri-platform-foundation-01/'; then
   echo 'Unsafe or non-canonical ZIP entry' >&2; exit 1

@@ -6,6 +6,7 @@ on:
       - codex/file-01-complete-foundation-1.0.0
     paths:
       - .codex/payload12.chunk12
+      - .github/workflows/file01-payload-12parts-apply.yml
 
 permissions:
   contents: write
@@ -32,7 +33,7 @@ jobs:
           echo '1d758c1b98baca97fac5fc2710575f24529dc7154878aacb1a76e01002e9de4d  /tmp/file01-payload.tar.gz' | sha256sum --check -
           tar -xzf /tmp/file01-payload.tar.gz -C .
           rm -rf .codex
-          rm -f .github/workflows/file01-payload-apply.yml .github/workflows/file01-payload-parts-apply.yml .github/workflows/file01-payload-12parts-apply.yml
+          git checkout HEAD -- .github/workflows
           bash qa/run-tests.sh
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

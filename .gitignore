@@ -1,5 +1,6 @@
 # Local build workspace
 build/
+dist/
 
 # Dependencies and caches
 vendor/
@@ -25,8 +26,3 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# Deterministic candidate artifact is intentionally versioned
-!dist/
-!dist/*.zip
-!dist/*.sha256

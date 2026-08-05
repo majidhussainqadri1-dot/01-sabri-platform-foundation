@@ -36,9 +36,9 @@ f23612b64aaa3ce458e3143e5ec9abb32bd36ccb6baf90e28f0a29f6005a0b93  ./includes/cla
 888bbbe6c62482988981967307a0e78a812ab71906fcdb9af4d9f2e04aa6f5bf  ./includes/class-spf-runtime.php
 7b3dff4e9c44b7be1920d462ca971e0fd65934f69dd0001ca08f295d8ffce62c  ./includes/class-spf-system-check.php
 46c895f7b49f099b91ff266885f95fd2de6a8ef621465367f6537f2e22b2b215  ./qa/run-tests.sh
-1b4e674b365867c78d263ae9b7dcb7187e8c2b15f90294e1c1799494415643d3  ./qa/wp-idempotency-worker.php
-8c41ec4f890543fb392daf030dd03fcee0e033b8a15be21ff15469f309f26646  ./qa/wp-purge-smoke.php
-8549a5185b9dd9538b0a98c52ccec35541646c426e42ce709d5271179ffd9286  ./qa/wp-runtime-smoke.php
+7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
+b12453874ee4236f7c42dd18b2ceddfa15b2d603bcfd903f7f43a11397e835f1  ./qa/wp-purge-smoke.php
+225f4cd758d584b1e4cc9195d6650401ad0ea56a25ff50dc22e8fad73b6ec9bc  ./qa/wp-runtime-smoke.php
 e70d7e74e81433adf9e935687b7cf508c848e38fa7357566971994719a9d7f69  ./readme.txt
 0ca45c1a8fd4617df1f7e2049684cafa4196d0368edd5ffa42c2295204736c8e  ./sabri-platform-foundation.php
 f9766fa70cea709a49aa2b6f8bbce734f1a9e9eb94301b2cddfc8d663f6026e0  ./tests/bootstrap-minimal.php

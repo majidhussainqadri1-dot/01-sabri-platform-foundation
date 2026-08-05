@@ -1,4 +1,4 @@
-c40758c3ddbaefeb26e079c870d9eb254bb34a98e67e80a938dad12d2ee537a6  ./.github/workflows/corrective-qa.yml
+21d47a8a099cca57a93e97d6f59c5d17909bde321d7e0f0c81e30bb7a51ef6a2  ./.github/workflows/corrective-qa.yml
 5684b6fd028d4aaa6a21d18f9fbbd0d10b1d0b73f5c1eaf28050aca58182eeb0  ./.gitignore
 e668113585172a974dfc79bfb7437cdcfdb4d082b0380c2a98c61da35a11181c  ./ADVERSARIAL-REVIEW-ROUND-2.md
 fad9c79da6683a6355fddbb18f81a5c915118d75d8e29e397fa45faba7e88376  ./ADVERSARIAL-REVIEW-ROUND-4.md
@@ -48,4 +48,3 @@ a372c3340fdb2051fdd00ff2d954af58672f2e3f2ced959db55048ff88632d49  ./tests/schema
 466afe7849c5e423963c6825497076089193c8ae936b6ac4f98b17d1b0b5c47c  ./tests/source-quality-tests.php
 571d5d3910aa36b2d2c526660911fffb564655a1497616efcde7fc7353ee5b86  ./tests/unit-tests.php
 0d4503bf3f5c3682c45b5e867db375398c32d25276af3d7f82276e37e622db2c  ./tools/build-package.sh
-e1f0b1d07b0c8aac9f0b9ae998d3fef24ab187e81492dfa673729087286cef4e  ./uninstall.php

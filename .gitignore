@@ -1,13 +1,14 @@
-# Packages and generated output
-*.zip
+# Local build workspace
 build/
-dist/
 
-# Dependencies
+# Dependencies and caches
 vendor/
 node_modules/
+.cache/
+coverage/
+.phpunit.result.cache
 
-# Local environment and secrets
+# Secrets and local environment
 .env
 .env.*
 !.env.example
@@ -17,15 +18,15 @@ node_modules/
 *.pfx
 auth.json
 
-# Logs, caches, and test output
+# Logs/editors/OS
 *.log
-.cache/
-coverage/
-.phpunit.result.cache
-
-# Editors and operating systems
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Deterministic candidate artifact is intentionally versioned
+!dist/
+!dist/*.zip
+!dist/*.sha256

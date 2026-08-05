@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 wp_set_current_user( 1 );
 $request = new WP_REST_Request( 'POST', '/sabri-foundation/v1/concurrency-probe' );
 $request->set_header( 'X-Idempotency-Key', 'concurrency-probe-key-0001' );

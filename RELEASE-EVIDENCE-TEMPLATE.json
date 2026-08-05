@@ -1,0 +1,40 @@
+{
+  "schema": "sabri-foundation-release-evidence/v1",
+  "release": {
+    "software_version": "",
+    "schema_version": "",
+    "commit_sha": "",
+    "package_name": "",
+    "checksum_sha256": "",
+    "status": "planned"
+  },
+  "evidence": {
+    "planned": {
+      "scope_reference": "SSH-F01-PLAN-2026-v1.0",
+      "owner": "file-01"
+    },
+    "built": {
+      "source_commit_verified": false,
+      "package_checksum_verified": false,
+      "reproducible_build": false,
+      "source_manifest": "SOURCE-MANIFEST.sha256",
+      "sbom": "SBOM.cdx.json"
+    },
+    "verified": {
+      "ci_run": "",
+      "test_summary": "",
+      "zero_unresolved_critical_high": false,
+      "security_review": ""
+    },
+    "staged": {
+      "staging_environment": "",
+      "fresh_install": false,
+      "upgrade_test": false,
+      "cross_file_contracts": "",
+      "backup_restore_test": false,
+      "rollback_rehearsal": false,
+      "browser_accessibility_rtl": "",
+      "founder_acceptance_pending": "yes"
+    }
+  }
+}

@@ -81,13 +81,17 @@ final class SPF_Dependency_Resolver {
 		foreach ( $module['optional'] as $dependency ) {
 			$target = SPF_Registry::get_module( $dependency['module_key'] );
 			if ( ! $target ) {
-				$result[] = array( 'module_key' => $dependency['module_key'], 'available' => false, 'code' => 'optional_manifest_missing' );
+				$result[] = array( 'module_key'=>$dependency['module_key'], 'available'=>false, 'code'=>'optional_manifest_missing', 'fail_mode'=>$dependency['fail_mode']??'' );
 				continue;
 			}
 			$range = self::range_status( $target, $dependency );
-			$result[] = true === $range
-				? array( 'module_key' => $dependency['module_key'], 'available' => ! in_array( $target['state'], array( 'unregistered','suspended','retired' ), true ), 'code' => 'optional_available', 'actual' => $target['software_version'] )
-				: array_merge( $range, array( 'available' => false ) );
+			if ( true !== $range ) {
+				$result[] = array_merge( $range, array( 'available'=>false, 'state'=>$target['state'], 'fail_mode'=>$dependency['fail_mode']??'' ) );
+				continue;
+			}
+			$state = sanitize_key( $target['state'] ?? 'unregistered' );
+			$available = in_array( $state, array( 'registered','compatible','active' ), true );
+			$result[] = array( 'module_key'=>$dependency['module_key'], 'available'=>$available, 'code'=>$available?'optional_available':'optional_'.$state, 'actual'=>$target['software_version'], 'state'=>$state, 'fail_mode'=>$dependency['fail_mode']??'' );
 		}
 		return $result;
 	}

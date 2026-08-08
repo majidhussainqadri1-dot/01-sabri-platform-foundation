@@ -34,6 +34,8 @@ $assert( str_contains( $reconciler, "true !== \$owner_plan['accepted']" ) && str
 
 $assert( str_contains( $repair, "'missing_table' !== (string) \$defect_code" ) && str_contains( $repair, 'spf_repair_restore_incomplete' ) && str_contains( $repair, 'spf_repair_compensation_incomplete' ), 'Round 7: safe repair misclassifies missing tables or claims unverified compensation.' );
 
+$assert( str_contains( $dependency, "array( 'registered','compatible','active' )" ) && str_contains( $dependency, "'fail_mode'=>" ) && str_contains( $dependency, "'optional_'.\$state" ), 'Round 8: degraded optional dependencies are reported as available and fail-mode metadata is lost.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

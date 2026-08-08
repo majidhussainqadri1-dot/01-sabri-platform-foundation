@@ -26,3 +26,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 7 — Safe-repair schema classification and compensation
 **Defects found and corrected.** `verify_schema()` returns defect code `missing_table`, but the repair planner searched for `:missing_table`, so a safely recreatable missing File 01 table was simultaneously treated as a blocking upgrade defect. Key/code handling is now correct, and repair compensation verifies restored options/routes/tables before claiming compensation.
+
+### Round 8 — Optional dependency degraded-state semantics
+**Defect found and corrected.** A degraded optional module was reported as `optional_available`; this hid the distinction between available and degraded providers. Optional readiness now treats only registered/compatible/active as available, exposes degraded/suspended/retired codes, and carries the declared fail-mode into readiness evidence.

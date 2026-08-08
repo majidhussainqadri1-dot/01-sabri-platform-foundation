@@ -60,7 +60,8 @@ $assert(isset($scaffold['manifest']['capabilities'],$scaffold['manifest']['route
 $generated_manifest_check=$normalize_manifest->invoke(null,$scaffold['manifest']);
 $assert(!is_wp_error($generated_manifest_check),'Golden-path scaffold is not accepted by the File 01 manifest contract.');
 
-$assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'),'Scaffold checkout action not pinned.');
+$assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'),'Scaffold checkout action not pinned to current v7.0.1.');
+$assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc'),'Generated CI does not pin PHP setup.');
 $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/smoke.php'),'Generated CI does not execute smoke test.');
 
 $compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]);

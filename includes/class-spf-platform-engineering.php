@@ -101,7 +101,7 @@ final class SPF_Platform_Engineering {
 		);
 		$plugin_header = "<?php\n/**\n * Plugin Name: " . ( $manifest['owner_name'] ?: $module_key ) . "\n * Version: 0.1.0\n * Requires PHP: 8.1\n */\n\ndefined( 'ABSPATH' ) || exit;\n";
 		$test = "<?php\ndeclare(strict_types=1);\n\$manifest = json_decode( file_get_contents( dirname(__DIR__) . '/manifest.json' ), true );\nif ( ! is_array( \$manifest ) || empty( \$manifest['module_key'] ) || empty( \$manifest['owner_file'] ) ) { fwrite( STDERR, 'Invalid generated manifest.' . PHP_EOL ); exit(1); }\necho 'Generated module smoke PASS' . PHP_EOL;\n";
-		$ci = "name: Module QA\non: [push, pull_request]\njobs:\n  qa:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      - name: PHP syntax\n        run: find . -name '*.php' -print0 | xargs -0 -n1 php -l\n      - name: Golden-path smoke\n        run: php tests/smoke.php\n";
+		$ci = "name: Module QA\non: [push, pull_request]\njobs:\n  qa:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - name: Set up PHP\n        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc\n        with:\n          php-version: '8.1'\n          coverage: none\n      - name: PHP syntax\n        run: find . -name '*.php' -print0 | xargs -0 -n1 php -l\n      - name: Golden-path smoke\n        run: php tests/smoke.php\n";
 		return array(
 			'scaffold_version' => '1.1.0',
 			'manifest'         => $manifest,

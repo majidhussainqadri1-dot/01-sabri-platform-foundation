@@ -22,7 +22,7 @@ $system_check = file_get_contents( dirname(__DIR__) . '/includes/class-spf-syste
 
 $assert( str_contains( $idempotency, 'idempotency_error_finalize_conflict' ) && str_contains( $idempotency, "return is_wp_error( \$finalized ) ? \$finalized" ), 'Round 1: failed idempotency outcomes are not durably finalized/fail-closed.' );
 
-$assert( str_contains( $runtime, "true !== \$claim['verified']" ) && str_contains( $system_check, "true===\$external_cron['verified']" ) && str_contains( $system_check, "true===\$mail['verified']" ), 'Round 2: external evidence accepts non-boolean truthy verification.' );
+$assert( str_contains( $runtime, "true !== \$claim['verified']" ) && str_contains( $system_check, "true === ( \$external_cron['verified'] ?? false )" ) && str_contains( $system_check, "true===\$mail['verified']" ), 'Round 2: external evidence accepts non-boolean truthy verification.' );
 
 $assert( str_contains( $governance, 'spf_invalid_flag_enabled' ) && str_contains( $governance, 'spf_invalid_flag_expiry' ) && str_contains( $governance, "true === \$flag['enabled']" ), 'Round 3: feature flag boolean/expiry is not strict and fail-closed.' );
 

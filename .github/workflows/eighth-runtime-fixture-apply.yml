@@ -24,8 +24,30 @@ jobs:
       - name: Apply runtime fixture correction
         run: |
           set -euo pipefail
-          git apply --check tools/eighth-runtime-fixture.patch
-          git apply tools/eighth-runtime-fixture.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('qa/wp-runtime-smoke.php')
+          s = p.read_text()
+          old1 = "\t'founder_approval_id'=>'ci-founder-claim-test','approved_scope'=>'disposable CI only','staging_evidence_hash'=>str_repeat('a',64),'rollback_window'=>'30 minutes',"
+          new1 = "\t'founder_approval_id'=>'ci-founder-claim-test','approved_scope'=>'disposable CI only','staging_evidence_hash'=>$staged['evidence_hash'],'rollback_window'=>'30 minutes',"
+          old2 = "add_filter( 'spf_verify_feature_activation_evidence', static fn() => [ 'verified'=>true,'migration_status'=>'ready','health_status'=>'pass','rollback_evidence'=>'ci-rollback-ready','gate_evidence'=>'ci-gate-proof','verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600) ] );"
+          new2 = """add_filter( 'spf_verify_feature_activation_evidence', static function ( $claim, array $context ) {
+          \treturn [
+          \t\t'verified'=>true,
+          \t\t'owner_module'=>sanitize_key( $context['owner_module'] ?? '' ),
+          \t\t'flag_key'=>sanitize_key( $context['flag_key'] ?? '' ),
+          \t\t'environment'=>sanitize_key( $context['environment'] ?? '' ),
+          \t\t'readiness_hash'=>(string) ( $context['readiness_hash'] ?? '' ),
+          \t\t'migration_status'=>'ready','health_status'=>'pass',
+          \t\t'rollback_evidence'=>'ci-rollback-ready','gate_evidence'=>'ci-gate-proof',
+          \t\t'verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600),
+          \t];
+          }, 10, 2 );"""
+          if s.count(old1) != 1 or s.count(old2) != 1:
+              raise SystemExit('Expected runtime fixture source anchors were not found exactly once.')
+          s = s.replace(old1, new1).replace(old2, new2)
+          p.write_text(s)
+          PY
           php -l qa/wp-runtime-smoke.php
       - name: Remove temporary artifacts and refresh checksums
         run: |

@@ -14,7 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'SPF_VERSION', '1.2.0' );
-define( 'SPF_SCHEMA_VERSION', '1.1.0' );
+define( 'SPF_SCHEMA_VERSION', '1.2.0' );
 define( 'SPF_CONTRACT_VERSION', '1.2.0' );
 define( 'SPF_PLAN_ID', 'SSH-F01-PLAN-2026-v1.0' );
 define( 'SPF_FILE', __FILE__ );

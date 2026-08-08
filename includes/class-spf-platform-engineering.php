@@ -505,11 +505,12 @@ final class SPF_Platform_Engineering {
 	}
 
 	private static function normalize_event_schema( array $schema ) {
-		$name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string)($schema['event_name']??'') );
+		$raw_name = (string) ( $schema['event_name'] ?? '' );
+		$name = preg_replace( '/[^A-Za-z0-9_.-]/', '', $raw_name );
 		$version = sanitize_text_field( $schema['version']??'1.0.0' );
 		$owner = sanitize_key( $schema['owner_module']??'' );
 		$privacy_class = sanitize_key( $schema['privacy_class']??'internal' );
-		$allowed_privacy = array( 'public','internal','personal','sensitive','restricted','secret','security' );
+		$allowed_privacy = array( 'public','internal','restricted','confidential','ephemeral' );
 		if ( array_key_exists( 'allow_additional', $schema ) && ! is_bool( $schema['allow_additional'] ) ) { return new WP_Error( 'spf_event_schema_boolean_invalid', __( 'Event-schema boolean fields must be literal booleans.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
 		$raw_fields = (array) ( $schema['fields'] ?? array() );
 		if ( count( $raw_fields ) > 100 ) {
@@ -524,10 +525,17 @@ final class SPF_Platform_Engineering {
 			}
 			$type = sanitize_key( $definition['type']??'string' );
 			if ( array_key_exists( 'required', $definition ) && ! is_bool( $definition['required'] ) ) { return new WP_Error( 'spf_event_schema_boolean_invalid', __( 'Event-schema boolean fields must be literal booleans.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
-			if ( $field && in_array( $type, array('string','integer','number','boolean','array','object','timestamp'), true ) ) { $fields[$field] = array( 'type'=>$type, 'required'=>true === ($definition['required']??false) ); }
+			if ( ! in_array( $type, array('string','integer','number','boolean','array','object','timestamp'), true ) ) { return new WP_Error( 'spf_event_schema_type_invalid', __( 'Event-schema field type is not supported.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$fields[$field] = array( 'type'=>$type, 'required'=>true === ($definition['required']??false) );
 		}
-		if ( ''===$name || !SPF_Registry::valid_semver($version) || !preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$owner) || !in_array($privacy_class,$allowed_privacy,true) || empty($fields) ) { return new WP_Error( 'spf_event_schema_invalid', __( 'Event name, semantic version, canonical owner, approved privacy class and bounded fields are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
-		return array( 'event_name'=>substr($name,0,160), 'version'=>$version, 'owner_module'=>$owner, 'privacy_class'=>$privacy_class, 'allow_additional'=>true===($schema['allow_additional']??false), 'fields'=>$fields, 'deprecated_at'=>substr(sanitize_text_field($schema['deprecated_at']??''),0,40) );
+		if ( ''===$name || $raw_name !== $name || strlen( $name ) > 160 || !SPF_Registry::valid_semver($version) || !preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$owner) || !in_array($privacy_class,$allowed_privacy,true) || empty($fields) ) { return new WP_Error( 'spf_event_schema_invalid', __( 'Event name, semantic version, canonical owner, approved privacy class and bounded fields are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+		$deprecated_at = '';
+		if ( '' !== trim( (string) ( $schema['deprecated_at'] ?? '' ) ) ) {
+			$deprecated_ts = strtotime( (string) $schema['deprecated_at'] );
+			if ( false === $deprecated_ts ) { return new WP_Error( 'spf_event_schema_deprecation_invalid', __( 'Event-schema deprecation timestamp is invalid.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$deprecated_at = gmdate( 'Y-m-d H:i:s', $deprecated_ts );
+		}
+		return array( 'event_name'=>$name, 'version'=>$version, 'owner_module'=>$owner, 'privacy_class'=>$privacy_class, 'allow_additional'=>true===($schema['allow_additional']??false), 'fields'=>$fields, 'deprecated_at'=>$deprecated_at );
 	}
 
 	private static function value_matches_type( $value, $type ) {

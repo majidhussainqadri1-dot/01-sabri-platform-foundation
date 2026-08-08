@@ -1,1 +1,2 @@
 Apply the completed ten-round review/fix source to the canonical File 01 PR branch and remove this staging transport in the same final commit.
+Retry: chunk concatenation now preserves split-line newlines deterministically.

@@ -1,1 +1,0 @@
-Final third-review exact-head QA trigger. This file is transient and will be removed immediately; it is not product source or acceptance evidence.

@@ -1,1 +1,0 @@
-Third ten-round File 01 corrective cycle completed locally with per-round source regression. This marker triggers independent exact-head GitHub Actions verification; it is not production/staging acceptance evidence.

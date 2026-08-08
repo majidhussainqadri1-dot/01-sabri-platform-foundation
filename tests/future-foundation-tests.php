@@ -137,6 +137,10 @@ $res_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-resilience-l
 $assert(str_contains($gov_source,"'approve_amendment'") && str_contains($gov_source,'sanitize_advisory_input'),'Governance mutation/advisor hardening absent.');
 $assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog concurrency lock absent.');
 $assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
+$assert(str_contains($eng_source,"'contracts'=>$contract_catalog") && str_contains($eng_source,"'routes'=>$route_catalog"),'Developer service catalog omits contract/route summaries.');
+$installer_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-installer.php');
+$assert(str_contains($installer_source,"'policy_as_code'")&&str_contains($installer_source,"'ai_governance_advisory'"),'File 01 v2 manifest omits Future Foundation capabilities.');
+
 $assert(str_contains($eng_source,"'rollback_required','rolled_back'") && str_contains($eng_source,"'future-rollout-'"),'Progressive rollout stale/rollback guard absent.');
 $assert(str_contains($res_source,"'spf_self_heal_recovery_stale'") && str_contains($res_source,"'self_heal_precommit'"),'Self-heal stale recovery/audit guard absent.');
 $assert(str_contains($res_source,'$safe_environments') && str_contains($res_source,"'run_reconciliation'") && str_contains($res_source,'sanitize_chaos_context'),'Chaos fail-closed authorization/privacy guard absent.');

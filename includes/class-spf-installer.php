@@ -615,7 +615,7 @@ final class SPF_Installer {
 				array( 'module_key' => 'file-24', 'minimum_version' => '0.25.0', 'maximum_version' => '', 'purpose' => 'assurance evidence' ),
 				array( 'module_key' => 'file-26', 'minimum_version' => '0.1.0', 'maximum_version' => '', 'purpose' => 'canonical search/discovery/ranking owner registration' ),
 			),
-			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle', 'event_backbone', 'feature_flags' ),
+			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle', 'event_backbone', 'feature_flags', 'policy_as_code', 'amendment_impact_simulation', 'architecture_lint', 'spec_code_traceability', 'developer_service_catalog', 'golden_path_scaffolder', 'contract_compatibility_lab', 'event_schema_registry', 'config_drift_detection', 'release_train_planning', 'progressive_delivery', 'slo_error_budget_gate', 'platform_digital_twin', 'bounded_self_heal', 'chaos_harness', 'telemetry_context', 'governance_snapshots', 'ai_governance_advisory' ),
 			'commands'         => array( 'RegisterFoundationManifest.v1', 'RegisterFoundationContract.v1', 'MapFoundationRoute.v1', 'TransitionFoundationRelease.v1' ),
 			'queries'          => array( 'GetFoundationReadiness.v1', 'ListFoundationContracts.v1', 'GetFoundationStatus.v1' ),
 			'events'           => array( 'FoundationModuleActivated.v1', 'FoundationModuleDeactivated.v1', 'FoundationContractDeprecated.v1', 'FoundationHealthChanged.v1', 'FoundationReleaseStateChanged.v1', 'ReleaseApproved.v1' ),

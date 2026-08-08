@@ -16,39 +16,35 @@ final class SPF_Platform_Engineering {
 
 	public static function service_catalog() {
 		$modules = SPF_Registry::list_modules( array( 'limit' => 200 ) );
-		$contracts = SPF_Registry::list_contracts( array( 'limit' => 500 ) );
+		$contracts = SPF_Registry::list_contracts( array( 'limit' => 200 ) );
 		$routes = SPF_Registry::list_routes();
 		$readiness = SPF_Dependency_Resolver::all_readiness();
 		$readiness_by_key = array();
 		foreach ( $readiness as $item ) {
-			if ( is_array( $item ) && ! empty( $item['module_key'] ) ) {
-				$readiness_by_key[ sanitize_key( $item['module_key'] ) ] = $item;
-			}
+			if ( is_array( $item ) && ! empty( $item['module_key'] ) ) { $readiness_by_key[ sanitize_key( $item['module_key'] ) ] = $item; }
 		}
 		$catalog = array();
 		foreach ( $modules as $module ) {
-			if ( ! is_array( $module ) ) {
-				continue;
-			}
+			if ( ! is_array( $module ) ) { continue; }
 			$key = sanitize_key( $module['module_key'] ?? '' );
 			$catalog[] = array(
-				'module_key'       => $key,
-				'owner_file'       => sanitize_text_field( $module['owner_file'] ?? '' ),
-				'owner_name'       => sanitize_text_field( $module['owner_name'] ?? '' ),
-				'software_version' => sanitize_text_field( $module['software_version'] ?? '' ),
-				'contract_version' => sanitize_text_field( $module['contract_version'] ?? '' ),
-				'state'            => sanitize_key( $module['state'] ?? '' ),
-				'readiness'        => $readiness_by_key[ $key ] ?? array( 'ready'=>false, 'code'=>'not_evaluated' ),
+				'module_key'=>$key, 'owner_file'=>sanitize_text_field($module['owner_file']??''), 'owner_name'=>sanitize_text_field($module['owner_name']??''),
+				'software_version'=>sanitize_text_field($module['software_version']??''), 'contract_version'=>sanitize_text_field($module['contract_version']??''), 'state'=>sanitize_key($module['state']??''),
+				'capabilities'=>array_values((array)($module['capabilities']??array())), 'required'=>array_values((array)($module['required']??array())), 'optional'=>array_values((array)($module['optional']??array())),
+				'canonical_entities'=>array_values((array)($module['canonical_entities']??array())), 'readiness'=>$readiness_by_key[$key]??array('ready'=>false,'code'=>'not_evaluated'),
 			);
 		}
-		return array(
-			'generated_at'  => SPF_Runtime::now_mysql(),
-			'modules'       => $catalog,
-			'contract_count'=> count( $contracts ),
-			'route_count'   => count( $routes ),
-			'health'        => SPF_System_Check::latest(),
-			'ownership_note'=> 'Catalog only. Canonical domain ownership remains with each numbered file.',
-		);
+		$contract_catalog = array();
+		foreach ( $contracts as $contract ) {
+			if ( ! is_array( $contract ) ) { continue; }
+			$contract_catalog[] = array('contract_key'=>sanitize_text_field($contract['contract_key']??''),'contract_version'=>sanitize_text_field($contract['contract_version']??''),'owner_module'=>sanitize_key($contract['owner_module']??''),'status'=>sanitize_key($contract['status']??''),'consumers'=>array_values((array)($contract['consumers']??array())),'deprecation_at'=>sanitize_text_field($contract['deprecation_at']??''));
+		}
+		$route_catalog = array();
+		foreach ( $routes as $route ) {
+			if ( ! is_array( $route ) ) { continue; }
+			$route_catalog[] = array('route_key'=>sanitize_key($route['route_key']??''),'route_path'=>sanitize_text_field($route['route_path']??''),'owner_module'=>sanitize_key($route['owner_module']??''),'layout_context'=>sanitize_key($route['layout_context']??''),'status'=>sanitize_key($route['status']??''));
+		}
+		return array('generated_at'=>SPF_Runtime::now_mysql(),'modules'=>$catalog,'contracts'=>$contract_catalog,'routes'=>$route_catalog,'contract_count'=>count($contract_catalog),'route_count'=>count($route_catalog),'health'=>SPF_System_Check::latest(),'ownership_note'=>'Catalog only. Canonical domain ownership remains with each numbered file.');
 	}
 
 	public static function scaffold_module( array $spec ) {

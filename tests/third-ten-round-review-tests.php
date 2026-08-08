@@ -38,6 +38,8 @@ $assert( str_contains( $dependency, "array( 'registered','compatible','active' )
 
 $assert( str_contains( $registry, 'spf_invalid_manifest_boolean' ) && str_contains( $registry, 'spf_invalid_manifest_write' ) && str_contains( $registry, "true === ( \$manifest['global_shell_owner']" ), 'Round 9: architecture ownership flags/writes are silently coerced or discarded.' );
 
+$assert( str_contains( $installer, "in_array( \$environment, array( 'local','development','staging' )" ) && str_contains( $engineering, 'spf_event_schema_boolean_invalid' ) && str_contains( $engineering, 'spf_event_replay_dispatch_invalid' ), 'Round 10: production migration backup bypass or replay/schema booleans are not fail-closed.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

@@ -32,3 +32,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 9 — Architecture manifest fail-closed parsing
 **Defects found and corrected.** String values such as `"false"` could become true shell-ownership claims, and malformed write declarations were silently dropped. Shell-ownership flags must now be real booleans and every write declaration must be structured; malformed architecture claims are rejected instead of coerced.
+
+### Round 10 — Production migration evidence and replay/schema booleans
+**Defects found and corrected.** The internal shadow-snapshot upgrade constant could bypass independent backup evidence even in production, contrary to the staging-only design comment and release law. Internal fallback is now restricted to local/development/staging. Event-schema `required`/`allow_additional` and replay dispatch also require literal booleans, preventing truthy-string coercion.

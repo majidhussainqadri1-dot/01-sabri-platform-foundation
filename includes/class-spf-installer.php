@@ -125,17 +125,19 @@ final class SPF_Installer {
 			update_option( 'spf_upgrade_state', array( 'status' => 'authorization_required', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'checked_at' => SPF_Runtime::now_mysql() ), false );
 			return new WP_Error( 'spf_upgrade_authorization_required', __( 'File 01 schema upgrade requires an authorized operator.', 'sabri-platform-foundation' ) );
 		}
+		$environment = self::environment();
 		$evidence = SPF_Runtime::verify_evidence(
 			'spf_verify_migration_backup_evidence',
-			array( 'module' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'environment' => self::environment() ),
-			array( 'backup_id', 'restore_tested_at', 'environment', 'verifier' )
+			array( 'module'=>'file-01', 'from'=>$current, 'to'=>SPF_SCHEMA_VERSION, 'environment'=>$environment ),
+			array( 'backup_id','restore_tested_at','environment','verifier' )
 		);
-		if ( is_wp_error( $evidence ) && ! ( defined( 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE' ) && true === SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE ) ) {
-			update_option( 'spf_upgrade_state', array( 'status' => 'backup_evidence_required', 'from' => $current, 'to' => SPF_SCHEMA_VERSION, 'checked_at' => SPF_Runtime::now_mysql() ), false );
+		$internal_snapshot_allowed = defined( 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE' ) && true === SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE && in_array( $environment, array( 'local','development','staging' ), true );
+		if ( is_wp_error( $evidence ) && ! $internal_snapshot_allowed ) {
+			update_option( 'spf_upgrade_state', array( 'status'=>'backup_evidence_required', 'from'=>$current, 'to'=>SPF_SCHEMA_VERSION, 'environment'=>$environment, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
 			return $evidence;
 		}
 		if ( is_wp_error( $evidence ) ) {
-			$evidence = array( 'verified' => true, 'mode' => 'internal_shadow_snapshot', 'environment' => self::environment(), 'verifier' => 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE', 'evidence_hash' => 'internal' );
+			$evidence = array( 'verified'=>true, 'mode'=>'internal_shadow_snapshot', 'environment'=>$environment, 'verifier'=>'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE', 'evidence_hash'=>'internal' );
 		}
 		return self::run_upgrade( $current, SPF_SCHEMA_VERSION, $evidence );
 	}

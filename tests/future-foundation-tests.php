@@ -157,7 +157,7 @@ $res_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-resilience-l
 $assert(str_contains($gov_source,"'approve_amendment'") && str_contains($gov_source,'sanitize_advisory_input'),'Governance mutation/advisor hardening absent.');
 $assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog concurrency lock absent.');
 $assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
-$assert(str_contains($eng_source,"'contracts'=>$contract_catalog") && str_contains($eng_source,"'routes'=>$route_catalog"),'Developer service catalog omits contract/route summaries.');
+$assert(str_contains($eng_source,"'contracts'=>\$contract_catalog") && str_contains($eng_source,"'routes'=>\$route_catalog"),'Developer service catalog omits contract/route summaries.');
 $dependency_manifest=json_decode(file_get_contents(dirname(__DIR__).'/DEPENDENCY-MANIFEST.json'),true);
 $assert(($dependency_manifest['software_version']??'')==='2.0.0'&&($dependency_manifest['contract_version']??'')==='2.0.0','Dependency manifest version identity drift remains.');
 $installer_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-installer.php');

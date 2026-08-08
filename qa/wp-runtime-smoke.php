@@ -84,7 +84,7 @@ $staged = SPF_Governance::transition_release( $rid, 'staged', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>3,'expected_record_version'=>3 ] );
 $assert( is_array( $staged ) && 4 === $staged['sequence_no'], 'verified→staged failed.' );
 $approved = SPF_Governance::transition_release( $rid, 'approved', [
-	'founder_approval_id'=>'ci-founder-claim-test','approved_scope'=>'disposable CI only','staging_evidence_hash'=>str_repeat('a',64),'rollback_window'=>'30 minutes',
+	'founder_approval_id'=>'ci-founder-claim-test','approved_scope'=>'disposable CI only','staging_evidence_hash'=>$staged['evidence_hash'],'rollback_window'=>'30 minutes',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>4,'expected_record_version'=>4 ] );
 $assert( is_array( $approved ) && 'approved' === $approved['status'], 'Founder-gated staged→approved failed.' );
 $record = SPF_Governance::get_release( $rid );
@@ -92,7 +92,18 @@ $assert( is_array( $record ) && 5 === count( $record['states'] ), 'Release state
 
 $ungated_flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
 $assert( is_wp_error( $ungated_flag ) && 'spf_evidence_unverified' === $ungated_flag->get_error_code(), 'Feature activation did not fail closed without readiness evidence.' );
-add_filter( 'spf_verify_feature_activation_evidence', static fn() => [ 'verified'=>true,'migration_status'=>'ready','health_status'=>'pass','rollback_evidence'=>'ci-rollback-ready','gate_evidence'=>'ci-gate-proof','verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600) ] );
+add_filter( 'spf_verify_feature_activation_evidence', static function ( $claim, array $context ) {
+	return [
+		'verified'=>true,
+		'owner_module'=>sanitize_key( $context['owner_module'] ?? '' ),
+		'flag_key'=>sanitize_key( $context['flag_key'] ?? '' ),
+		'environment'=>sanitize_key( $context['environment'] ?? '' ),
+		'readiness_hash'=>(string) ( $context['readiness_hash'] ?? '' ),
+		'migration_status'=>'ready','health_status'=>'pass',
+		'rollback_evidence'=>'ci-rollback-ready','gate_evidence'=>'ci-gate-proof',
+		'verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600),
+	];
+}, 10, 2 );
 $flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
 $assert( is_array( $flag ) && spf_is_feature_enabled( 'file-01', 'runtime_probe', 'staging' ), 'Feature flag create/evaluate failed.' );
 $flag2 = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>false,'reason'=>'runtime test complete' ], [ 'purpose'=>'feature_flag','expected_version'=>$flag['record_version'] ] );

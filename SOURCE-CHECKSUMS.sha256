@@ -57,7 +57,7 @@ f23612b64aaa3ce458e3143e5ec9abb32bd36ccb6baf90e28f0a29f6005a0b93  ./includes/cla
 c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future-foundation-smoke.php
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 b12453874ee4236f7c42dd18b2ceddfa15b2d603bcfd903f7f43a11397e835f1  ./qa/wp-purge-smoke.php
-5079a55404761d0bb14794433358623c1dca9d4ed00c15aa494841a4225b11ca  ./qa/wp-runtime-smoke.php
+dccfc467155acbdbcf569c8b244c3d90bdea530c591a8b3bb9540050c80cbb26  ./qa/wp-runtime-smoke.php
 d71574cc0c5cf9ac1518eda7cce57c8afe9ab5402f6950852c20945dd50a3930  ./readme.txt
 e79218e151c38193492392ea43f142a0f05a3decb23d7361a4b3797245795147  ./sabri-platform-foundation.php
 1d7f1bc67a1d18d12fccf22a809eef9e8ba975f0fd82d1a5704aa0df26c061bf  ./tests/bootstrap-minimal.php

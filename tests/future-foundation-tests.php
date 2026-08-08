@@ -32,6 +32,15 @@ $codes=array_column($lint['findings'],'code');
 $assert($lint['pass']===false,'Architecture linter missed conflicts.');
 foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}
 
+$normalize_manifest=new ReflectionMethod(SPF_Registry::class,'normalize_manifest');$normalize_manifest->setAccessible(true);
+$architecture_manifest=$normalize_manifest->invoke(null,[
+ 'module_key'=>'file-20','owner_file'=>'20','owner_name'=>'Shell','slug'=>'shell','namespace_prefix'=>'SHELL_','software_version'=>'1.0.0','contract_version'=>'1.0.0','state'=>'active',
+ 'required'=>[],'optional'=>[],'capabilities'=>[],'commands'=>[],'queries'=>[],'events'=>[],'routes'=>[],'data_classes'=>[],'health'=>[],
+ 'canonical_entities'=>['global-shell'],'writes'=>[['owner_module'=>'file-20','operation'=>'write']],'global_shell_owner'=>true,
+]);
+$assert(!is_wp_error($architecture_manifest)&&($architecture_manifest['canonical_entities'][0]??'')==='global-shell','Manifest architecture declarations were not preserved.');
+$assert(($architecture_manifest['global_shell_owner']??false)===true,'Shell-owner declaration was not preserved.');
+
 $trace=SPF_Governance_Control_Plane::build_traceability_report([['id'=>'REQ-1'],['id'=>'REQ-1'],['id'=>'REQ-2']],[
  'REQ-1'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1],
  'REQ-2'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1,'live'=>1,'operational'=>1],

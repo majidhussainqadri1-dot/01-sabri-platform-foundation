@@ -377,6 +377,33 @@ final class SPF_Registry {
 		if ( ! is_array( $manifest['health'] ) ) {
 			return new WP_Error( 'spf_invalid_manifest', 'Manifest health declaration must be structured.' );
 		}
+		foreach ( array( 'canonical_entities', 'writes' ) as $architecture_field ) {
+			if ( isset( $manifest[ $architecture_field ] ) && ! is_array( $manifest[ $architecture_field ] ) ) {
+				return new WP_Error( 'spf_invalid_manifest', 'Manifest architecture field must be an array: ' . $architecture_field );
+			}
+		}
+		$canonical_entities = array();
+		foreach ( array_slice( (array) ( $manifest['canonical_entities'] ?? array() ), 0, 128 ) as $entity ) {
+			$key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
+			if ( $key ) { $canonical_entities[] = $key; }
+		}
+		$manifest['canonical_entities'] = array_values( array_unique( $canonical_entities ) );
+		$writes = array();
+		foreach ( array_slice( (array) ( $manifest['writes'] ?? array() ), 0, 128 ) as $write ) {
+			if ( ! is_array( $write ) ) { continue; }
+			$target = sanitize_key( $write['owner_module'] ?? '' );
+			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $target ) ) {
+				return new WP_Error( 'spf_invalid_manifest_write_owner', __( 'Manifest write declarations require a canonical owner module.', 'sabri-platform-foundation' ) );
+			}
+			$writes[] = array(
+				'owner_module' => $target,
+				'operation'    => substr( sanitize_key( $write['operation'] ?? 'write' ), 0, 64 ),
+				'purpose'      => substr( sanitize_text_field( $write['purpose'] ?? '' ), 0, 191 ),
+			);
+		}
+		$manifest['writes'] = $writes;
+		$manifest['global_shell_owner'] = ! empty( $manifest['global_shell_owner'] );
+		$manifest['application_shell_owner'] = ! empty( $manifest['application_shell_owner'] );
 		$manifest['module_key'] = $module_key;
 		$manifest['owner_file'] = $owner_file;
 		$manifest['owner_name'] = substr( sanitize_text_field( $manifest['owner_name'] ), 0, 191 );
@@ -520,6 +547,8 @@ final class SPF_Registry {
 			'state' => $row['state'], 'required' => $manifest['required'] ?? array(), 'optional' => $manifest['optional'] ?? array(),
 			'capabilities' => $manifest['capabilities'] ?? array(), 'commands' => $manifest['commands'] ?? array(), 'queries' => $manifest['queries'] ?? array(),
 			'events' => $manifest['events'] ?? array(), 'routes' => $manifest['routes'] ?? array(), 'data_classes' => $manifest['data_classes'] ?? array(),
+			'canonical_entities' => $manifest['canonical_entities'] ?? array(), 'writes' => $manifest['writes'] ?? array(),
+			'global_shell_owner' => ! empty( $manifest['global_shell_owner'] ), 'application_shell_owner' => ! empty( $manifest['application_shell_owner'] ),
 			'health' => $manifest['health'] ?? array(), 'record_version' => (int) $row['record_version'], 'updated_at' => $row['updated_at'],
 		);
 	}

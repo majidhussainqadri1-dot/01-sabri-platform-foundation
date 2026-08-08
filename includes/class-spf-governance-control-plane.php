@@ -437,7 +437,7 @@ final class SPF_Governance_Control_Plane {
 		$shell_owners = array();
 		foreach ( $modules as $module ) {
 			$key = sanitize_key( $module['module_key'] ?? '' );
-			$manifest = (array) ( $module['manifest'] ?? array() );
+			$manifest = (array) ( $module['manifest'] ?? $module );
 			$claims_shell = ! empty( $manifest['global_shell_owner'] ) || ! empty( $manifest['application_shell_owner'] );
 			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
 				$entity_key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );

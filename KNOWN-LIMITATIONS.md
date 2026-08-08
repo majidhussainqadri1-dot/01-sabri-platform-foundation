@@ -1,12 +1,12 @@
 # Known External Acceptance Boundaries
 
-No unresolved source-level Critical/High defect is knowingly accepted in this corrective candidate. The following are external evidence gates, not claims of completed deployment:
+No unresolved blocker/critical product-code defect is knowingly accepted in the reviewed 1.2.0 repository scope. The following remain external evidence gates rather than missing File 01 coding:
 
-- Hostinger fresh install and upgrade on the actual WordPress/PHP/MySQL/LiteSpeed environment.
-- Real File 00 structured claims and File 20/21/24/25 owner/assurance adapters.
+- Hostinger fresh install and supported upgrade on the actual WordPress/PHP/MySQL/LiteSpeed environment.
+- Real File 00, 20, 21, 24, 25 and 26 contract/coexistence evidence.
 - Browser/device, keyboard, screen reader, 200–400% zoom, RTL and weak-network acceptance.
-- Production-size data/load/soak measurements.
-- Independent backup/restore and full rollback rehearsal.
-- Founder staging acceptance, production change approval and post-deployment monitoring.
+- Representative production-size load/soak, cache, cron and queue measurements.
+- Independent backup/restore and full rollback rehearsal with real operational evidence.
+- Founder staging acceptance, production change approval, smoke testing and post-deployment monitoring.
 
-Until those gates pass, status remains source/package/automated-QA candidate—not staging-accepted, live or operational.
+Until those pass, `Staging-Accepted`, `Live-Deployed`, and `Operational` remain pending even when `Coded`, `Packaged`, and `Automated-QA Green` are complete.

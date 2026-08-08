@@ -2,40 +2,22 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "serialNumber": "urn:uuid:2c837296-3f64-4eb1-9c59-5c0ab1f01110",
-  "version": 1,
+  "version": 2,
   "metadata": {
-    "timestamp": "2026-08-06T00:00:00Z",
+    "timestamp": "2026-08-08T00:00:00Z",
     "component": {
       "type": "application",
       "name": "Sabri Platform Foundation",
-      "version": "1.1.0",
-      "purl": "pkg:wordpress/sabri-platform-foundation@1.1.0"
+      "version": "1.2.0",
+      "purl": "pkg:wordpress/sabri-platform-foundation@1.2.0"
     }
   },
   "components": [
-    {
-      "type": "framework",
-      "name": "WordPress",
-      "version": ">=6.0",
-      "scope": "required"
-    },
-    {
-      "type": "library",
-      "name": "PHP",
-      "version": ">=8.1",
-      "scope": "required"
-    },
-    {
-      "type": "database",
-      "name": "MySQL-compatible InnoDB",
-      "version": "runtime-verified",
-      "scope": "required"
-    }
+    {"type":"framework","name":"WordPress","version":">=6.0","scope":"required"},
+    {"type":"library","name":"PHP","version":">=8.1","scope":"required"},
+    {"type":"database","name":"MySQL-compatible InnoDB","version":"runtime-verified","scope":"required"}
   ],
   "dependencies": [
-    {
-      "ref": "pkg:wordpress/sabri-platform-foundation@1.1.0",
-      "dependsOn": []
-    }
+    {"ref":"pkg:wordpress/sabri-platform-foundation@1.2.0","dependsOn":[]}
   ]
 }

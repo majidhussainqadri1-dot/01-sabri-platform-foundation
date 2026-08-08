@@ -26,6 +26,9 @@ jobs:
           python3 tools/fifth-review-fix.py
           python3 - <<'PY'
           from pathlib import Path
+          import hashlib
+
+          # Syntax-safe fifth-cycle source assertion.
           p = Path('tests/fifth-ten-round-review-tests.php')
           s = p.read_text(encoding='utf-8')
           old = '! str_contains( $control, "$shell_owners[] = \'file-20\';" )'
@@ -33,14 +36,27 @@ jobs:
           if old not in s:
               raise SystemExit('Expected generated shell-owner assertion not found')
           p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
-          # Refresh the generated source checksum entry after this syntax-only regression correction.
-          import hashlib
+
+          # Existing traceability tests must use literal evidence booleans under the hardened contract.
+          trace = Path('tests/future-foundation-tests.php')
+          t = trace.read_text(encoding='utf-8')
+          old_trace = " 'REQ-1'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1],\n 'REQ-2'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1,'live'=>1,'operational'=>1],"
+          new_trace = " 'REQ-1'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true],\n 'REQ-2'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true,'live'=>true,'operational'=>true],"
+          if old_trace not in t:
+              raise SystemExit('Expected traceability fixture not found')
+          trace.write_text(t.replace(old_trace, new_trace, 1), encoding='utf-8', newline='\n')
+
+          # Refresh checksum entries for both corrected regression files.
           manifest = Path('SOURCE-CHECKSUMS.sha256')
+          changed = {
+              'tests/fifth-ten-round-review-tests.php': p,
+              'tests/future-foundation-tests.php': trace,
+          }
           lines = []
           for line in manifest.read_text(encoding='utf-8').splitlines():
               digest, rel = line.split('  ', 1)
-              if rel == 'tests/fifth-ten-round-review-tests.php':
-                  digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              if rel in changed:
+                  digest = hashlib.sha256(changed[rel].read_bytes()).hexdigest()
               lines.append(f'{digest}  {rel}')
           manifest.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
           PY
@@ -56,6 +72,7 @@ jobs:
                   includes/class-spf-resilience-lab.php \
                   includes/class-spf-system-check.php \
                   qa/wp-future-foundation-smoke.php qa/run-tests.sh \
+                  tests/future-foundation-tests.php \
                   tests/fifth-ten-round-review-tests.php \
                   FIFTH-TEN-ROUND-REVIEW-2026-08-08.md \
                   tools/build-package.sh SOURCE-CHECKSUMS.sha256

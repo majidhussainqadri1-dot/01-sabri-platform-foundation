@@ -8,3 +8,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 1 — Idempotency failure durability
 **Defect found and corrected.** Failed/rate-limited mutations could return an error even when the failed replay record was not persisted, leaving a stale `processing` reservation eligible for re-execution. Error finalization now verifies the compare-and-set update, emits a recovery receipt/audit on conflict, and fails closed.
+
+### Round 2 — External evidence truth semantics
+**Defect found and corrected.** `verified` evidence used truthiness, so values such as the string `false` could be treated as verified. Runtime evidence, external cron evidence and mail-delivery evidence now require the literal boolean `true`.

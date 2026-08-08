@@ -142,7 +142,7 @@ final class SPF_Runtime {
 	 */
 	public static function verify_evidence( $filter, array $context, array $required_fields ) {
 		$claim = apply_filters( $filter, null, $context );
-		if ( ! is_array( $claim ) || empty( $claim['verified'] ) ) {
+		if ( ! is_array( $claim ) || ! array_key_exists( 'verified', $claim ) || true !== $claim['verified'] ) {
 			return new WP_Error( 'spf_evidence_unverified', __( 'Required external evidence has not been independently verified.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
 		}
 		foreach ( $required_fields as $field ) {

@@ -23,7 +23,7 @@ final class SPF_System_Check {
 
 		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
 		$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>array('spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags') ) );
-		$cron_ok = ! $cron_disabled || ( is_array($external_cron) && !empty($external_cron['verified']) );
+		$cron_ok = ! $cron_disabled || ( is_array($external_cron) && array_key_exists('verified',$external_cron) && true===$external_cron['verified'] );
 		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without verified external scheduler evidence.', 'fail' );
 		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags' ) as $hook ) {
 			$scheduled = wp_next_scheduled( $hook );
@@ -39,7 +39,7 @@ final class SPF_System_Check {
 		$checks[] = self::check( 'persistent_object_cache', wp_using_ext_object_cache(), wp_using_ext_object_cache()?'enabled':'not-enabled', 'Persistent object cache is recommended for scale but not required for safe correctness.', 'warning' );
 
 		$mail = apply_filters( 'spf_mail_health_evidence', null, array( 'admin_email_configured'=>(bool)get_option('admin_email') ) );
-		$mail_ok = is_array($mail) && !empty($mail['verified']);
+		$mail_ok = is_array($mail) && array_key_exists('verified',$mail) && true===$mail['verified'];
 		$checks[] = self::check( 'mail_delivery_evidence', $mail_ok, $mail_ok?'verified':'not-verified', 'An admin email address is not proof of mail delivery; provider evidence is pending.', 'warning' );
 
 		$upload = wp_upload_dir();

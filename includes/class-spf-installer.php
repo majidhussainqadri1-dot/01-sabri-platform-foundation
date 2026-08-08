@@ -507,20 +507,19 @@ final class SPF_Installer {
 	public static function required_indexes() {
 		return array(
 			'modules'=>array('PRIMARY'=>array(array('id'),true),'module_key'=>array(array('module_key'),true),'owner_file'=>array(array('owner_file'),false),'state'=>array(array('state'),false)),
-			'contracts'=>array('PRIMARY'=>array(array('id'),true),'contract_identity'=>array(array('contract_key','contract_version'),true),'owner_module'=>array(array('owner_module'),false),'status'=>array(array('status'),false)),
-			'contract_acks'=>array('PRIMARY'=>array(array('contract_key','contract_version','consumer_module'),true)),
+			'contracts'=>array('PRIMARY'=>array(array('id'),true),'contract_version'=>array(array('contract_key','contract_version'),true),'owner_module'=>array(array('owner_module'),false),'status'=>array(array('status'),false)),
 			'routes'=>array('PRIMARY'=>array(array('id'),true),'route_key'=>array(array('route_key'),true),'route_path'=>array(array('route_path'),true),'owner_module'=>array(array('owner_module'),false),'status'=>array(array('status'),false)),
-			'releases'=>array('PRIMARY'=>array(array('id'),true),'release_id'=>array(array('release_id'),true),'software_version_unique'=>array(array('software_version'),true),'status'=>array(array('status'),false)),
+			'releases'=>array('PRIMARY'=>array(array('id'),true),'release_id'=>array(array('release_id'),true),'checksum_sha256'=>array(array('checksum_sha256'),true),'status'=>array(array('status'),false),'software_version'=>array(array('software_version'),false)),
 			'release_states'=>array('PRIMARY'=>array(array('id'),true),'release_sequence'=>array(array('release_id','sequence_no'),true),'release_id'=>array(array('release_id'),false),'status'=>array(array('status'),false)),
 			'amendments'=>array('PRIMARY'=>array(array('id'),true),'amendment_id'=>array(array('amendment_id'),true),'status'=>array(array('status'),false)),
 			'health'=>array('PRIMARY'=>array(array('id'),true),'trace_id'=>array(array('trace_id'),true),'overall_status'=>array(array('overall_status'),false),'created_at'=>array(array('created_at'),false)),
-			'flags'=>array('PRIMARY'=>array(array('id'),true),'flag_identity'=>array(array('owner_module','flag_key','environment'),true),'expires_at'=>array(array('expires_at'),false)),
+			'flags'=>array('PRIMARY'=>array(array('id'),true),'owner_flag'=>array(array('owner_module','flag_key','environment'),true),'expires_at'=>array(array('expires_at'),false)),
 			'audit'=>array('PRIMARY'=>array(array('id'),true),'entry_hash'=>array(array('entry_hash'),true),'trace_id'=>array(array('trace_id'),false),'actor_id'=>array(array('actor_id'),false),'created_at'=>array(array('created_at'),false)),
 			'idempotency'=>array('PRIMARY'=>array(array('id'),true),'scope_hash'=>array(array('scope_hash'),true),'expires_at'=>array(array('expires_at'),false),'status'=>array(array('status'),false)),
 			'outbox'=>array('PRIMARY'=>array(array('id'),true),'event_id'=>array(array('event_id'),true),'dedupe_key'=>array(array('dedupe_key'),true),'due'=>array(array('status','available_at'),false),'created_at'=>array(array('created_at'),false)),
 			'privacy_requests'=>array('PRIMARY'=>array(array('id'),true),'request_id'=>array(array('request_id'),true),'user_status'=>array(array('user_id','status'),false),'due_at'=>array(array('due_at'),false)),
-			'privacy_holds'=>array('PRIMARY'=>array(array('id'),true),'hold_id'=>array(array('hold_id'),true),'subject_active'=>array(array('subject_id','active'),false)),
-			'migrations'=>array('PRIMARY'=>array(array('id'),true),'migration_key'=>array(array('migration_key'),true),'status'=>array(array('status'),false))
+			'privacy_holds'=>array('PRIMARY'=>array(array('id'),true),'hold_id'=>array(array('hold_id'),true),'subject_active'=>array(array('subject_type','subject_id','active'),false)),
+			'migrations'=>array('PRIMARY'=>array(array('id'),true),'migration_id'=>array(array('migration_id'),true),'status'=>array(array('status'),false))
 		);
 	}
 
@@ -560,6 +559,7 @@ final class SPF_Installer {
 		$amendments = array(
 			array( 'amendment_id' => 'SSH-PMP-2026-v3.0', 'effective_at' => '2026-07-31 00:00:00', 'supersedes' => 'Foundation 0.25; Comprehensive Master Plan 2.0', 'decision' => array( 'type' => 'governing_constitution', 'numbering' => '00-26', 'runtime' => '01-B' ) ),
 			array( 'amendment_id' => 'SSH-DIRECTIVES-2026-v2.1', 'effective_at' => '2026-08-05 10:47:00', 'supersedes' => 'conflicting earlier chat directives', 'decision' => array( 'type' => 'directive_register', 'primary_color' => 'green', 'navigation_owner' => '20', 'visual_owner' => '25', 'file_26' => 'approved' ) ),
+			array( 'amendment_id' => 'SSH-CONTINUOUS-VALUE-2026-v1.0', 'effective_at' => '2026-08-06 00:00:00', 'supersedes' => 'conflicting paid-tier and donor-advantage rules', 'decision' => array( 'type' => 'central_plan_3', 'files' => '00-26', 'tier_model' => 'single_free_tier', 'donation_only' => true, 'donor_advantage' => false ) ),
 			array( 'amendment_id' => 'F01-REPOSITORY-ALIAS-2026-08-06', 'effective_at' => '2026-08-06 00:00:00', 'supersedes' => 'plan repository label only', 'decision' => array( 'type' => 'repository_alias', 'canonical_repository' => '01-sabri-platform-foundation', 'package_folder' => 'sabri-platform-foundation-01', 'reason' => 'Founder-selected repository retained; runtime slug unchanged.' ) ),
 		);
 		foreach ( $amendments as $item ) {
@@ -609,11 +609,13 @@ final class SPF_Installer {
 			'state'            => 'active',
 			'required'         => array(),
 			'optional'         => array(
-				array( 'module_key' => 'file-00', 'minimum_version' => '1.2.3', 'maximum_version' => '', 'purpose' => 'versioned authorization claims' ),
+				array( 'module_key' => 'file-00', 'minimum_version' => '1.2.13', 'maximum_version' => '', 'purpose' => 'versioned authorization and current institutional-role claims' ),
 				array( 'module_key' => 'file-20', 'minimum_version' => '1.2.0', 'maximum_version' => '', 'purpose' => 'shell provider and route placement' ),
+				array( 'module_key' => 'file-21', 'minimum_version' => '1.0.1', 'maximum_version' => '', 'purpose' => 'canonical Home/News owner for legacy reconciliation' ),
 				array( 'module_key' => 'file-24', 'minimum_version' => '0.25.0', 'maximum_version' => '', 'purpose' => 'assurance evidence' ),
+				array( 'module_key' => 'file-26', 'minimum_version' => '0.1.0', 'maximum_version' => '', 'purpose' => 'canonical search/discovery/ranking owner registration' ),
 			),
-			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle' ),
+			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle', 'event_backbone', 'feature_flags' ),
 			'commands'         => array( 'RegisterFoundationManifest.v1', 'RegisterFoundationContract.v1', 'MapFoundationRoute.v1', 'TransitionFoundationRelease.v1' ),
 			'queries'          => array( 'GetFoundationReadiness.v1', 'ListFoundationContracts.v1', 'GetFoundationStatus.v1' ),
 			'events'           => array( 'FoundationModuleActivated.v1', 'FoundationModuleDeactivated.v1', 'FoundationContractDeprecated.v1', 'FoundationHealthChanged.v1', 'FoundationReleaseStateChanged.v1', 'ReleaseApproved.v1' ),

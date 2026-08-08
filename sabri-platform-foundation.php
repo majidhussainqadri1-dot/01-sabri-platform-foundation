@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Platform Foundation
  * Plugin URI: https://www.sabrihomeopathy.com/
  * Description: Canonical File 01-B governance, registry, dependency, route, privacy, health, reconciliation, repair and release-evidence runtime for the Sabri Social Homeopathy Platform.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Requires at least: 6.0
  * Requires PHP: 8.1
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,9 +13,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SPF_VERSION', '1.1.0' );
+define( 'SPF_VERSION', '1.2.0' );
 define( 'SPF_SCHEMA_VERSION', '1.1.0' );
-define( 'SPF_CONTRACT_VERSION', '1.1.0' );
+define( 'SPF_CONTRACT_VERSION', '1.2.0' );
 define( 'SPF_PLAN_ID', 'SSH-F01-PLAN-2026-v1.0' );
 define( 'SPF_FILE', __FILE__ );
 define( 'SPF_DIR', plugin_dir_path( __FILE__ ) );
@@ -38,7 +38,6 @@ require_once SPF_DIR . 'includes/class-spf-purge.php';
 require_once SPF_DIR . 'includes/class-spf-rest.php';
 require_once SPF_DIR . 'includes/class-spf-admin.php';
 require_once SPF_DIR . 'includes/class-spf-plugin.php';
-
 
 function spf_foundation_cron_schedules( $schedules ) {
 	$schedules['spf_five_minutes'] = array( 'interval' => 300, 'display' => __( 'Every five minutes (Sabri Foundation)', 'sabri-platform-foundation' ) );

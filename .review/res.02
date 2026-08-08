@@ -1,0 +1,122 @@
++		$environment = function_exists( 'wp_get_environment_type' ) ? sanitize_key( wp_get_environment_type() ) : ( defined( 'WP_ENVIRONMENT_TYPE' ) ? sanitize_key( WP_ENVIRONMENT_TYPE ) : 'unknown' );
++		$safe_environments = array( 'local', 'development', 'staging', 'ci', 'test' );
++		$enabled = defined( 'SPF_CHAOS_MODE' ) && SPF_CHAOS_MODE && in_array( $environment, $safe_environments, true );
+ 		$result = array(
+-			'scenario'        => $scenario,
+-			'definition'      => $catalog[ $scenario ],
+-			'environment'     => sanitize_key( $environment ),
++			'scenario'         => $scenario,
++			'definition'       => $catalog[ $scenario ],
++			'environment'      => $environment,
+ 			'injection_enabled'=> $enabled,
+-			'injected'        => false,
+-			'simulation_only' => ! $enabled,
++			'injected'         => false,
++			'simulation_only'  => ! $enabled,
++			'fail_closed'      => ! in_array( $environment, $safe_environments, true ),
+ 		);
+ 		if ( $enabled ) {
+-			do_action( 'spf_chaos_inject_' . $scenario, SPF_Runtime::canonicalize( $context ) );
++			do_action( 'spf_chaos_inject_' . $scenario, self::sanitize_chaos_context( $context ) );
+ 			$result['injected'] = true;
+ 			$result['simulation_only'] = false;
+ 		}
+@@ -223,7 +310,12 @@
+ 			$log = get_option( self::CHAOS_OPTION, array() );
+ 			$log = is_array( $log ) ? $log : array();
+ 			$log[] = array( 'scenario'=>$scenario, 'environment'=>$result['environment'], 'injected'=>$result['injected'], 'time'=>SPF_Runtime::now_mysql() );
+-			update_option( self::CHAOS_OPTION, array_slice( $log, -100 ), false );
++			$expected = array_slice( $log, -100 );
++			update_option( self::CHAOS_OPTION, $expected, false );
++			$persisted = get_option( self::CHAOS_OPTION, array() );
++			if ( SPF_Runtime::hash( $persisted ) !== SPF_Runtime::hash( $expected ) ) {
++				return new WP_Error( 'spf_chaos_log_persistence_failed', __( 'The chaos-run evidence log could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
+ 		}
+ 		return $result;
+ 	}
+@@ -233,28 +325,41 @@
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+-		$data = array(
+-			'policy_catalog' => get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() ),
+-			'event_schemas'  => get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
+-			'config_baselines'=> get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
+-			'feature_flags'  => get_option( 'spf_feature_flags', array() ),
+-			'activation_state'=> get_option( 'spf_activation_state', array() ),
+-			'upgrade_state'  => get_option( 'spf_upgrade_state', array() ),
+-		);
+-		$id = 'snap-' . gmdate( 'YmdHis' ) . '-' . substr( SPF_Runtime::hash( $data ), 0, 12 );
+-		$snapshot = array(
+-			'id'         => $id,
+-			'label'      => substr( sanitize_text_field( $label ), 0, 120 ),
+-			'created_at' => SPF_Runtime::now_mysql(),
+-			'data'       => SPF_Runtime::canonicalize( $data ),
+-			'data_hash'  => SPF_Runtime::hash( $data ),
+-		);
+-		$snapshots = get_option( self::SNAPSHOT_OPTION, array() );
+-		$snapshots = is_array( $snapshots ) ? $snapshots : array();
+-		$snapshots[ $id ] = $snapshot;
+-		$snapshots = array_slice( $snapshots, -50, null, true );
+-		update_option( self::SNAPSHOT_OPTION, $snapshots, false );
+-		return array( 'id'=>$id, 'label'=>$snapshot['label'], 'created_at'=>$snapshot['created_at'], 'data_hash'=>$snapshot['data_hash'] );
++		$lock_name = 'future-snapshot-capture';
++		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
++		if ( is_wp_error( $lock ) ) {
++			return $lock;
++		}
++		try {
++			$data = array(
++				'policy_catalog' => get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() ),
++				'event_schemas'  => get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
++				'config_baselines'=> get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
++				'feature_flags'  => get_option( 'spf_feature_flags', array() ),
++				'activation_state'=> get_option( 'spf_activation_state', array() ),
++				'upgrade_state'  => get_option( 'spf_upgrade_state', array() ),
++			);
++			$id = 'snap-' . gmdate( 'YmdHis' ) . '-' . substr( SPF_Runtime::hash( array( $data, wp_generate_uuid4() ) ), 0, 12 );
++			$snapshot = array(
++				'id'         => $id,
++				'label'      => substr( sanitize_text_field( $label ), 0, 120 ),
++				'created_at' => SPF_Runtime::now_mysql(),
++				'data'       => SPF_Runtime::canonicalize( $data ),
++				'data_hash'  => SPF_Runtime::hash( $data ),
++			);
++			$snapshots = get_option( self::SNAPSHOT_OPTION, array() );
++			$snapshots = is_array( $snapshots ) ? $snapshots : array();
++			$snapshots[ $id ] = $snapshot;
++			$snapshots = array_slice( $snapshots, -50, null, true );
++			update_option( self::SNAPSHOT_OPTION, $snapshots, false );
++			$persisted = get_option( self::SNAPSHOT_OPTION, array() );
++			if ( empty( $persisted[ $id ] ) || SPF_Runtime::hash( $persisted[ $id ] ) !== SPF_Runtime::hash( $snapshot ) ) {
++				return new WP_Error( 'spf_snapshot_persistence_failed', __( 'The governance snapshot could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			return array( 'id'=>$id, 'label'=>$snapshot['label'], 'created_at'=>$snapshot['created_at'], 'data_hash'=>$snapshot['data_hash'] );
++		} finally {
++			SPF_Runtime::release_lock( $lock_name, $lock );
++		}
+ 	}
+ 
+ 	public static function list_snapshots() {
+@@ -333,42 +438,62 @@
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+-		$plan = self::restore_snapshot_plan( $snapshot_id );
+-		if ( is_wp_error( $plan ) ) {
+-			return $plan;
+-		}
+-		if ( ! hash_equals( (string) $plan['plan_hash'], (string) $expected_hash ) ) {
+-			return new WP_Error( 'spf_snapshot_restore_plan_changed', __( 'The snapshot restore plan changed; review the new dry run first.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+-		}
+ 		if ( 'RESTORE FILE 01 GOVERNANCE SNAPSHOT' !== trim( (string) $confirmation ) ) {
+ 			return new WP_Error( 'spf_snapshot_restore_confirmation_required', __( 'Typed confirmation is required for governance snapshot restore.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+ 		}
+-		$snapshots = get_option( self::SNAPSHOT_OPTION, array() );
+-		$target = (array) $snapshots[ $snapshot_id ]['data'];
+-		$mapping = self::restorable_snapshot_mapping();
+-		$current = array();
+-		foreach ( $mapping as $section => $option ) {
+-			$current[ $option ] = get_option( $option, array() );
+-		}

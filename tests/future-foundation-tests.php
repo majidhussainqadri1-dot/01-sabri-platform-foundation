@@ -66,6 +66,12 @@ $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/s
 $compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]);
 $assert($compat['breaking_change']===true,'Contract breaking changes missed.');
 $assert($compat['major_bump_ok']===true,'Major bump rejected for breaking change.');
+$regressed=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'string','required'=>true]]],['contract_version'=>'1.9.9','schema'=>['id'=>['type'=>'string','required'=>true]]]);
+$assert($regressed['compatible']===false && $regressed['version_monotonic']===false,'Contract version regression was accepted as compatible.');
+$normalize_dependencies=new ReflectionMethod(SPF_Registry::class,'normalize_dependencies');$normalize_dependencies->setAccessible(true);
+$dep=$normalize_dependencies->invoke(null,[['module_key'=>'file-20','minimum_version'=>'1.2.0','fail_mode'=>'No duplicate shell']]);
+$assert(($dep[0]['fail_mode']??'')==='No duplicate shell','Dependency fail-mode metadata was discarded.');
+
 
 $schema=['event_name'=>'ExampleChanged.v1','version'=>'1.0.0','owner_module'=>'file-01','fields'=>['event_id'=>['type'=>'string','required'=>true],'occurred_at'=>['type'=>'timestamp','required'=>true],'count'=>['type'=>'integer','required'=>true]]];
 $event=['event_id'=>'evt-1','occurred_at'=>'2026-08-08T05:00:00Z','count'=>2];

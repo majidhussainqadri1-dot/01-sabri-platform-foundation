@@ -455,7 +455,7 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_duplicate_dependency', __( 'A dependency module may be declared only once in a dependency list.', 'sabri-platform-foundation' ) );
 			}
 			$seen[ $key ] = true;
-			$result[] = array( 'module_key' => $key, 'minimum_version' => $min, 'maximum_version' => $max, 'purpose' => substr( sanitize_text_field( $dependency['purpose'] ?? '' ), 0, 191 ) );
+			$result[] = array( 'module_key' => $key, 'minimum_version' => $min, 'maximum_version' => $max, 'purpose' => substr( sanitize_text_field( $dependency['purpose'] ?? '' ), 0, 191 ), 'fail_mode' => substr( sanitize_text_field( $dependency['fail_mode'] ?? '' ), 0, 240 ) );
 		}
 		usort( $result, static function ( $a, $b ) { return strcmp( $a['module_key'], $b['module_key'] ); } );
 		return $result;

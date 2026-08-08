@@ -106,41 +106,9 @@ final class SPF_Platform_Engineering {
 	}
 
 	public static function contract_compatibility( array $old, array $new ) {
-		$issues = array();
-		$old_schema = (array) ( $old['schema'] ?? array() );
-		$new_schema = (array) ( $new['schema'] ?? array() );
-		foreach ( $old_schema as $field => $definition ) {
-			$definition = (array) $definition;
-			if ( ! array_key_exists( $field, $new_schema ) ) {
-				$issues[] = array( 'severity'=>'breaking', 'code'=>'field_removed', 'field'=>$field );
-				continue;
-			}
-			$new_definition = (array) $new_schema[ $field ];
-			if ( ( $definition['type'] ?? '' ) !== ( $new_definition['type'] ?? '' ) ) {
-				$issues[] = array( 'severity'=>'breaking', 'code'=>'type_changed', 'field'=>$field );
-			}
-			if ( empty( $definition['required'] ) && ! empty( $new_definition['required'] ) ) {
-				$issues[] = array( 'severity'=>'breaking', 'code'=>'optional_became_required', 'field'=>$field );
-			}
-		}
-		foreach ( $new_schema as $field => $definition ) {
-			if ( ! array_key_exists( $field, $old_schema ) && ! empty( $definition['required'] ) ) {
-				$issues[] = array( 'severity'=>'breaking', 'code'=>'new_required_field', 'field'=>$field );
-			}
-		}
-		$old_version = sanitize_text_field( $old['contract_version'] ?? '0.0.0' );
-		$new_version = sanitize_text_field( $new['contract_version'] ?? '0.0.0' );
-		$breaking = (bool) array_filter( $issues, static function ( $issue ) { return 'breaking' === $issue['severity']; } );
-		$version_valid = SPF_Registry::valid_semver( $old_version ) && SPF_Registry::valid_semver( $new_version );
-		$major_bumped = $version_valid && (int) strtok( $new_version, '.' ) > (int) strtok( $old_version, '.' );
-		return array(
-			'compatible'      => ! $breaking,
-			'breaking_change' => $breaking,
-			'major_bump_ok'   => ! $breaking || $major_bumped,
-			'issues'          => $issues,
-			'old_hash'        => SPF_Runtime::hash( $old_schema ),
-			'new_hash'        => SPF_Runtime::hash( $new_schema ),
-		);
+		$issues=array();$old_schema=(array)($old['schema']??array());$new_schema=(array)($new['schema']??array());foreach($old_schema as $field=>$definition){$definition=(array)$definition;if(!array_key_exists($field,$new_schema)){$issues[]=array('severity'=>'breaking','code'=>'field_removed','field'=>$field);continue;}$new_definition=(array)$new_schema[$field];if(($definition['type']??'')!==($new_definition['type']??'')){$issues[]=array('severity'=>'breaking','code'=>'type_changed','field'=>$field);}if(empty($definition['required'])&&!empty($new_definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'optional_became_required','field'=>$field);}}foreach($new_schema as $field=>$definition){if(!array_key_exists($field,$old_schema)&&!empty($definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'new_required_field','field'=>$field);}}
+		$old_version=sanitize_text_field($old['contract_version']??'0.0.0');$new_version=sanitize_text_field($new['contract_version']??'0.0.0');$version_valid=SPF_Registry::valid_semver($old_version)&&SPF_Registry::valid_semver($new_version);if(!$version_valid){$issues[]=array('severity'=>'breaking','code'=>'contract_version_invalid');}elseif(version_compare($new_version,$old_version,'<')){$issues[]=array('severity'=>'breaking','code'=>'contract_version_regressed','old_version'=>$old_version,'new_version'=>$new_version);}$breaking=(bool)array_filter($issues,static function($issue){return 'breaking'===($issue['severity']??'');});$major_bumped=$version_valid&&(int)strtok($new_version,'.')>(int)strtok($old_version,'.');
+		return array('compatible'=>!$breaking,'breaking_change'=>$breaking,'major_bump_ok'=>!$breaking||$major_bumped,'version_valid'=>$version_valid,'version_monotonic'=>$version_valid&&version_compare($new_version,$old_version,'>='),'issues'=>$issues,'old_hash'=>SPF_Runtime::hash($old_schema),'new_hash'=>SPF_Runtime::hash($new_schema));
 	}
 
 	public static function register_event_schema( array $schema ) {

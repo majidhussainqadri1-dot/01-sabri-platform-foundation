@@ -89,49 +89,36 @@ final class SPF_Privacy {
 			return array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true );
 		}
 		if ( self::has_active_hold( 'user', (string) $user->ID ) ) {
-			return array(
-				'items_removed'  => false,
-				'items_retained' => true,
-				'messages'       => array( __( 'File 01 records are retained under an active legal/privacy hold.', 'sabri-platform-foundation' ) ),
-				'done'           => true,
-			);
+			return array( 'items_removed'=>false, 'items_retained'=>true, 'messages'=>array( __( 'File 01 records are retained under an active legal/privacy hold.', 'sabri-platform-foundation' ) ), 'done'=>true );
 		}
 		global $wpdb;
 		$pseudonym = 'erased-' . substr( hash_hmac( 'sha256', (string) $user->ID, wp_salt( 'auth' ) ), 0, 24 );
 		$removed = false;
-
-		// Idempotency rows are short-lived technical linkage and may be erased.
 		$idempotency = SPF_Installer::table( 'idempotency' );
 		if ( SPF_Runtime::table_exists( $idempotency ) ) {
 			$count = $wpdb->delete( $idempotency, array( 'actor_id' => $user->ID ), array( '%d' ) );
-			$removed = false !== $count && $count > 0;
+			if ( false === $count ) {
+				return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Transient idempotency linkage could not be erased; retry is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
+			}
+			$removed = $count > 0;
 		}
-
-		// Privacy request linkage may be pseudonymized because it is not part of
-		// the tamper-evident audit chain.
 		$requests = SPF_Installer::table( 'privacy_requests' );
 		if ( SPF_Runtime::table_exists( $requests ) ) {
-			$count = $wpdb->update(
-				$requests,
-				array( 'user_id' => 0, 'result_json' => wp_json_encode( array( 'pseudonym' => $pseudonym, 'erased_at' => SPF_Runtime::now_mysql() ) ) ),
-				array( 'user_id' => $user->ID ),
-				array( '%d', '%s' ),
-				array( '%d' )
-			);
-			$removed = $removed || ( false !== $count && $count > 0 );
+			$count = $wpdb->update( $requests, array( 'user_id'=>0, 'result_json'=>wp_json_encode( array( 'pseudonym'=>$pseudonym, 'erased_at'=>SPF_Runtime::now_mysql() ) ) ), array( 'user_id'=>$user->ID ), array( '%d','%s' ), array( '%d' ) );
+			if ( false === $count ) {
+				return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Privacy-request linkage could not be pseudonymized; retry is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
+			}
+			$removed = $removed || $count > 0;
 		}
-
-		// Audit and release-state rows remain unchanged: mutating their actor_id
-		// would invalidate the append-only integrity chain. Retention is therefore
-		// expressly recorded rather than falsely described as erased.
-		SPF_Audit::record_required( 'privacy_erasure', 'foundation_privacy_subject', $pseudonym, 'partially_erased', array( 'purpose' => 'wordpress_privacy_erasure', 'immutable_facts_retained' => 'audit,release_states' ) );
-		SPF_Event_Bus::publish( 'FoundationPrivacyErasureCompleted.v1', 'foundation_privacy_subject', $pseudonym, array( 'pseudonym' => $pseudonym, 'immutable_facts_retained' => true ), 1, 'privacy-erasure-' . $pseudonym );
-		return array(
-			'items_removed'  => $removed,
-			'items_retained' => true,
-			'messages'       => array( __( 'Transient linkage was erased. Hash-chained audit and append-only release facts were retained under the approved governance purpose and were not rewritten.', 'sabri-platform-foundation' ) ),
-			'done'           => true,
-		);
+		$audit = SPF_Audit::record_required( 'privacy_erasure', 'foundation_privacy_subject', $pseudonym, 'partially_erased', array( 'purpose'=>'wordpress_privacy_erasure', 'immutable_facts_retained'=>'audit,release_states' ) );
+		if ( is_wp_error( $audit ) ) {
+			return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Privacy erasure changed transient linkage but mandatory audit evidence could not be recorded; operator reconciliation is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
+		}
+		$event = SPF_Event_Bus::publish( 'FoundationPrivacyErasureCompleted.v1', 'foundation_privacy_subject', $pseudonym, array( 'pseudonym'=>$pseudonym, 'immutable_facts_retained'=>true ), 1, 'privacy-erasure-'.$pseudonym );
+		if ( is_wp_error( $event ) ) {
+			return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Privacy erasure changed transient linkage but completion event persistence failed; operator reconciliation is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
+		}
+		return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Transient linkage was erased. Hash-chained audit and append-only release facts were retained under the approved governance purpose and were not rewritten.', 'sabri-platform-foundation' ) ), 'done'=>true );
 	}
 
 	public static function create_request( $user_id, $type, $purpose, $legal_basis ) {
@@ -165,33 +152,38 @@ final class SPF_Privacy {
 
 	public static function run_retention() {
 		global $wpdb;
-		$policies = apply_filters(
-			'spf_privacy_retention_policy',
-			array(
-				'health_days'      => self::HEALTH_RETENTION_DAYS,
-				'idempotency_days' => self::IDEMPOTENCY_RETENTION_DAYS,
-				'sent_outbox_days' => self::SENT_OUTBOX_RETENTION_DAYS,
-				'dead_outbox_days' => self::DEAD_OUTBOX_RETENTION_DAYS,
-			)
-		);
+		$defaults = array( 'health_days'=>self::HEALTH_RETENTION_DAYS, 'idempotency_days'=>self::IDEMPOTENCY_RETENTION_DAYS, 'sent_outbox_days'=>self::SENT_OUTBOX_RETENTION_DAYS, 'dead_outbox_days'=>self::DEAD_OUTBOX_RETENTION_DAYS );
+		$policies = apply_filters( 'spf_privacy_retention_policy', $defaults );
+		$policies = is_array( $policies ) ? $policies : $defaults;
+		foreach ( $defaults as $key => $default ) {
+			$value = $policies[$key] ?? $default;
+			$policies[$key] = is_numeric( $value ) && (int)$value >= 1 ? min( 3650, (int)$value ) : $default;
+		}
 		$deleted = array();
+		$failures = array();
 		$health = SPF_Installer::table( 'health' );
 		if ( SPF_Runtime::table_exists( $health ) ) {
-			$deleted['health'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$health} WHERE created_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - absint( $policies['health_days'] ) * DAY_IN_SECONDS ) ) );
+			$deleted['health'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$health} WHERE created_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - $policies['health_days'] * DAY_IN_SECONDS ) ) );
+			if ( false === $deleted['health'] ) { $failures[] = 'health'; }
 		}
 		$idempotency = SPF_Installer::table( 'idempotency' );
 		if ( SPF_Runtime::table_exists( $idempotency ) ) {
-			$deleted['idempotency'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$idempotency} WHERE expires_at<%s AND status IN ('completed','failed') LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - absint( $policies['idempotency_days'] ) * DAY_IN_SECONDS ) ) );
+			$deleted['idempotency'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$idempotency} WHERE expires_at<%s AND status IN ('completed','failed') LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - $policies['idempotency_days'] * DAY_IN_SECONDS ) ) );
+			if ( false === $deleted['idempotency'] ) { $failures[] = 'idempotency'; }
 		}
 		$outbox = SPF_Installer::table( 'outbox' );
 		if ( SPF_Runtime::table_exists( $outbox ) ) {
-			$deleted['outbox_sent'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$outbox} WHERE status='sent' AND sent_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - absint( $policies['sent_outbox_days'] ) * DAY_IN_SECONDS ) ) );
-			$deleted['outbox_dead'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$outbox} WHERE status='dead' AND created_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - absint( $policies['dead_outbox_days'] ) * DAY_IN_SECONDS ) ) );
+			$deleted['outbox_sent'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$outbox} WHERE status='sent' AND sent_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - $policies['sent_outbox_days'] * DAY_IN_SECONDS ) ) );
+			$deleted['outbox_dead'] = $wpdb->query( $wpdb->prepare( "DELETE FROM {$outbox} WHERE status='dead' AND created_at<%s LIMIT 1000", gmdate( 'Y-m-d H:i:s', time() - $policies['dead_outbox_days'] * DAY_IN_SECONDS ) ) );
+			if ( false === $deleted['outbox_sent'] ) { $failures[] = 'outbox_sent'; }
+			if ( false === $deleted['outbox_dead'] ) { $failures[] = 'outbox_dead'; }
 		}
-		// Audit rows are not deleted in-place because that would break the hash
-		// chain. Archival/deletion requires a separately verified chain checkpoint.
 		$deleted['audit'] = 'retained_integrity_chain';
-		SPF_Audit::record_required( 'retention_run', 'foundation_privacy', 'file-01', 'success', array( 'purpose' => 'scheduled_retention', 'deleted' => wp_json_encode( $deleted ) ) );
-		return $deleted;
+		if ( $failures ) {
+			SPF_Audit::record( 'retention_run', 'foundation_privacy', 'file-01', 'failed', array( 'purpose'=>'scheduled_retention', 'failed_targets'=>implode(',', $failures) ) );
+			return new WP_Error( 'spf_retention_incomplete', __( 'One or more File 01 retention operations failed.', 'sabri-platform-foundation' ), array( 'targets'=>$failures ) );
+		}
+		$audit = SPF_Audit::record_required( 'retention_run', 'foundation_privacy', 'file-01', 'success', array( 'purpose'=>'scheduled_retention', 'deleted'=>wp_json_encode($deleted) ) );
+		return is_wp_error( $audit ) ? $audit : $deleted;
 	}
 }

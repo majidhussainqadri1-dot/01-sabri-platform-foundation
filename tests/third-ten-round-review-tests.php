@@ -28,6 +28,8 @@ $assert( str_contains( $governance, 'spf_invalid_flag_enabled' ) && str_contains
 
 $assert( str_contains( $governance, 'feature_flag_expiry_write_failed' ) && str_contains( $governance, 'feature_flag_expiry_event_failed' ) && str_contains( $governance, "'enabled'=>1" ), 'Round 4: flag expiry can emit a fact without a successful state transition.' );
 
+$assert( str_contains( $privacy, 'spf_retention_incomplete' ) && str_contains( $privacy, 'mandatory audit evidence could not be recorded' ) && str_contains( $privacy, "'done'=>false" ), 'Round 5: privacy erasure/retention can claim completion after persistence failure.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

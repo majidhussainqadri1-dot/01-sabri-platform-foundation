@@ -17,3 +17,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 4 — Expired-flag CAS and event truth
 **Defect found and corrected.** Expiry reconciliation ignored the database update result and could publish `FeatureFlagExpired` even when no flag transition actually occurred. It now uses a version/enabled compare-and-set, never emits the fact on conflict/failure, audits failures, and returns explicit reconciliation counts.
+
+### Round 5 — Privacy erasure and retention truthfulness
+**Defects found and corrected.** Erasure could report `done=true` after database, mandatory-audit or completion-event failure; retention could record success after a failed delete and accepted unsafe retention overrides. Erasure now reports retry/reconciliation on any failed required step; retention windows are bounded and failed targets return an explicit error rather than false success.

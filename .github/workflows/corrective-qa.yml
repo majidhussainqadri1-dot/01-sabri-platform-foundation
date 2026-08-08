@@ -79,6 +79,8 @@ jobs:
           wp plugin activate sabri-platform-foundation --user=admin --path=/tmp/wp
       - name: Run WordPress/MySQL integration tests
         run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-runtime-smoke.php --user=admin --path=/tmp/wp
+      - name: Run Future Foundation 18-enhancement runtime smoke
+        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-future-foundation-smoke.php --user=admin --path=/tmp/wp
       - name: Run concurrent idempotency test
         run: |
           wp option delete spf_concurrency_counter --path=/tmp/wp || true
@@ -120,11 +122,11 @@ jobs:
           VERSION="$(php -r '$s=file_get_contents("sabri-platform-foundation.php"); preg_match("/define\\( \\x27SPF_VERSION\\x27, \\x27([^\\x27]+)\\x27 \\)/",$s,$m); echo $m[1] ?? "";')"
           test -n "$VERSION"
           cd dist
-          sha256sum --check "01-sabri-platform-foundation-${VERSION}-CORRECTIVE-CANDIDATE.zip.sha256"
+          sha256sum --check "01-sabri-platform-foundation-${VERSION}-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip.sha256"
       - name: Upload package evidence
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
-          name: file-01-corrective-package
+          name: file-01-future-foundation-superset-package
           path: |
             dist/*.zip
             dist/*.sha256

@@ -3,9 +3,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(php -r '$s=file_get_contents($argv[1]); preg_match("/define\\( \\x27SPF_VERSION\\x27, \\x27([^\\x27]+)\\x27 \\)/",$s,$m); echo $m[1] ?? "";' "$ROOT/sabri-platform-foundation.php")"
 [[ -n "$VERSION" ]] || { echo 'Unable to determine SPF_VERSION' >&2; exit 1; }
-NAME="01-sabri-platform-foundation-${VERSION}-CORRECTIVE-CANDIDATE"
+NAME="01-sabri-platform-foundation-${VERSION}-FUTURE-FOUNDATION-SUPERSET-CANDIDATE"
 TOP="sabri-platform-foundation-01"
-EPOCH="202608080100"
+EPOCH="202608080500"
 DIST="$ROOT/dist"
 BUILD="$ROOT/build"
 rm -rf "$BUILD" "$DIST"
@@ -20,7 +20,9 @@ copy_package() {
     ADVERSARIAL-REVIEW-ROUND-4.md FINAL-REVIEW-ROUND-1-2026-08-08.md
     FINAL-ADVERSARIAL-REVIEW-ROUND-2-2026-08-08.md QA-REPORT.md RUNTIME-QA-NOTES.md
     KNOWN-LIMITATIONS.md RELEASE-CHECKLIST.md SBOM.cdx.json DEPENDENCY-MANIFEST.json
-    RELEASE-EVIDENCE-TEMPLATE.json
+    RELEASE-EVIDENCE-TEMPLATE.json FUTURE-FOUNDATION-18-ENHANCEMENTS.md
+    FUTURE-FOUNDATION-REVIEW-ROUND-1-2026-08-08.md
+    FUTURE-FOUNDATION-ADVERSARIAL-ROUND-2-2026-08-08.md
   )
   for file in "${files[@]}"; do cp "$ROOT/$file" "$target/"; done
   mkdir -p "$target/includes"

@@ -7,10 +7,11 @@ printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 
 php tests/unit-tests.php
+php tests/future-foundation-tests.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php
+php tests/security-tests.php
 php tests/contract-tests.php
-
 
 printf 'Source checksum manifest\n'
 sha256sum --check SOURCE-CHECKSUMS.sha256

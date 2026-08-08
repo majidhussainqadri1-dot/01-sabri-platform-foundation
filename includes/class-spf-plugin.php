@@ -20,6 +20,7 @@ final class SPF_Plugin {
 		add_action( 'spf_dispatch_outbox', array( 'SPF_Event_Bus', 'dispatch_due' ) );
 		add_action( 'spf_reconcile_expired_flags', array( 'SPF_Governance', 'reconcile_expired_flags' ) );
 		SPF_Privacy::register();
+		SPF_Future_Foundation::register();
 		add_action( 'rest_api_init', array( 'SPF_REST', 'register' ) );
 		add_action( 'admin_menu', array( 'SPF_Admin', 'register_menu' ) );
 		SPF_Admin::register_actions();
@@ -103,6 +104,19 @@ final class SPF_Plugin {
 				'schema'=>array('trace_id'=>array('type'=>'uuid','required'=>true),'overall_status'=>array('type'=>'enum','required'=>true),'checks'=>array('type'=>'array','required'=>true),'checked_at'=>array('type'=>'datetime','required'=>true)),
 				'consumers'=>array('file-20','file-24'),
 			),
+			array(
+				'contract_key'=>'FoundationFutureControlPlane.v2','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array(
+					'future_foundation_version'=>array('type'=>'semver','required'=>true),
+					'feature_count'=>array('type'=>'integer','required'=>true),
+					'coded_count'=>array('type'=>'integer','required'=>true),
+					'policy_count'=>array('type'=>'integer','required'=>true),
+					'event_schema_count'=>array('type'=>'integer','required'=>true),
+					'snapshot_count'=>array('type'=>'integer','required'=>true),
+					'ai_autonomous_changes'=>array('type'=>'boolean','required'=>true),
+				),
+				'consumers'=>array('file-20','file-24'),
+			),
 		);
 	}
 
@@ -120,6 +134,7 @@ final class SPF_Plugin {
 			'module_count'=>count(SPF_Registry::list_modules(array('limit'=>200))),'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
 			'contract_count'=>count(SPF_Registry::list_contracts(array('limit'=>200))),'route_count'=>count(SPF_Registry::list_routes()),
 			'latest_health'=>$health,'legacy_state'=>get_option('spf_reconciliation_state',array('status'=>'not_run')),'latest_release_status'=>$release_status,
+			'future_foundation'=>SPF_Future_Foundation::status(),
 			'completion_statuses'=>array(
 				'specified'=>true,
 				'coded'=>true,
@@ -129,7 +144,7 @@ final class SPF_Plugin {
 				'live_deployed'=>'deployed'===$release_status,
 				'operational'=>$operational,
 			),
-			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center or search-truth ownership.',
+			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
 	}
 

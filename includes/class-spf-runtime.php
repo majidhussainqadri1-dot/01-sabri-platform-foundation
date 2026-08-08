@@ -66,7 +66,7 @@ final class SPF_Runtime {
 			// safety window rather than allowing a contender's shorter TTL to steal it.
 			$current_expires = (int) $current['created'] + HOUR_IN_SECONDS;
 		}
-		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && $current_expires > 0 && time() > $current_expires ) {
+		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && $current_expires > 0 && time() >= $current_expires ) {
 			// Stale takeover is compare-and-delete at the database row itself. An
 			// unconditional delete_option() here could delete a newer owner's lock
 			// if another worker replaced the stale value between read and delete.
@@ -121,7 +121,17 @@ final class SPF_Runtime {
 
 	public static function table_exists( $table ) {
 		global $wpdb;
-		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+		$table = is_string( $table ) ? trim( $table ) : '';
+		if ( '' === $table ) {
+			return false;
+		}
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s LIMIT 1',
+				$table
+			)
+		);
+		return is_string( $found ) && hash_equals( $table, $found );
 	}
 
 	public static function table_engine( $table ) {

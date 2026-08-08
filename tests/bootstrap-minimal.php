@@ -39,6 +39,8 @@ $GLOBALS['spf_test_options'] = [];
 function get_option( $key, $default = false ) { return array_key_exists( $key, $GLOBALS['spf_test_options'] ) ? $GLOBALS['spf_test_options'][$key] : $default; }
 function add_option( $key, $value, $deprecated = '', $autoload = 'yes' ) { if ( array_key_exists( $key, $GLOBALS['spf_test_options'] ) ) { return false; } $GLOBALS['spf_test_options'][$key]=$value; return true; }
 function update_option( $key, $value, $autoload = null ) { $GLOBALS['spf_test_options'][$key]=$value; return true; }
+function delete_option( $key ) { if ( ! array_key_exists( $key, $GLOBALS['spf_test_options'] ) ) return false; unset( $GLOBALS['spf_test_options'][$key] ); return true; }
+function wp_cache_delete( $key, $group = '' ) { return true; }
 
 require_once dirname( __DIR__ ) . '/includes/class-spf-runtime.php';
 require_once dirname( __DIR__ ) . '/includes/class-spf-registry.php';

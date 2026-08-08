@@ -79,6 +79,10 @@ final class SPF_Runtime {
 
 	private static function delete_lock_if_matches( $option, array $payload ) {
 		global $wpdb;
+		if ( ! is_object( $wpdb ) || empty( $wpdb->options ) ) {
+			$current = get_option( $option, null );
+			return $current === $payload && function_exists( 'delete_option' ) ? (bool) delete_option( $option ) : false;
+		}
 		$deleted = $wpdb->delete(
 			$wpdb->options,
 			array( 'option_name' => $option, 'option_value' => maybe_serialize( $payload ) ),

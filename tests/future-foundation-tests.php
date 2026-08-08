@@ -119,6 +119,8 @@ $assert($unknown_slo['allow']===false && ($unknown_slo['violations'][0]['code']?
 $context=SPF_Platform_Engineering::new_telemetry_context();
 $assert(strlen($context['trace_id'])===32 && strlen($context['span_id'])===16,'Telemetry IDs invalid.');
 SPF_Platform_Engineering::record_metric('privacy_test',1,['module'=>'file-01','patient_name'=>'sensitive']);
+$metric_result=SPF_Platform_Engineering::record_metric('second_metric',2,['module'=>'file-01']);
+$assert($metric_result===true,'Locked telemetry metric persistence failed.');
 $rows=$GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION]??[];$last=end($rows);
 $assert(isset($last['labels']['module'])&&!isset($last['labels']['patient_name']),'Telemetry persisted sensitive label.');
 
@@ -154,6 +156,7 @@ $installer_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-instal
 $assert(str_contains($installer_source,"'policy_as_code'")&&str_contains($installer_source,"'ai_governance_advisory'"),'File 01 v2 manifest omits Future Foundation capabilities.');
 
 $assert(str_contains($eng_source,"'rollback_required','rolled_back'") && str_contains($eng_source,"'future-rollout-'"),'Progressive rollout stale/rollback guard absent.');
+$assert(str_contains($eng_source,"'future-metrics'")&&str_contains($eng_source,'spf_metric_persistence_failed'),'Telemetry metric lost-update/persistence guard absent.');
 $assert(str_contains($res_source,"'spf_self_heal_recovery_stale'") && str_contains($res_source,"'self_heal_precommit'"),'Self-heal stale recovery/audit guard absent.');
 $assert(str_contains($res_source,'$safe_environments') && str_contains($res_source,"'run_reconciliation'") && str_contains($res_source,'sanitize_chaos_context'),'Chaos fail-closed authorization/privacy guard absent.');
 $assert(str_contains($res_source,"'spf_snapshot_integrity_failed'") && str_contains($res_source,"'future-snapshot-restore'"),'Snapshot integrity/concurrency guard absent.');

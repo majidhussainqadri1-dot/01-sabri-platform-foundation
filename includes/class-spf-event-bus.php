@@ -15,6 +15,9 @@ final class SPF_Event_Bus {
 			return new WP_Error( 'spf_invalid_event_privacy_class', __( 'A valid event privacy classification is required.', 'sabri-platform-foundation' ) );
 		}
 		$payload = self::sanitize_payload( $payload );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
 		$payload_json = wp_json_encode( $payload );
 		if ( false === $payload_json || strlen( $payload_json ) > 262144 ) {
 			return new WP_Error( 'spf_event_payload_invalid', __( 'Event payload is invalid or too large.', 'sabri-platform-foundation' ) );
@@ -128,28 +131,33 @@ final class SPF_Event_Bus {
 
 	private static function sanitize_payload( array $payload, $depth = 0 ) {
 		if ( $depth > 5 ) {
-			return array( '_truncated' => true );
-		}
-		$result = array();
-		foreach ( array_slice( $payload, 0, 100, true ) as $key => $value ) {
-			$key = substr( sanitize_key( (string) $key ), 0, 128 );
-			if ( '' === $key ) {
-				continue;
-			}
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private|key/i', $key ) ) {
-				$result[ $key ] = '[redacted]';
-			} elseif ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize_payload( $value, $depth + 1 );
-			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
-				$result[ $key ] = $value;
-			} elseif ( is_scalar( $value ) ) {
-				$result[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 1000 );
-			} else {
-				$result[ $key ] = '[unsupported]';
-			}
+			return new WP_Error( 'spf_event_payload_too_deep', __( 'Event payload nesting exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
 		}
 		if ( count( $payload ) > 100 ) {
-			$result['_truncated'] = true;
+			return new WP_Error( 'spf_event_payload_too_many_fields', __( 'Event payload fields exceed the bounded contract envelope.', 'sabri-platform-foundation' ) );
+		}
+		$result = array();
+		foreach ( $payload as $key => $value ) {
+			$raw_key = (string) $key;
+			$safe_key = substr( sanitize_key( $raw_key ), 0, 128 );
+			if ( '' === $safe_key || $raw_key !== $safe_key || array_key_exists( $safe_key, $result ) ) {
+				return new WP_Error( 'spf_event_payload_key_invalid', __( 'Event payload keys must already be unique canonical keys.', 'sabri-platform-foundation' ) );
+			}
+			if ( preg_match( '/(^|_)(password|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private_key|api_key|encryption_key)($|_)/i', $safe_key ) ) {
+				$result[ $safe_key ] = '[redacted]';
+			} elseif ( is_array( $value ) ) {
+				$nested = self::sanitize_payload( $value, $depth + 1 );
+				if ( is_wp_error( $nested ) ) {
+					return $nested;
+				}
+				$result[ $safe_key ] = $nested;
+			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
+				$result[ $safe_key ] = $value;
+			} elseif ( is_scalar( $value ) ) {
+				$result[ $safe_key ] = substr( sanitize_text_field( (string) $value ), 0, 1000 );
+			} else {
+				return new WP_Error( 'spf_event_payload_value_invalid', __( 'Event payload contains an unsupported value type.', 'sabri-platform-foundation' ) );
+			}
 		}
 		return SPF_Runtime::canonicalize( $result );
 	}

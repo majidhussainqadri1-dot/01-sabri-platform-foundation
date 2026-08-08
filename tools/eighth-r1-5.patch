@@ -1,0 +1,206 @@
+--- a/includes/class-spf-idempotency.php
++++ b/includes/class-spf-idempotency.php
+@@ -73,21 +73,32 @@
+ 			if ( 'completed' === $existing['status'] || 'failed' === $existing['status'] ) {
+ 				return self::replay( $existing );
+ 			}
++			if ( 'reconciliation_required' === $existing['status'] ) {
++				return self::reconciliation_required_error( $existing );
++			}
+ 			$locked_at = strtotime( (string) $existing['locked_at'] );
+ 			$expires_at = strtotime( (string) $existing['expires_at'] );
+ 			$stale = ! $locked_at || $locked_at < time() - 300 || ! $expires_at || $expires_at <= time();
+ 			if ( ! $stale ) {
+ 				return new WP_Error( 'spf_idempotency_in_progress', __( 'An identical request is still processing.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
+ 			}
+-			$claimed = $wpdb->update(
++
++			// A stale processing reservation is ambiguous: the protected callback may
++			// already have committed its side effect while replay-record finalization
++			// failed. Re-running it automatically can duplicate releases, amendments or
++			// other owner mutations. Freeze the reservation for explicit reconciliation
++			// instead of stealing the lease and executing the callback again.
++			$marked = $wpdb->update(
+ 				$table,
+-				array( 'status'=>'processing','owner_token'=>$token,'locked_at'=>$now,'expires_at'=>$expires,'attempts'=>(int)$existing['attempts']+1,'updated_at'=>$now ),
++				array( 'status'=>'reconciliation_required','updated_at'=>$now ),
+ 				array( 'id'=>(int)$existing['id'],'actor_id'=>$actor,'request_hash'=>$request_hash,'owner_token'=>$existing['owner_token'],'status'=>$existing['status'] ),
+-				array( '%s','%s','%s','%s','%d','%s' ), array( '%d','%d','%s','%s','%s' )
++				array( '%s','%s' ), array( '%d','%d','%s','%s','%s' )
+ 			);
+-			if ( 1 !== $claimed ) {
+-				return new WP_Error( 'spf_idempotency_in_progress', __( 'Another worker claimed the identical request.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
++			if ( 1 !== $marked ) {
++				return new WP_Error( 'spf_idempotency_in_progress', __( 'Another worker changed the identical request reservation.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
+ 			}
++			$existing['status'] = 'reconciliation_required';
++			return self::reconciliation_required_error( $existing );
+ 		}
+ 
+ 		if ( ! self::rate_limit( $actor, $action ) ) {
+@@ -120,6 +131,16 @@
+ 		return rest_ensure_response( $response );
+ 	}
+ 
++	private static function reconciliation_required_error( array $row ) {
++		$receipt = hash( 'sha256', (string)($row['scope_hash'] ?? '') . '|' . (string)($row['request_hash'] ?? '') . '|reconcile' );
++		SPF_Audit::record( 'idempotency_reconciliation_required', 'foundation_mutation', $receipt, 'failed', array( 'purpose'=>'idempotency_reconciliation','action'=>sanitize_key( $row['action_name'] ?? '' ) ) );
++		return new WP_Error(
++			'spf_idempotency_reconciliation_required',
++			__( 'The prior mutation has an ambiguous completion state; automatic replay is blocked until reconciliation.', 'sabri-platform-foundation' ),
++			array( 'status'=>503, 'recovery_receipt'=>$receipt )
++		);
++	}
++
+ 	private static function finalize_error( $scope_hash, $token, WP_Error $error ) {
+ 		global $wpdb;
+ 		$data = $error->get_error_data();
+--- a/includes/class-spf-governance.php
++++ b/includes/class-spf-governance.php
+@@ -143,6 +143,10 @@
+ 			if ( in_array( $next_status, array( 'approved','deployed' ), true ) && ! self::prior_evidence_complete( $release_id, $next_status ) ) {
+ 				throw new RuntimeException( 'Required prior release gates are incomplete.' );
+ 			}
++			$binding = self::validate_transition_evidence_binding( $release, $next_status, $evidence );
++			if ( is_wp_error( $binding ) ) {
++				throw new RuntimeException( $binding->get_error_message() );
++			}
+ 			$sequence = (int) $last['sequence_no'] + 1;
+ 			$evidence_hash = SPF_Runtime::hash( $evidence );
+ 			$now = SPF_Runtime::now_mysql();
+@@ -263,19 +267,22 @@
+ 			$expires_at = gmdate( 'Y-m-d H:i:s', $expires_ts );
+ 		}
+ 		$owner = sanitize_key( $flag['owner_module'] );
++		$key = sanitize_key( $flag['flag_key'] );
++		$env = sanitize_key( $flag['environment'] );
++		if ( '' === $owner || '' === $key || ! in_array( $env, array( 'all','local','development','staging','production' ), true ) ) {
++			return new WP_Error( 'spf_invalid_flag', __( 'Flag owner, environment or key is invalid.', 'sabri-platform-foundation' ) );
++		}
++		if ( $owner !== (string) $flag['owner_module'] || $key !== (string) $flag['flag_key'] || $env !== (string) $flag['environment'] ) {
++			return new WP_Error( 'spf_noncanonical_flag_identity', __( 'Feature-flag owner, key and environment must already be canonical before authorization.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
++		}
+ 		if ( ! SPF_Registry::get_module( $owner ) ) {
+ 			return new WP_Error( 'spf_flag_owner_missing', __( 'Flag owner missing.', 'sabri-platform-foundation' ) );
+ 		}
+-		$allowed = SPF_Authorization::require_action( 'set_flag', array( 'owner_module'=>$owner,'flag_key'=>$flag['flag_key'] ), array( 'purpose'=>$context['purpose']??'feature_flag' ) );
++		$allowed = SPF_Authorization::require_action( 'set_flag', array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env ), array( 'purpose'=>$context['purpose']??'feature_flag' ) );
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+ 		$table = SPF_Installer::table( 'flags' );
+-		$key = sanitize_key( $flag['flag_key'] );
+-		$env = sanitize_key( $flag['environment'] );
+-		if ( ! in_array( $env, array( 'all','local','development','staging','production' ), true ) || ! $key ) {
+-			return new WP_Error( 'spf_invalid_flag', __( 'Flag environment or key is invalid.', 'sabri-platform-foundation' ) );
+-		}
+ 		$old = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE owner_module=%s AND flag_key=%s AND environment=%s", $owner, $key, $env ), ARRAY_A );
+ 		if ( $old && ! isset( $context['expected_version'] ) ) {
+ 			return new WP_Error( 'spf_expected_version_required', __( 'Updating a flag requires its expected record version.', 'sabri-platform-foundation' ), array( 'status' => 428 ) );
+@@ -289,10 +296,18 @@
+ 			if ( empty( $readiness['ready'] ) ) {
+ 				return new WP_Error( 'spf_feature_dependency_not_ready', __( 'Feature activation is blocked because the owner dependency graph is not ready.', 'sabri-platform-foundation' ), array( 'status'=>412, 'readiness_code'=>$readiness['code'] ?? 'not_ready' ) );
+ 			}
+-			$activation = SPF_Runtime::verify_evidence( 'spf_verify_feature_activation_evidence', array( 'owner_module'=>$owner, 'flag_key'=>$key, 'environment'=>$env, 'readiness_hash'=>SPF_Runtime::hash($readiness) ), array( 'migration_status','health_status','rollback_evidence','gate_evidence','verifier','expires_at' ) );
++			$readiness_hash = SPF_Runtime::hash( $readiness );
++			$activation = SPF_Runtime::verify_evidence( 'spf_verify_feature_activation_evidence', array( 'owner_module'=>$owner, 'flag_key'=>$key, 'environment'=>$env, 'readiness_hash'=>$readiness_hash ), array( 'owner_module','flag_key','environment','readiness_hash','migration_status','health_status','rollback_evidence','gate_evidence','verifier','expires_at' ) );
+ 			if ( is_wp_error( $activation ) ) {
+ 				return $activation;
+ 			}
++			$activation_owner = sanitize_key( $activation['owner_module'] ?? '' );
++			$activation_key = sanitize_key( $activation['flag_key'] ?? '' );
++			$activation_environment = sanitize_key( $activation['environment'] ?? '' );
++			$activation_readiness_hash = strtolower( trim( (string) ( $activation['readiness_hash'] ?? '' ) ) );
++			if ( $activation_owner !== $owner || $activation_key !== $key || $activation_environment !== $env || ! preg_match( '/^[a-f0-9]{64}$/', $activation_readiness_hash ) || ! hash_equals( $readiness_hash, $activation_readiness_hash ) ) {
++				return new WP_Error( 'spf_feature_activation_evidence_binding_invalid', __( 'Feature activation evidence must bind the exact owner, flag, environment and current dependency-readiness hash.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
++			}
+ 			if ( ! in_array( sanitize_key( $activation['migration_status'] ), array( 'ready','not_required' ), true ) || 'pass' !== sanitize_key( $activation['health_status'] ) ) {
+ 				return new WP_Error( 'spf_feature_activation_evidence_failed', __( 'Feature activation evidence does not prove migration and health readiness.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
+ 			}
+@@ -473,6 +488,31 @@
+ 			}
+ 		}
+ 		return true;
++	}
++
++	private static function validate_transition_evidence_binding( array $release, $next_status, array $evidence ) {
++		global $wpdb;
++		if ( 'approved' === $next_status ) {
++			$staged_hash = (string) $wpdb->get_var(
++				$wpdb->prepare(
++					'SELECT evidence_hash FROM '.SPF_Installer::table('release_states').' WHERE release_id=%s AND status=%s ORDER BY sequence_no DESC LIMIT 1',
++					$release['release_id'],
++					'staged'
++				)
++			);
++			$claimed = strtolower( trim( (string) ( $evidence['staging_evidence_hash'] ?? '' ) ) );
++			if ( ! preg_match( '/^[a-f0-9]{64}$/', $claimed ) || ! preg_match( '/^[a-f0-9]{64}$/', strtolower( $staged_hash ) ) || ! hash_equals( strtolower( $staged_hash ), $claimed ) ) {
++				return new WP_Error( 'spf_release_staging_evidence_binding_invalid', __( 'Founder approval must bind the exact staged evidence hash for this release.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
++			}
++		}
++		if ( 'deployed' === $next_status ) {
++			$claimed = strtolower( trim( (string) ( $evidence['deployed_package_checksum'] ?? '' ) ) );
++			$expected = strtolower( trim( (string) ( $release['checksum_sha256'] ?? '' ) ) );
++			if ( ! preg_match( '/^[a-f0-9]{64}$/', $claimed ) || ! preg_match( '/^[a-f0-9]{64}$/', $expected ) || ! hash_equals( $expected, $claimed ) ) {
++				return new WP_Error( 'spf_release_deployed_checksum_binding_invalid', __( 'Deployment evidence must bind the exact approved package checksum.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
++			}
++		}
++		return true;
+ 	}
+ 
+ 	private static function prior_evidence_complete( $release_id, $target ) {
+--- a/includes/class-spf-reconciler.php
++++ b/includes/class-spf-reconciler.php
+@@ -176,10 +176,28 @@
+ 			return $precommit;
+ 		}
+ 		$receipts = is_array( $snapshot['owner_receipts'] ?? null ) ? $snapshot['owner_receipts'] : array();
+-		$owner_result = self::rollback_owner_receipts( $receipts, $snapshot['plan_hash'] );
+-		if ( is_wp_error( $owner_result ) ) {
++		$current_state = get_option( 'spf_reconciliation_state', array() );
++		$current_status = is_array( $current_state ) ? sanitize_key( $current_state['status'] ?? '' ) : '';
++		if ( 'rolled_back' === $current_status && hash_equals( (string)($current_state['plan_hash'] ?? ''), (string)$snapshot['plan_hash'] ) ) {
+ 			SPF_Runtime::release_lock( 'reconciliation', $lock );
+-			return $owner_result;
++			return array( 'status'=>'rolled_back','owner_receipts'=>count($receipts),'idempotent_replay'=>true );
++		}
++		if ( ! in_array( $current_status, array( 'applied','owner_rollback_completed' ), true ) || ! hash_equals( (string)($current_state['plan_hash'] ?? ''), (string)$snapshot['plan_hash'] ) ) {
++			SPF_Runtime::release_lock( 'reconciliation', $lock );
++			return new WP_Error( 'spf_reconciliation_rollback_state_invalid', __( 'Reconciliation rollback is not valid from the current lifecycle state.', 'sabri-platform-foundation' ), array( 'status'=>409, 'state'=>$current_status ) );
++		}
++		if ( 'applied' === $current_status ) {
++			$owner_result = self::rollback_owner_receipts( $receipts, $snapshot['plan_hash'] );
++			if ( is_wp_error( $owner_result ) ) {
++				SPF_Runtime::release_lock( 'reconciliation', $lock );
++				return $owner_result;
++			}
++			$intermediate = array( 'status'=>'owner_rollback_completed','plan_hash'=>$snapshot['plan_hash'],'owner_rollback_completed_at'=>SPF_Runtime::now_mysql(),'receipt_count'=>count($receipts) );
++			update_option( 'spf_reconciliation_state', $intermediate, false );
++			if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_state', array() ) ) !== SPF_Runtime::hash( $intermediate ) ) {
++				SPF_Runtime::release_lock( 'reconciliation', $lock );
++				return new WP_Error( 'spf_reconciliation_rollback_checkpoint_failed', __( 'Owner rollback completed but its durable checkpoint could not be verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
++			}
+ 		}
+ 		$local_result = self::restore_snapshot( $snapshot );
+ 		if ( is_wp_error( $local_result ) ) {
+--- a/includes/class-spf-system-check.php
++++ b/includes/class-spf-system-check.php
+@@ -36,15 +36,17 @@
+ 			$reported_hooks = is_array( $external_cron ) && is_array( $external_cron['hooks'] ?? null ) ? array_values( array_unique( array_map( 'sanitize_key', $external_cron['hooks'] ) ) ) : array();
+ 			$verified_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['verified_at'] ?? '' ) ) : false;
+ 			$expires_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['expires_at'] ?? '' ) ) : false;
++			$max_interval = is_array( $external_cron ) && isset( $external_cron['max_interval_seconds'] ) && is_numeric( $external_cron['max_interval_seconds'] ) ? (int) $external_cron['max_interval_seconds'] : 0;
+ 			$cron_ok = is_array( $external_cron )
+ 				&& true === ( $external_cron['verified'] ?? false )
+ 				&& '' !== trim( (string) ( $external_cron['scheduler_id'] ?? '' ) )
+ 				&& '' !== trim( (string) ( $external_cron['verifier'] ?? '' ) )
+ 				&& $verified_at && $verified_at <= time() + 60 && $verified_at >= time() - 900
+ 				&& $expires_at && $expires_at > time()
++				&& $max_interval >= 1 && $max_interval <= 300
+ 				&& empty( array_diff( $required_hooks, $reported_hooks ) );
+ 		}
+-		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without fresh, complete, expiring external scheduler evidence.', 'fail' );
++		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without fresh, complete, expiring external scheduler evidence proving a runner interval of five minutes or less.', 'fail' );
+ 		foreach ( $expected_schedules as $hook => $expected_recurrence ) {
+ 			$scheduled = wp_next_scheduled( $hook );
+ 			$recurrence = $scheduled ? wp_get_schedule( $hook ) : false;

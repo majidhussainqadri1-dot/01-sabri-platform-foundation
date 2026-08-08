@@ -301,8 +301,19 @@ final class SPF_Platform_Engineering {
 			return $allowed;
 		}
 		$release_id = substr( sanitize_text_field( $release_id ), 0, 191 );
-		$rings = array_values( array_unique( array_filter( array_map( 'sanitize_key', $rings ) ) ) );
+		if ( count( $rings ) > 20 ) { return new WP_Error( 'spf_rollout_invalid', __( 'Rollout rings exceed the bounded rollout envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+		$normalized_rings = array();
+		$seen_rings = array();
+		foreach ( $rings as $raw_ring ) {
+			if ( ! is_string( $raw_ring ) ) { return new WP_Error( 'spf_rollout_invalid', __( 'Rollout rings must be canonical strings.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$ring = sanitize_key( $raw_ring );
+			if ( '' === $ring || $raw_ring !== $ring || isset( $seen_rings[ $ring ] ) ) { return new WP_Error( 'spf_rollout_invalid', __( 'Rollout rings must be unique canonical values.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$seen_rings[ $ring ] = true;
+			$normalized_rings[] = $ring;
+		}
+		$rings = $normalized_rings;
 		$slo = self::sanitize_numeric_map( $slo );
+		if ( is_wp_error( $slo ) ) { return $slo; }
 		$allowed_rings = array( 'local','ci','staging','staff','canary','gradual','production','full' );
 		$terminal_rings = array( 'production','full' );
 		$unknown_rings = array_values( array_diff( $rings, $allowed_rings ) );
@@ -438,6 +449,10 @@ final class SPF_Platform_Engineering {
 	public static function evaluate_slo_gate( array $metrics, array $objectives ) {
 		$metrics = self::sanitize_numeric_map( $metrics );
 		$objectives = self::sanitize_numeric_map( $objectives );
+		if ( is_wp_error( $metrics ) || is_wp_error( $objectives ) ) {
+			$error = is_wp_error( $objectives ) ? $objectives : $metrics;
+			return array( 'allow'=>false, 'reason'=>'invalid_slo_input', 'violations'=>array( array( 'code'=>$error->get_error_code() ) ), 'checked_at'=>function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' ) );
+		}
 		if ( empty( $objectives ) ) {
 			return array( 'allow'=>false, 'reason'=>'slo_objectives_missing', 'violations'=>array( array( 'code'=>'no_objectives' ) ), 'checked_at'=>function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' ) );
 		}
@@ -596,12 +611,15 @@ final class SPF_Platform_Engineering {
 	}
 
 	private static function sanitize_numeric_map( array $values ) {
+		if ( count( $values ) > 100 ) { return new WP_Error( 'spf_numeric_map_too_large', __( 'Numeric metric/objective maps exceed the bounded envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
 		$out = array();
-		foreach ( array_slice( $values, 0, 100, true ) as $key => $value ) {
-			$key = sanitize_key( $key );
-			if ( $key && is_numeric( $value ) ) {
-				$out[ $key ] = (float) $value;
-			}
+		foreach ( $values as $raw_key => $value ) {
+			if ( ! is_string( $raw_key ) ) { return new WP_Error( 'spf_numeric_map_key_invalid', __( 'Metric/objective keys must be canonical strings.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$key = sanitize_key( $raw_key );
+			if ( '' === $key || $raw_key !== $key || array_key_exists( $key, $out ) || ! is_numeric( $value ) ) { return new WP_Error( 'spf_numeric_map_invalid', __( 'Metric/objective entries must use unique canonical keys and numeric values.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$number = (float) $value;
+			if ( ! is_finite( $number ) ) { return new WP_Error( 'spf_numeric_map_invalid', __( 'Metric/objective values must be finite numbers.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+			$out[ $key ] = $number;
 		}
 		ksort( $out, SORT_STRING );
 		return $out;

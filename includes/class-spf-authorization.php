@@ -5,9 +5,9 @@ defined( 'ABSPATH' ) || exit;
  * File 01 authorization adapter.
  *
  * File 00 remains the canonical authority. File 01 accepts only versioned,
- * short-lived, object-bound claims for sensitive operations. WordPress roles
- * provide bootstrap viewing/limited File 01 maintenance only and never grant
- * Founder, release-approval or destructive-purge authority.
+ * short-lived, actor/object/purpose-bound structured claims for protected
+ * operations. WordPress roles provide bootstrap viewing/limited File 01
+ * maintenance only and never grant Founder, release-approval or purge authority.
  */
 final class SPF_Authorization {
 	const CAP_VIEW    = 'view_sabri_foundation';
@@ -33,8 +33,6 @@ final class SPF_Authorization {
 		if ( $role ) {
 			$role->add_cap( self::CAP_VIEW );
 			$role->add_cap( self::CAP_MANAGE );
-			// CAP_RELEASE, CAP_FOUNDER and CAP_PURGE are intentionally not
-			// granted to the generic Administrator role.
 		}
 	}
 
@@ -47,31 +45,32 @@ final class SPF_Authorization {
 	}
 
 	public static function can( $action, $object = null, array $context = array() ) {
-		$action = sanitize_key( $action );
+		$action  = sanitize_key( $action );
 		$user_id = get_current_user_id();
 
-		// A security integrator may always force a denial; a permissive boolean
-		// override is deliberately ignored so this hook cannot become a bypass.
 		$policy = apply_filters( 'spf_authorization_policy_decision', null, $action, $object, $user_id, $context );
 		if ( false === $policy ) {
 			return false;
 		}
 
-		$required = self::required_capability( $action );
+		$required       = self::required_capability( $action );
 		$file00_present = self::file00_present();
+		$object_ref     = self::object_reference( $object );
+		$purpose        = sanitize_key( $context['purpose'] ?? $action );
 		$claim = apply_filters(
 			'spf_file00_authorization_claim',
 			null,
 			array(
-				'user_id'       => $user_id,
-				'action'        => $action,
-				'capability'    => $required,
-				'object'        => self::object_reference( $object ),
-				'object_hash'   => SPF_Runtime::hash( self::object_reference( $object ) ),
-				'purpose'       => sanitize_key( $context['purpose'] ?? $action ),
-				'plugin'        => 'file-01',
-				'contract'      => SPF_CONTRACT_VERSION,
-				'current_time'  => time(),
+				'user_id'      => $user_id,
+				'actor_id'     => $user_id,
+				'action'       => $action,
+				'capability'   => $required,
+				'object'       => $object_ref,
+				'object_hash'  => SPF_Runtime::hash( $object_ref ),
+				'purpose'      => $purpose,
+				'plugin'       => 'file-01',
+				'contract'     => SPF_CONTRACT_VERSION,
+				'current_time' => time(),
 			)
 		);
 
@@ -79,8 +78,8 @@ final class SPF_Authorization {
 			return self::validate_claim( $claim, $user_id, $action, $required, $object, $context );
 		}
 
-		// Backward-compatible File 00 boolean claims are accepted only for
-		// low-risk read/maintenance operations, never for sensitive actions.
+		// Legacy booleans remain a migration bridge only for non-sensitive
+		// read/maintenance operations. Sensitive operations always fail closed.
 		if ( ! in_array( $action, self::SENSITIVE_ACTIONS, true ) ) {
 			$legacy = apply_filters( 'spf_file00_capability_claim', null, $required, $user_id, $action, $object );
 			if ( is_bool( $legacy ) ) {
@@ -89,7 +88,6 @@ final class SPF_Authorization {
 		}
 
 		if ( $file00_present ) {
-			// File 00 exists but supplied no valid claim: fail closed.
 			return false;
 		}
 
@@ -130,7 +128,10 @@ final class SPF_Authorization {
 	}
 
 	public static function validate_claim( array $claim, $user_id, $action, $required, $object = null, array $context = array() ) {
-		$required_fields = array( 'claim_version', 'allowed', 'user_id', 'action', 'capability', 'issued_at', 'expires_at', 'claim_id' );
+		$required_fields = array(
+			'claim_version', 'allowed', 'user_id', 'action', 'capability', 'issued_at',
+			'expires_at', 'claim_id', 'object_hash', 'purpose', 'institutional_role',
+		);
 		foreach ( $required_fields as $field ) {
 			if ( ! array_key_exists( $field, $claim ) ) {
 				return false;
@@ -142,38 +143,45 @@ final class SPF_Authorization {
 		if ( ! SPF_Registry::valid_semver( (string) $claim['claim_version'] ) || version_compare( (string) $claim['claim_version'], '1.0.0', '<' ) ) {
 			return false;
 		}
+		$claim_id = trim( (string) $claim['claim_id'] );
+		if ( '' === $claim_id || strlen( $claim_id ) > 191 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $claim_id ) ) {
+			return false;
+		}
 		if ( absint( $claim['user_id'] ) !== absint( $user_id ) || sanitize_key( $claim['action'] ) !== sanitize_key( $action ) ) {
+			return false;
+		}
+		if ( array_key_exists( 'actor_id', $claim ) && absint( $claim['actor_id'] ) !== absint( $user_id ) ) {
 			return false;
 		}
 		if ( sanitize_key( $claim['capability'] ) !== sanitize_key( $required ) ) {
 			return false;
 		}
-		$issued = is_numeric( $claim['issued_at'] ) ? (int) $claim['issued_at'] : strtotime( (string) $claim['issued_at'] );
+		$issued  = is_numeric( $claim['issued_at'] ) ? (int) $claim['issued_at'] : strtotime( (string) $claim['issued_at'] );
 		$expires = is_numeric( $claim['expires_at'] ) ? (int) $claim['expires_at'] : strtotime( (string) $claim['expires_at'] );
-		if ( ! $issued || ! $expires || $issued > time() + 60 || $expires <= time() || ( $expires - $issued ) > 900 ) {
+		if ( ! $issued || ! $expires || $issued > time() + 60 || $issued < time() - 900 || $expires <= time() || ( $expires - $issued ) > 900 ) {
 			return false;
 		}
 		if ( ! empty( $claim['suspended'] ) || ! empty( $claim['revoked'] ) ) {
 			return false;
 		}
 		$expected_hash = SPF_Runtime::hash( self::object_reference( $object ) );
-		if ( ! empty( $claim['object_hash'] ) && ! hash_equals( $expected_hash, (string) $claim['object_hash'] ) ) {
+		$object_hash   = strtolower( (string) $claim['object_hash'] );
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $object_hash ) || ! hash_equals( $expected_hash, $object_hash ) ) {
 			return false;
 		}
 		$expected_purpose = sanitize_key( $context['purpose'] ?? $action );
-		if ( ! empty( $claim['purpose'] ) && sanitize_key( $claim['purpose'] ) !== $expected_purpose ) {
+		if ( '' === $expected_purpose || sanitize_key( $claim['purpose'] ) !== $expected_purpose ) {
 			return false;
 		}
-		if ( in_array( $action, array( 'approve_release', 'deploy_release', 'approve_amendment', 'purge', 'production_cutover' ), true ) ) {
-			if ( 'founder' !== sanitize_key( $claim['institutional_role'] ?? '' ) ) {
-				return false;
-			}
+		$institutional_role = sanitize_key( $claim['institutional_role'] );
+		if ( '' === $institutional_role ) {
+			return false;
 		}
-		if ( in_array( $action, array( 'record_release', 'transition_release', 'run_reconciliation', 'run_schema_upgrade' ), true ) ) {
-			$role = sanitize_key( $claim['institutional_role'] ?? '' );
-			if ( ! in_array( $role, array( 'release_operator', 'founder' ), true ) ) {
-				return false;
-			}
+		if ( in_array( $action, array( 'approve_release', 'deploy_release', 'approve_amendment', 'purge', 'production_cutover' ), true ) && 'founder' !== $institutional_role ) {
+			return false;
+		}
+		if ( in_array( $action, array( 'record_release', 'transition_release', 'run_reconciliation', 'run_schema_upgrade' ), true ) && ! in_array( $institutional_role, array( 'release_operator', 'founder' ), true ) ) {
+			return false;
 		}
 		return true;
 	}
@@ -188,7 +196,6 @@ final class SPF_Authorization {
 		if ( in_array( $action, array( 'view', 'system_check' ), true ) ) {
 			return current_user_can( self::CAP_VIEW ) || current_user_can( self::CAP_MANAGE );
 		}
-		// Bootstrap mutation is restricted to File 01-owned objects only.
 		$object_ref = self::object_reference( $object );
 		$object_key = sanitize_key( $object_ref['module_key'] ?? $object_ref['owner_module'] ?? $object_ref['object_id'] ?? '' );
 		if ( $object_key && 'file-01' !== $object_key ) {

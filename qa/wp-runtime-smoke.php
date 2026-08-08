@@ -10,8 +10,9 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 $admin = get_user_by( 'login', 'admin' );
 wp_set_current_user( $admin ? $admin->ID : 1 );
 
-$assert( defined( 'SPF_VERSION' ) && '1.1.0' === SPF_VERSION, 'Plugin version mismatch.' );
-$assert( '1.1.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version mismatch after activation.' );
+$assert( defined( 'SPF_VERSION' ) && '1.2.0' === SPF_VERSION, 'Plugin version mismatch.' );
+$assert( '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version mismatch after activation.' );
+$assert( '1.2.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
 $schema = SPF_Installer::verify_schema();
 $assert( ! is_wp_error( $schema ), 'Schema verification failed: ' . ( is_wp_error( $schema ) ? $schema->get_error_message() : '' ) );
 $assert( true === SPF_Runtime::verify_owned_tables_transactional(), 'One or more File 01 tables are not InnoDB.' );
@@ -35,7 +36,7 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $unauthorized = SPF_Governance::record_release( [
-	'software_version'=>'1.1.0','schema_version'=>'1.1.0','commit_sha'=>str_repeat('a',40),'package_name'=>'test.zip','checksum_sha256'=>str_repeat('b',64),
+	'software_version'=>'1.2.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('a',40),'package_name'=>'test.zip','checksum_sha256'=>str_repeat('b',64),
 	'status'=>'planned','evidence'=>[ 'scope_reference'=>'runtime-test','owner'=>'file-01' ],
 ] );
 $assert( is_wp_error( $unauthorized ) && 'spf_forbidden' === $unauthorized->get_error_code(), 'Sensitive release action did not fail closed without File 00 claim.' );
@@ -45,20 +46,20 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 	$release_actions = [ 'record_release','transition_release','run_reconciliation','run_schema_upgrade' ];
 	$role = in_array( $request['action'], $founder_actions, true ) ? 'founder' : ( in_array( $request['action'], $release_actions, true ) ? 'release_operator' : 'administrator' );
 	return [
-		'claim_version'=>'1.1.0','allowed'=>true,'user_id'=>$request['user_id'],'action'=>$request['action'],'capability'=>$request['capability'],
+		'claim_version'=>'1.2.0','allowed'=>true,'user_id'=>$request['user_id'],'actor_id'=>$request['user_id'],'action'=>$request['action'],'capability'=>$request['capability'],
 		'issued_at'=>time()-5,'expires_at'=>time()+300,'claim_id'=>wp_generate_uuid4(),'object_hash'=>$request['object_hash'],'purpose'=>$request['purpose'],
 		'institutional_role'=>$role,'suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
 
 $invalid_initial = SPF_Governance::record_release( [
-	'software_version'=>'1.1.1','schema_version'=>'1.1.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),
+	'software_version'=>'1.2.1','schema_version'=>'1.2.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),
 	'status'=>'deployed','evidence'=>[ 'production_change_id'=>'x' ],
 ] );
 $assert( is_wp_error( $invalid_initial ) && 'spf_release_initial_state_invalid' === $invalid_initial->get_error_code(), 'Direct deployed release creation was accepted.' );
 
 $release = SPF_Governance::record_release( [
-	'software_version'=>'1.1.0','schema_version'=>'1.1.0','commit_sha'=>str_repeat('e',40),'package_name'=>'runtime-candidate.zip','checksum_sha256'=>str_repeat('f',64),
+	'software_version'=>'1.2.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('e',40),'package_name'=>'runtime-candidate.zip','checksum_sha256'=>str_repeat('f',64),
 	'status'=>'planned','evidence'=>[ 'scope_reference'=>'SSH-F01-PLAN-2026-v1.0','owner'=>'file-01' ],
 ], [ 'purpose'=>'release_evidence' ] );
 $assert( is_array( $release ) && 'planned' === $release['status'], 'Planned release could not be recorded.' );
@@ -69,7 +70,7 @@ $built = SPF_Governance::transition_release( $rid, 'built', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>1,'expected_record_version'=>1 ] );
 $assert( is_array( $built ) && 2 === $built['sequence_no'], 'planned→built failed.' );
 $verified = SPF_Governance::transition_release( $rid, 'verified', [
-	'ci_run'=>'runtime-ci','test_summary'=>'all automated suites pass','zero_unresolved_critical_high'=>true,'security_review'=>'review-round-4',
+	'ci_run'=>'runtime-ci','test_summary'=>'all automated suites pass','zero_unresolved_critical_high'=>true,'security_review'=>'final-adversarial-review',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>2,'expected_record_version'=>2 ] );
 $assert( is_array( $verified ) && 3 === $verified['sequence_no'], 'built→verified failed.' );
 $staged = SPF_Governance::transition_release( $rid, 'staged', [
@@ -106,8 +107,8 @@ add_post_meta( $page_id, '_spf_legacy_quarantined', '1' );
 add_post_meta( $page_id, '_spf_legacy_quarantined', 'preexisting-second' );
 update_option( 'spf_page_map', [ 'home'=>(int)$page_id ], false );
 update_option( 'spf_founder_user_id', 999, false );
-add_filter( 'spf_owner_reconciliation_plan', static fn() => [ 'accepted'=>true,'owner_module'=>'file-20','command_version'=>'1.0.0','target'=>'canonical-shell-route' ] );
-add_filter( 'spf_execute_owner_reconciliation', static fn() => [ 'success'=>true,'receipt_id'=>'owner-receipt-1','owner_module'=>'file-20','rollback_command'=>'RollbackOwnerRoute.v1' ] );
+add_filter( 'spf_owner_reconciliation_plan', static fn() => [ 'accepted'=>true,'owner_module'=>'file-20','command_version'=>'1.2.0','target'=>'canonical-shell-route' ] );
+add_filter( 'spf_execute_owner_reconciliation', static fn() => [ 'success'=>true,'receipt_id'=>'owner-receipt-1','owner_module'=>'file-20','command_version'=>'1.2.0','rollback_command'=>'rollback_owner_route_v1','state_hash'=>str_repeat('a',64) ] );
 add_filter( 'spf_rollback_owner_reconciliation', static fn() => [ 'success'=>true ] );
 $plan = SPF_Reconciler::plan();
 $assert( empty( $plan['blockers'] ), 'Accepted owner reconciliation plan remains blocked.' );
@@ -128,14 +129,14 @@ $assert( is_array( $export ) && ! empty( $export['data'] ), 'Privacy export retu
 $erasure = SPF_Privacy::erase_personal_data( $admin->user_email, 1 );
 $assert( ! empty( $erasure['items_retained'] ), 'Privacy erasure did not truthfully report retained immutable facts.' );
 $audit_verify = SPF_Audit::verify_chain();
-$assert( is_array( $audit_verify ) && ! empty( $audit_verify['verified'] ), 'Audit chain failed after privacy erasure.' );
+$assert( is_array( $audit_verify ) && ! empty( $audit_verify['verified'] ) && ! empty( $audit_verify['complete'] ), 'Audit chain failed after privacy erasure.' );
 
 update_option( SPF_Installer::SCHEMA_OPTION, '1.0.0', false );
 add_filter( 'spf_verify_migration_backup_evidence', static fn() => [
 	'verified'=>true,'backup_id'=>'ci-backup-1','restore_tested_at'=>gmdate('c'),'environment'=>'staging','verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600),
 ] );
 $upgrade = SPF_Installer::maybe_upgrade();
-$assert( true === $upgrade && '1.1.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Evidence-gated schema upgrade failed.' );
+$assert( true === $upgrade && '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Evidence-gated schema upgrade failed.' );
 
 SPF_Installer::activate();
 $assert( 1 === count( SPF_Registry::list_modules( [ 'limit'=>100 ] ) ), 'Reactivation created duplicate/placeholder manifests.' );

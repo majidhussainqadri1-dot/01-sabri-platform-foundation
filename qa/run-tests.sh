@@ -13,6 +13,7 @@ php tests/fourth-ten-round-review-tests.php
 php tests/fifth-ten-round-review-tests.php
 php tests/sixth-ten-round-review-tests.php
 php tests/seventh-ten-round-review-tests.php
+php tests/eighth-ten-round-review-tests.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php
 php tests/security-tests.php

@@ -5,6 +5,7 @@
 - Aligned File 01 with the latest 00–26 governance, File 20/21/24/25/26 ownership boundaries, and the single-free-tier/donation-only central law.
 - Hardened File 00 claims with actor/action/object/purpose binding, short expiry and fail-closed institutional-role separation.
 - Hardened runtime locks, mutation idempotency, replay/recovery receipts and serialized rate limiting.
+- Suppressed only the expected duplicate-key database log noise used by idempotency reservation/outbox deduplication while preserving duplicate detection and fail-closed handling for all other storage failures.
 - Added complete bounded audit-chain verification and recursive sensitive-context redaction.
 - Added durable event privacy classification, bounded payloads, stale lease recovery, retries/dead-letter and reconciliation evidence.
 - Added exact schema/index verification, dbDelta-compatible index declarations and evidence-gated schema upgrades.

@@ -25,25 +25,44 @@ jobs:
         with:
           ref: codex/file-01-complete-foundation-1.0.0
           fetch-depth: 0
-      - name: Verify and apply reviewed source
+      - name: Diagnose reviewed source archive
         shell: bash
         run: |
-          set -euo pipefail
-          sha256sum .codex/review40.chunk{00..07}
-          cat .codex/review40.chunk{00..07} | base64 -d > /tmp/file01-review40.tar.gz
-          ACTUAL_SHA="$(sha256sum /tmp/file01-review40.tar.gz | awk '{print $1}')"
-          echo "Reviewed source archive SHA-256: ${ACTUAL_SHA}"
-          gzip -t /tmp/file01-review40.tar.gz
-          tar -tzf /tmp/file01-review40.tar.gz > /tmp/file01-review40.list
-          if grep -Eq '(^/|(^|/)\.\.(/|$))' /tmp/file01-review40.list; then
-            echo 'Unsafe path detected in reviewed source archive' >&2
-            exit 1
-          fi
-          tar -xzf /tmp/file01-review40.tar.gz -C .
-          rm -rf .codex
-          rm -f .github/workflows/apply-forty-round-source.yml
+          set +e
+          sha256sum .codex/review40.chunk{00..07} > /tmp/chunk-hashes.txt 2>&1
+          cat .codex/review40.chunk{00..07} | base64 -d > /tmp/file01-review40.tar.gz 2>/tmp/base64.err
+          BASE64_STATUS=$?
+          ACTUAL_SHA="$(sha256sum /tmp/file01-review40.tar.gz 2>/dev/null | awk '{print $1}')"
+          gzip -t /tmp/file01-review40.tar.gz 2>/tmp/gzip.err
+          GZIP_STATUS=$?
+          tar -tzf /tmp/file01-review40.tar.gz > /tmp/file01-review40.list 2>/tmp/tar.err
+          TAR_STATUS=$?
+          {
+            echo '# File 01 reviewed-source archive diagnostic'
+            echo
+            echo "base64_status=${BASE64_STATUS}"
+            echo "archive_sha256=${ACTUAL_SHA}"
+            echo "gzip_status=${GZIP_STATUS}"
+            echo "tar_list_status=${TAR_STATUS}"
+            echo
+            echo '## Chunk hashes'
+            cat /tmp/chunk-hashes.txt
+            echo
+            echo '## base64 stderr'
+            cat /tmp/base64.err
+            echo
+            echo '## gzip stderr'
+            cat /tmp/gzip.err
+            echo
+            echo '## tar stderr'
+            cat /tmp/tar.err
+            echo
+            echo '## archive listing head'
+            head -50 /tmp/file01-review40.list
+          } > REVIEW40-DIAGNOSTIC.md
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m "fix: apply File 01 forty-round reviewed source 1.1.1 (${ACTUAL_SHA})"
+          git add REVIEW40-DIAGNOSTIC.md
+          git commit -m 'ci: record File 01 forty-round archive diagnostic' || true
           git push origin HEAD:codex/file-01-complete-foundation-1.0.0
+          exit 0

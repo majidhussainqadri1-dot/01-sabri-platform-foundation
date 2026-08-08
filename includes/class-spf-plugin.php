@@ -31,7 +31,6 @@ final class SPF_Plugin {
 		add_action( 'admin_init', array( $this, 'maybe_upgrade' ) );
 	}
 
-
 	public function maybe_upgrade() {
 		$result = SPF_Installer::maybe_upgrade();
 		if ( is_wp_error( $result ) ) {
@@ -90,7 +89,13 @@ final class SPF_Plugin {
 			),
 			array(
 				'contract_key'=>'FoundationAuthorizationClaim.v1','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
-				'schema'=>array('claim_version'=>array('type'=>'semver','required'=>true),'allowed'=>array('type'=>'boolean','required'=>true),'user_id'=>array('type'=>'integer','required'=>true),'action'=>array('type'=>'string','required'=>true),'capability'=>array('type'=>'string','required'=>true),'object_hash'=>array('type'=>'sha256','required'=>true),'issued_at'=>array('type'=>'timestamp','required'=>true),'expires_at'=>array('type'=>'timestamp','required'=>true),'institutional_role'=>array('type'=>'string','required'=>true)),
+				'schema'=>array(
+					'claim_version'=>array('type'=>'semver','required'=>true),'claim_id'=>array('type'=>'string','required'=>true),
+					'allowed'=>array('type'=>'boolean','required'=>true),'user_id'=>array('type'=>'integer','required'=>true),'actor_id'=>array('type'=>'integer','required'=>false),
+					'action'=>array('type'=>'string','required'=>true),'capability'=>array('type'=>'string','required'=>true),'object_hash'=>array('type'=>'sha256','required'=>true),
+					'purpose'=>array('type'=>'string','required'=>true),'issued_at'=>array('type'=>'timestamp','required'=>true),'expires_at'=>array('type'=>'timestamp','required'=>true),
+					'institutional_role'=>array('type'=>'string','required'=>true),
+				),
 				'consumers'=>array('file-00','file-24'),
 			),
 			array(

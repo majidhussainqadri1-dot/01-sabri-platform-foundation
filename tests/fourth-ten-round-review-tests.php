@@ -24,7 +24,7 @@ $expect( str_contains( $privacy, 'privacy_hold_query_failed' ), 'Round 8 privacy
 $audit = $src( 'includes/class-spf-audit.php' );
 $expect( str_contains( $audit, 'spf_audit_head_read_failed' ) && str_contains( $audit, 'spf_audit_verification_query_failed' ), 'Round 9 audit DB fail-closed checks missing' );
 $system = $src( 'includes/class-spf-system-check.php' );
-$expect( substr_count( $system, 'spf_future_foundation_tick' ) >= 2, 'Round 10 Future Foundation schedule health missing' );
+$expect( str_contains( $system, "'spf_future_foundation_tick'  => 'spf_five_minutes'" ) && str_contains( $system, 'wp_get_schedule( $hook )' ) && str_contains( $system, '$expected_recurrence === $recurrence' ), 'Round 10 Future Foundation recurrence-aware schedule health missing' );
 $expect( str_contains( $system, 'outbox_query' ) && str_contains( $system, 'count_raw' ), 'Round 10 health false-positive guards missing' );
 $build = $src( 'tools/build-package.sh' );
 $expect( str_contains( $build, 'FOURTH-TEN-ROUND-REVIEW-2026-08-08.md' ) && str_contains( $build, 'THIRD-TEN-ROUND-REVIEW-2026-08-08.md' ), 'Round 10 package review evidence missing' );

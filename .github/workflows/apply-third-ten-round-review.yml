@@ -1,0 +1,65 @@
+name: Apply File 01 Third Ten-Round Review
+
+on:
+  push:
+    branches:
+      - codex/file-01-third-ten-round-review-2026-08-08
+    paths:
+      - .github/workflows/apply-third-ten-round-review.yml
+      - tools/third-ten-round-patch.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout review transport
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: codex/file-01-third-ten-round-review-2026-08-08
+          path: transport
+          fetch-depth: 1
+
+      - name: Checkout File 01 target
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          path: target
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Apply ten sequential correction and regression rounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          refresh_checksums() {
+            git add -A
+            : > SOURCE-CHECKSUMS.sha256
+            while IFS= read -r file; do
+              sha256sum "$file" >> SOURCE-CHECKSUMS.sha256
+            done < <(git ls-files | grep -v '^SOURCE-CHECKSUMS\.sha256$' | grep -v '^build/' | grep -v '^dist/' | LC_ALL=C sort)
+            git add SOURCE-CHECKSUMS.sha256
+          }
+
+          for round in $(seq 1 10); do
+            echo "=== THIRD REVIEW ROUND ${round} ==="
+            python ../transport/tools/third-ten-round-patch.py "$(pwd)" "$round"
+            refresh_checksums
+            bash qa/run-tests.sh
+            git add -A
+            git commit -m "Third review round ${round}: correct newly discovered File 01 defect"
+          done
+
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

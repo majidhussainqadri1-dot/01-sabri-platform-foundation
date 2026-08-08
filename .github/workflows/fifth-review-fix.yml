@@ -22,7 +22,28 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply fifth-review fixes
-        run: python3 tools/fifth-review-fix.py
+        run: |
+          python3 tools/fifth-review-fix.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tests/fifth-ten-round-review-tests.php')
+          s = p.read_text(encoding='utf-8')
+          old = '! str_contains( $control, "$shell_owners[] = \'file-20\';" )'
+          new = "! str_contains( $control, '$shell_owners[] =' )"
+          if old not in s:
+              raise SystemExit('Expected generated shell-owner assertion not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+          # Refresh the generated source checksum entry after this syntax-only regression correction.
+          import hashlib
+          manifest = Path('SOURCE-CHECKSUMS.sha256')
+          lines = []
+          for line in manifest.read_text(encoding='utf-8').splitlines():
+              digest, rel = line.split('  ', 1)
+              if rel == 'tests/fifth-ten-round-review-tests.php':
+                  digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              lines.append(f'{digest}  {rel}')
+          manifest.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+          PY
       - name: Validate patched source
         run: bash qa/run-tests.sh
       - name: Commit corrected source

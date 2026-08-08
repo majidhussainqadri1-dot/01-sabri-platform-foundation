@@ -15,6 +15,7 @@ $assert( '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version
 $assert( '1.2.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
 $schema = SPF_Installer::verify_schema();
 $assert( ! is_wp_error( $schema ), 'Schema verification failed: ' . ( is_wp_error( $schema ) ? $schema->get_error_message() : '' ) );
+$assert( true === SPF_Installer::verify_required_indexes(), 'Required File 01 index integrity failed.' );
 $assert( true === SPF_Runtime::verify_owned_tables_transactional(), 'One or more File 01 tables are not InnoDB.' );
 foreach ( SPF_Installer::table_names() as $name ) {
 	$assert( SPF_Runtime::table_exists( SPF_Installer::table( $name ) ), "Missing runtime table {$name}." );
@@ -85,6 +86,9 @@ $assert( is_array( $approved ) && 'approved' === $approved['status'], 'Founder-g
 $record = SPF_Governance::get_release( $rid );
 $assert( is_array( $record ) && 5 === count( $record['states'] ), 'Release state history is incomplete.' );
 
+$ungated_flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
+$assert( is_wp_error( $ungated_flag ) && 'spf_evidence_unverified' === $ungated_flag->get_error_code(), 'Feature activation did not fail closed without readiness evidence.' );
+add_filter( 'spf_verify_feature_activation_evidence', static fn() => [ 'verified'=>true,'migration_status'=>'ready','health_status'=>'pass','rollback_evidence'=>'ci-rollback-ready','gate_evidence'=>'ci-gate-proof','verifier'=>'CI runtime','expires_at'=>gmdate('c',time()+3600) ] );
 $flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
 $assert( is_array( $flag ) && spf_is_feature_enabled( 'file-01', 'runtime_probe', 'staging' ), 'Feature flag create/evaluate failed.' );
 $flag2 = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>false,'reason'=>'runtime test complete' ], [ 'purpose'=>'feature_flag','expected_version'=>$flag['record_version'] ] );

@@ -256,7 +256,22 @@ final class SPF_Governance {
 		if ( $old && (int) $context['expected_version'] !== (int) $old['record_version'] ) {
 			return new WP_Error( 'spf_stale_record', __( 'The feature flag changed before this update.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
-		$pre = SPF_Audit::record_required( 'set_flag_precommit', 'foundation_flag', $owner.':'.$key.':'.$env, 'authorized', array( 'purpose'=>$context['purpose']??'feature_flag' ) );
+		$activation_evidence_hash = '';
+		if ( ! empty( $flag['enabled'] ) ) {
+			$readiness = SPF_Dependency_Resolver::readiness( $owner );
+			if ( empty( $readiness['ready'] ) ) {
+				return new WP_Error( 'spf_feature_dependency_not_ready', __( 'Feature activation is blocked because the owner dependency graph is not ready.', 'sabri-platform-foundation' ), array( 'status'=>412, 'readiness_code'=>$readiness['code'] ?? 'not_ready' ) );
+			}
+			$activation = SPF_Runtime::verify_evidence( 'spf_verify_feature_activation_evidence', array( 'owner_module'=>$owner, 'flag_key'=>$key, 'environment'=>$env, 'readiness_hash'=>SPF_Runtime::hash($readiness) ), array( 'migration_status','health_status','rollback_evidence','gate_evidence','verifier','expires_at' ) );
+			if ( is_wp_error( $activation ) ) {
+				return $activation;
+			}
+			if ( ! in_array( sanitize_key( $activation['migration_status'] ), array( 'ready','not_required' ), true ) || 'pass' !== sanitize_key( $activation['health_status'] ) ) {
+				return new WP_Error( 'spf_feature_activation_evidence_failed', __( 'Feature activation evidence does not prove migration and health readiness.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
+			}
+			$activation_evidence_hash = $activation['evidence_hash'];
+		}
+		$pre = SPF_Audit::record_required( 'set_flag_precommit', 'foundation_flag', $owner.':'.$key.':'.$env, 'authorized', array( 'purpose'=>$context['purpose']??'feature_flag','activation_evidence_hash'=>$activation_evidence_hash ) );
 		if ( is_wp_error( $pre ) ) {
 			return $pre;
 		}
@@ -278,7 +293,7 @@ final class SPF_Governance {
 					throw new RuntimeException( 'Flag insert failed.' );
 				}
 			}
-			$audit = SPF_Audit::record_required( 'set_flag', 'foundation_flag', $owner.':'.$key.':'.$env, 'success', array( 'purpose'=>$context['purpose']??'feature_flag','enabled'=>empty($flag['enabled'])?0:1 ) );
+			$audit = SPF_Audit::record_required( 'set_flag', 'foundation_flag', $owner.':'.$key.':'.$env, 'success', array( 'purpose'=>$context['purpose']??'feature_flag','enabled'=>empty($flag['enabled'])?0:1,'activation_evidence_hash'=>$activation_evidence_hash ) );
 			if ( is_wp_error( $audit ) ) {
 				throw new RuntimeException( $audit->get_error_message() );
 			}

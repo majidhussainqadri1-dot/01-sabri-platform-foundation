@@ -2,13 +2,17 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_Event_Bus {
-	public static function publish( $event_name, $aggregate_type, $aggregate_id, array $payload, $version = 1, $dedupe_key = '' ) {
+	public static function publish( $event_name, $aggregate_type, $aggregate_id, array $payload, $version = 1, $dedupe_key = '', $privacy_class = 'internal' ) {
 		global $wpdb;
 		$event_name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_name );
 		$aggregate_type = sanitize_key( $aggregate_type );
 		$aggregate_id = substr( sanitize_text_field( (string) $aggregate_id ), 0, 191 );
 		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 ) {
 			return new WP_Error( 'spf_invalid_event', __( 'Invalid event contract.', 'sabri-platform-foundation' ) );
+		}
+		$privacy_class = sanitize_key( $privacy_class );
+		if ( ! in_array( $privacy_class, array( 'public','internal','restricted','confidential','ephemeral' ), true ) ) {
+			return new WP_Error( 'spf_invalid_event_privacy_class', __( 'A valid event privacy classification is required.', 'sabri-platform-foundation' ) );
 		}
 		$payload = self::sanitize_payload( $payload );
 		$payload_json = wp_json_encode( $payload );
@@ -24,10 +28,10 @@ final class SPF_Event_Bus {
 			SPF_Installer::table( 'outbox' ),
 			array(
 				'event_id'=>wp_generate_uuid4(),'event_name'=>$event_name,'event_version'=>absint($version),'aggregate_type'=>$aggregate_type,
-				'aggregate_id'=>$aggregate_id,'dedupe_key'=>$dedupe_key,'payload_json'=>$payload_json,
+				'aggregate_id'=>$aggregate_id,'dedupe_key'=>$dedupe_key,'payload_json'=>$payload_json,'privacy_class'=>$privacy_class,
 				'status'=>'pending','attempts'=>0,'available_at'=>$now,'created_at'=>$now,
 			),
-			array( '%s','%s','%d','%s','%s','%s','%s','%s','%d','%s','%s' )
+			array( '%s','%s','%d','%s','%s','%s','%s','%s','%s','%d','%s','%s' )
 		);
 		if ( false === $inserted && false !== stripos( (string) $wpdb->last_error, 'duplicate' ) ) {
 			return true;

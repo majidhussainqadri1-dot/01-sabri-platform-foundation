@@ -391,6 +391,7 @@ final class SPF_Installer {
 			aggregate_id varchar(191) NOT NULL,
 			dedupe_key varchar(191) NOT NULL,
 			payload_json longtext NOT NULL,
+			privacy_class varchar(32) NOT NULL DEFAULT 'internal',
 			status varchar(32) NOT NULL DEFAULT 'pending',
 			attempts int(10) unsigned NOT NULL DEFAULT 0,
 			available_at datetime NOT NULL,
@@ -483,6 +484,7 @@ final class SPF_Installer {
 			'release_states' => array( 'evidence_hash','sequence_no' ),
 			'privacy_requests' => array( 'request_id','request_type','legal_basis','due_at' ),
 			'privacy_holds' => array( 'hold_id','subject_type','subject_id','active' ),
+			'outbox' => array( 'event_id','event_version','payload_json','privacy_class','status','attempts','available_at' ),
 		);
 		foreach ( $required_columns as $name => $columns ) {
 			$table = self::table( $name );
@@ -496,7 +498,60 @@ final class SPF_Installer {
 				}
 			}
 		}
-		return empty( $missing ) ? true : new WP_Error( 'spf_schema_verification_failed', __( 'File 01 schema verification failed.', 'sabri-platform-foundation' ), array( 'defects' => $missing ) );
+		if ( ! empty( $missing ) ) {
+			return new WP_Error( 'spf_schema_verification_failed', __( 'File 01 schema verification failed.', 'sabri-platform-foundation' ), array( 'defects' => $missing ) );
+		}
+		return self::verify_required_indexes();
+	}
+
+	public static function required_indexes() {
+		return array(
+			'modules'=>array('PRIMARY'=>array(array('id'),true),'module_key'=>array(array('module_key'),true),'owner_file'=>array(array('owner_file'),false),'state'=>array(array('state'),false)),
+			'contracts'=>array('PRIMARY'=>array(array('id'),true),'contract_identity'=>array(array('contract_key','contract_version'),true),'owner_module'=>array(array('owner_module'),false),'status'=>array(array('status'),false)),
+			'contract_acks'=>array('PRIMARY'=>array(array('contract_key','contract_version','consumer_module'),true)),
+			'routes'=>array('PRIMARY'=>array(array('id'),true),'route_key'=>array(array('route_key'),true),'route_path'=>array(array('route_path'),true),'owner_module'=>array(array('owner_module'),false),'status'=>array(array('status'),false)),
+			'releases'=>array('PRIMARY'=>array(array('id'),true),'release_id'=>array(array('release_id'),true),'software_version_unique'=>array(array('software_version'),true),'status'=>array(array('status'),false)),
+			'release_states'=>array('PRIMARY'=>array(array('id'),true),'release_sequence'=>array(array('release_id','sequence_no'),true),'release_id'=>array(array('release_id'),false),'status'=>array(array('status'),false)),
+			'amendments'=>array('PRIMARY'=>array(array('id'),true),'amendment_id'=>array(array('amendment_id'),true),'status'=>array(array('status'),false)),
+			'health'=>array('PRIMARY'=>array(array('id'),true),'trace_id'=>array(array('trace_id'),true),'overall_status'=>array(array('overall_status'),false),'created_at'=>array(array('created_at'),false)),
+			'flags'=>array('PRIMARY'=>array(array('id'),true),'flag_identity'=>array(array('owner_module','flag_key','environment'),true),'expires_at'=>array(array('expires_at'),false)),
+			'audit'=>array('PRIMARY'=>array(array('id'),true),'entry_hash'=>array(array('entry_hash'),true),'trace_id'=>array(array('trace_id'),false),'actor_id'=>array(array('actor_id'),false),'created_at'=>array(array('created_at'),false)),
+			'idempotency'=>array('PRIMARY'=>array(array('id'),true),'scope_hash'=>array(array('scope_hash'),true),'expires_at'=>array(array('expires_at'),false),'status'=>array(array('status'),false)),
+			'outbox'=>array('PRIMARY'=>array(array('id'),true),'event_id'=>array(array('event_id'),true),'dedupe_key'=>array(array('dedupe_key'),true),'due'=>array(array('status','available_at'),false),'created_at'=>array(array('created_at'),false)),
+			'privacy_requests'=>array('PRIMARY'=>array(array('id'),true),'request_id'=>array(array('request_id'),true),'user_status'=>array(array('user_id','status'),false),'due_at'=>array(array('due_at'),false)),
+			'privacy_holds'=>array('PRIMARY'=>array(array('id'),true),'hold_id'=>array(array('hold_id'),true),'subject_active'=>array(array('subject_id','active'),false)),
+			'migrations'=>array('PRIMARY'=>array(array('id'),true),'migration_key'=>array(array('migration_key'),true),'status'=>array(array('status'),false))
+		);
+	}
+
+	public static function verify_required_indexes() {
+		global $wpdb;
+		foreach ( self::required_indexes() as $name => $required ) {
+			$table = self::table( $name );
+			if ( ! SPF_Runtime::table_exists( $table ) ) {
+				return new WP_Error( 'spf_schema_missing_table', 'Missing File 01 table: ' . $name );
+			}
+			$rows = $wpdb->get_results( 'SHOW INDEX FROM ' . $table, ARRAY_A );
+			$actual = array();
+			foreach ( (array) $rows as $row ) {
+				$key = (string) $row['Key_name'];
+				$seq = (int) $row['Seq_in_index'];
+				$actual[$key]['columns'][$seq] = (string) $row['Column_name'];
+				$actual[$key]['unique'] = 0 === (int) $row['Non_unique'];
+			}
+			foreach ( $actual as &$index ) {
+				ksort( $index['columns'] );
+				$index['columns'] = array_values( $index['columns'] );
+			}
+			unset( $index );
+			foreach ( $required as $key => $spec ) {
+				list( $columns, $unique ) = $spec;
+				if ( empty( $actual[$key] ) || $actual[$key]['columns'] !== $columns || (bool)$actual[$key]['unique'] !== (bool)$unique ) {
+					return new WP_Error( 'spf_schema_index_invalid', 'Missing or invalid File 01 index: ' . $name . '.' . $key, array( 'table'=>$name, 'index'=>$key, 'expected_columns'=>$columns, 'expected_unique'=>(bool)$unique ) );
+				}
+			}
+		}
+		return true;
 	}
 
 	private static function seed_governance() {

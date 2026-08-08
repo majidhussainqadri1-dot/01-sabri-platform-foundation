@@ -2,10 +2,10 @@
 5684b6fd028d4aaa6a21d18f9fbbd0d10b1d0b73f5c1eaf28050aca58182eeb0  ./.gitignore
 e668113585172a974dfc79bfb7437cdcfdb4d082b0380c2a98c61da35a11181c  ./ADVERSARIAL-REVIEW-ROUND-2.md
 fad9c79da6683a6355fddbb18f81a5c915118d75d8e29e397fa45faba7e88376  ./ADVERSARIAL-REVIEW-ROUND-4.md
-60c6ed20efeab166b459ca7df01be648f7b76526913a43e8ed1242c107335f00  ./CHANGELOG.md
+831b4476fde1c112abf9b55d193ef9222d501a456820bb27c988d47379494e80  ./CHANGELOG.md
 d27e8e985380b266ffd2d1b1d269b85a5fc58377c6445c7caed6e7400a7895ca  ./DEPENDENCY-MANIFEST.json
-e022928d519b596c992897af46a0efecbb5740e8dd1fee0000e57f2185aa1411  ./FINAL-ADVERSARIAL-REVIEW-ROUND-2-2026-08-08.md
-cd1b5db2a0a66eb027714e6eb964c36d5594d55c778730389bc382a969a7d384  ./FINAL-REVIEW-ROUND-1-2026-08-08.md
+747c69bfa8a4f014005bab4214a434478bc4de391827da8d1acb96f4aca4983d  ./FINAL-ADVERSARIAL-REVIEW-ROUND-2-2026-08-08.md
+807e1353ae7c65d1edeca34038f7517651b70ea4071bd5bdaadc3d6c08b534fc  ./FINAL-REVIEW-ROUND-1-2026-08-08.md
 7b419e02e7a12f70a08d9f9caa5bb44cf8e24a163a6155055e574dcc3f2235c8  ./KNOWN-LIMITATIONS.md
 d2a6089c53498f40c428dfd92548a9272b4706902109ba9176c3d5506e476d68  ./MIGRATION.md
 349c2bf9ddd2d1d0c5909995e34ea47ca29e69119a49f861169c341ff82de671  ./PRIVACY.md
@@ -25,9 +25,9 @@ bd72479ff5df366d8ea01de15b52dcb7a5236c2ce0c7e0c876707924d38da32f  ./TRACEABILITY
 43282fb106c7df327186e419af0ee5d6188ed3b4463eddecec341480d74c93f9  ./includes/class-spf-audit.php
 7e12135da0d7b95a153cd3b029e31c4e19d10f18b7603af879617c656c368503  ./includes/class-spf-authorization.php
 f6b8c7c567ea1ab929eeeae9df02c4685f7a3f59543225d9dec0cb90affddee5  ./includes/class-spf-dependency-resolver.php
-e9bc4ffe132b0cb8d4796e58f1ff8f0efa50dab37bda5ca007854db40846c05e  ./includes/class-spf-event-bus.php
+42bfb8bdf75272cd1bd86f8f6e34cadbfba2697876971cdc074fed647b9235da  ./includes/class-spf-event-bus.php
 04f10e8f4ac5ee156a6d095c411ffc06598b2edadaa5502b4db953067786c4d7  ./includes/class-spf-governance.php
-c51be16130adf55d0b83866f924fd0837b231ebfb11b1edb22985d44547e4d63  ./includes/class-spf-idempotency.php
+8eeb54675c68bcc21c144768ffbf810be6da292ff902be5998f36de6441ca074  ./includes/class-spf-idempotency.php
 b0163a194811c102d0f869c40baf09ca7a3a7ebfd6402d96acda8e3df3a4a4f4  ./includes/class-spf-installer.php
 c471a6aaee29e0b284e9117d29ae2e917788beb6e901048697818b2a060956ed  ./includes/class-spf-plugin.php
 f7647f951321991200ecfc4506bf97b6f4ccc2e430394a7fdb4636c40e50af33  ./includes/class-spf-privacy.php
@@ -48,7 +48,7 @@ f9766fa70cea709a49aa2b6f8bbce734f1a9e9eb94301b2cddfc8d663f6026e0  ./tests/bootst
 d60c99e3ec839ad92a4b6cefa1cd901e8b77b62c6a4b261976d3b5d52129f60b  ./tests/contract-tests.php
 cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema-tests.php
 b34c050c011a20e3ebcad3cd3269a20455f248e7f3bc1877d6b02f70de6813c1  ./tests/security-tests.php
-5845e16a6f0a947385c0e5790501a90c9d4465d497217dbc0aa37504dc1b9800  ./tests/source-quality-tests.php
+cd54595841299dec1f12bb3dbb7a661fd49048151fe6ebff98cc0c88b2085272  ./tests/source-quality-tests.php
 838c9b168db2cafe03a4112173f7b1b944f7bc04ad9f70c07fb19b61877f46e0  ./tests/unit-tests.php
 4a6b2d9b58bbdb0d2f1fc10cffc6a3a22858231e76a7b318d5fcd81b3e463f5f  ./tools/build-package.sh
 e1f0b1d07b0c8aac9f0b9ae998d3fef24ab187e81492dfa673729087286cef4e  ./uninstall.php

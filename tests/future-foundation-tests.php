@@ -112,6 +112,9 @@ $assert($slo['allow']===true,'Healthy SLO blocked.');
 $slo_bad=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.0,'latency_p95'=>800,'error_rate'=>2.0,'error_budget_remaining'=>-1],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
 $assert($slo_bad['allow']===false && count($slo_bad['violations'])>=3,'Unhealthy SLO passed.');
 $assert(SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>100],[])['reason']==='slo_objectives_missing','Missing SLO objectives did not fail closed.');
+$unknown_slo=SPF_Platform_Engineering::evaluate_slo_gate(['mystery_metric'=>50],['mystery_metric'=>40]);
+$assert($unknown_slo['allow']===false && ($unknown_slo['violations'][0]['code']??'')==='metric_direction_unknown','Unknown SLO metric direction was guessed instead of failing closed.');
+
 
 $context=SPF_Platform_Engineering::new_telemetry_context();
 $assert(strlen($context['trace_id'])===32 && strlen($context['span_id'])===16,'Telemetry IDs invalid.');

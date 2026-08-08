@@ -452,6 +452,10 @@ final class SPF_Platform_Engineering {
 			}
 			$value = $metrics[ $name ];
 			$lower_is_better = self::metric_lower_is_better( $name );
+			if ( null === $lower_is_better ) {
+				$violations[] = array( 'metric'=>$name, 'value'=>$value, 'threshold'=>$threshold, 'code'=>'metric_direction_unknown' );
+				continue;
+			}
 			$ok = $lower_is_better ? $value <= $threshold : $value >= $threshold;
 			if ( ! $ok ) {
 				$violations[] = array( 'metric'=>$name, 'value'=>$value, 'threshold'=>$threshold, 'direction'=>$lower_is_better ? 'max' : 'min' );
@@ -592,10 +596,9 @@ final class SPF_Platform_Engineering {
 
 	private static function metric_lower_is_better( $name ) {
 		$name = sanitize_key( $name );
-		if ( str_contains( $name, 'budget_remaining' ) || str_contains( $name, 'availability' ) || str_contains( $name, 'success' ) || str_contains( $name, 'throughput' ) || str_contains( $name, 'coverage' ) ) {
-			return false;
-		}
-		return str_contains( $name, 'latency' ) || str_contains( $name, 'error' ) || str_contains( $name, 'lag' ) || str_contains( $name, 'failure' );
+		if ( str_contains( $name, 'budget_remaining' ) || str_contains( $name, 'availability' ) || str_contains( $name, 'success' ) || str_contains( $name, 'throughput' ) || str_contains( $name, 'coverage' ) ) { return false; }
+		if ( str_contains( $name, 'latency' ) || str_contains( $name, 'error' ) || str_contains( $name, 'lag' ) || str_contains( $name, 'failure' ) || str_contains( $name, 'utilization' ) || str_contains( $name, 'saturation' ) || str_contains( $name, 'queue' ) || str_contains( $name, 'depth' ) || str_contains( $name, 'duration' ) ) { return true; }
+		return null;
 	}
 
 	private static function valid_hex_id( $value, $length ) {

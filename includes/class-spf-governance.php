@@ -343,10 +343,27 @@ final class SPF_Governance {
 		global $wpdb;
 		$table = SPF_Installer::table( 'flags' );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=%s LIMIT 100", SPF_Runtime::now_mysql() ), ARRAY_A );
+		$result = array( 'expired'=>0, 'conflict'=>0, 'failed'=>0, 'event_failed'=>0 );
 		foreach ( $rows as $row ) {
-			$wpdb->update( $table, array( 'enabled'=>0,'record_version'=>(int)$row['record_version']+1,'updated_at'=>SPF_Runtime::now_mysql(),'reason'=>substr($row['reason'].' [expired]',0,500) ), array( 'id'=>(int)$row['id'],'record_version'=>(int)$row['record_version'] ) );
-			SPF_Event_Bus::publish( 'FeatureFlagExpired.v1', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], array( 'owner_module'=>$row['owner_module'],'flag_key'=>$row['flag_key'],'environment'=>$row['environment'] ), 1, 'flag-expired-'.$row['id'].'-'.$row['record_version'] );
+			$updated = $wpdb->update( $table, array( 'enabled'=>0,'record_version'=>(int)$row['record_version']+1,'updated_at'=>SPF_Runtime::now_mysql(),'reason'=>substr($row['reason'].' [expired]',0,500) ), array( 'id'=>(int)$row['id'],'record_version'=>(int)$row['record_version'],'enabled'=>1 ) );
+			if ( false === $updated ) {
+				$result['failed']++;
+				SPF_Audit::record( 'feature_flag_expiry_write_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
+				continue;
+			}
+			if ( 1 !== $updated ) {
+				$result['conflict']++;
+				continue;
+			}
+			$event = SPF_Event_Bus::publish( 'FeatureFlagExpired.v1', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], array( 'owner_module'=>$row['owner_module'],'flag_key'=>$row['flag_key'],'environment'=>$row['environment'] ), 1, 'flag-expired-'.$row['id'].'-'.$row['record_version'] );
+			if ( is_wp_error( $event ) ) {
+				$result['event_failed']++;
+				SPF_Audit::record( 'feature_flag_expiry_event_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
+				continue;
+			}
+			$result['expired']++;
 		}
+		return $result;
 	}
 
 	public static function get_release( $release_id ) {

@@ -26,6 +26,8 @@ $assert( str_contains( $runtime, "true !== \$claim['verified']" ) && str_contain
 
 $assert( str_contains( $governance, 'spf_invalid_flag_enabled' ) && str_contains( $governance, 'spf_invalid_flag_expiry' ) && str_contains( $governance, "true === \$flag['enabled']" ), 'Round 3: feature flag boolean/expiry is not strict and fail-closed.' );
 
+$assert( str_contains( $governance, 'feature_flag_expiry_write_failed' ) && str_contains( $governance, 'feature_flag_expiry_event_failed' ) && str_contains( $governance, "'enabled'=>1" ), 'Round 4: flag expiry can emit a fact without a successful state transition.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

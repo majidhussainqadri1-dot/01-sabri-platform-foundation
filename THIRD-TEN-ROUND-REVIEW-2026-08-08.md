@@ -14,3 +14,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 3 — Feature-flag type and expiry validation
 **Defect found and corrected.** Truthy strings could enable a flag and invalid dates could normalize to an unintended timestamp. `enabled` is now strict boolean and supplied expiry must parse to a future instant before any authorization/evidence mutation path continues.
+
+### Round 4 — Expired-flag CAS and event truth
+**Defect found and corrected.** Expiry reconciliation ignored the database update result and could publish `FeatureFlagExpired` even when no flag transition actually occurred. It now uses a version/enabled compare-and-set, never emits the fact on conflict/failure, audits failures, and returns explicit reconciliation counts.

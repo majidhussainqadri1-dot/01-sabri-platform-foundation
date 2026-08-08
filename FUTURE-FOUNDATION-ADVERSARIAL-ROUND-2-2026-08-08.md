@@ -24,6 +24,6 @@ Review posture: fail-open behavior, production-only hazards, nested sensitive da
 
 Focused Future Foundation suite: **57/57 PASS** after the fresh corrections. Static forbidden-primitive, cross-domain SQL, AI-mutation, production-guard and snapshot-exclusion checks: PASS.
 
-Final exact-head automated evidence was subsequently verified on commit `f0448717f355dd89774732b1a2b5d4b5a2e6b1fb`, GitHub Actions run `31243158778`: PHP 8.1/8.3 source QA PASS; **264/264 aggregate source assertions PASS**; WordPress/MySQL runtime **60/60 PASS**; Future Foundation runtime **26/26 PASS**; concurrency PASS; disposable purge PASS; deterministic package/checksum/internal manifest PASS. Canonical package SHA-256: `c15a7b804d193107ee493da8748f920033d8dac4d44219fcda096b84ea688f16`.
+Exact-head automated evidence is intentionally not frozen into this tracked review note because doing so would change the tracked head itself. The authoritative exact-head commit, workflow run, package checksum and artifact are recorded in the live Pull Request/release evidence after the final source head is frozen.
 
 Result: no known unresolved blocker/critical source-level defect in the reviewed 18-enhancement delta. Staging, live deployment and operational acceptance remain separate mandatory gates.

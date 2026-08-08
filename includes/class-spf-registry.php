@@ -382,6 +382,11 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_manifest', 'Manifest architecture field must be an array: ' . $architecture_field );
 			}
 		}
+		foreach ( array( 'global_shell_owner','application_shell_owner' ) as $boolean_field ) {
+			if ( array_key_exists( $boolean_field, $manifest ) && ! is_bool( $manifest[$boolean_field] ) ) {
+				return new WP_Error( 'spf_invalid_manifest_boolean', __( 'Manifest architecture ownership flags must be boolean.', 'sabri-platform-foundation' ) );
+			}
+		}
 		$canonical_entities = array();
 		foreach ( array_slice( (array) ( $manifest['canonical_entities'] ?? array() ), 0, 128 ) as $entity ) {
 			$key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
@@ -390,7 +395,9 @@ final class SPF_Registry {
 		$manifest['canonical_entities'] = array_values( array_unique( $canonical_entities ) );
 		$writes = array();
 		foreach ( array_slice( (array) ( $manifest['writes'] ?? array() ), 0, 128 ) as $write ) {
-			if ( ! is_array( $write ) ) { continue; }
+			if ( ! is_array( $write ) ) {
+				return new WP_Error( 'spf_invalid_manifest_write', __( 'Every manifest write declaration must be structured.', 'sabri-platform-foundation' ) );
+			}
 			$target = sanitize_key( $write['owner_module'] ?? '' );
 			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $target ) ) {
 				return new WP_Error( 'spf_invalid_manifest_write_owner', __( 'Manifest write declarations require a canonical owner module.', 'sabri-platform-foundation' ) );
@@ -402,8 +409,8 @@ final class SPF_Registry {
 			);
 		}
 		$manifest['writes'] = $writes;
-		$manifest['global_shell_owner'] = ! empty( $manifest['global_shell_owner'] );
-		$manifest['application_shell_owner'] = ! empty( $manifest['application_shell_owner'] );
+		$manifest['global_shell_owner'] = true === ( $manifest['global_shell_owner'] ?? false );
+		$manifest['application_shell_owner'] = true === ( $manifest['application_shell_owner'] ?? false );
 		$manifest['module_key'] = $module_key;
 		$manifest['owner_file'] = $owner_file;
 		$manifest['owner_name'] = substr( sanitize_text_field( $manifest['owner_name'] ), 0, 191 );

@@ -36,6 +36,8 @@ $assert( str_contains( $repair, "'missing_table' !== (string) \$defect_code" ) &
 
 $assert( str_contains( $dependency, "array( 'registered','compatible','active' )" ) && str_contains( $dependency, "'fail_mode'=>" ) && str_contains( $dependency, "'optional_'.\$state" ), 'Round 8: degraded optional dependencies are reported as available and fail-mode metadata is lost.' );
 
+$assert( str_contains( $registry, 'spf_invalid_manifest_boolean' ) && str_contains( $registry, 'spf_invalid_manifest_write' ) && str_contains( $registry, "true === ( \$manifest['global_shell_owner']" ), 'Round 9: architecture ownership flags/writes are silently coerced or discarded.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

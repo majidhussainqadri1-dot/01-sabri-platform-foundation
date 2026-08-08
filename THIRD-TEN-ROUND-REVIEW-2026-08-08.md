@@ -29,3 +29,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 8 — Optional dependency degraded-state semantics
 **Defect found and corrected.** A degraded optional module was reported as `optional_available`; this hid the distinction between available and degraded providers. Optional readiness now treats only registered/compatible/active as available, exposes degraded/suspended/retired codes, and carries the declared fail-mode into readiness evidence.
+
+### Round 9 — Architecture manifest fail-closed parsing
+**Defects found and corrected.** String values such as `"false"` could become true shell-ownership claims, and malformed write declarations were silently dropped. Shell-ownership flags must now be real booleans and every write declaration must be structured; malformed architecture claims are rejected instead of coerced.

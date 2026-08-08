@@ -1,0 +1,54 @@
+ ['module_key'=>'file-00','software_version'=>'1.2.3','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]],
+ ['module_key'=>'file-20','software_version'=>'1.2.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0'],['module_key'=>'file-00','minimum_version'=>'1.2.0']]],
+ ['module_key'=>'file-21','software_version'=>'1.0.1','required'=>[['module_key'=>'file-20','minimum_version'=>'1.2.0']]],
+]);
+$assert($train['valid']===true,'Valid release train rejected.');
+$assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
+$bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'banana','required'=>[]]]);
+$assert($bad_version['valid']===false && !empty($bad_version['manifest_errors']),'Invalid semantic version not blocked.');
+$duplicate=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'1.0.0'],['module_key'=>'x','software_version'=>'2.0.0']]);
+$assert($duplicate['valid']===false,'Duplicate release-train module silently overwritten.');
+$bad_train=SPF_Platform_Engineering::plan_release_train([['module_key'=>'a','software_version'=>'1.0.0','required'=>['b']],['module_key'=>'b','software_version'=>'1.0.0','required'=>['a']]]);
+$assert($bad_train['valid']===false && !empty($bad_train['cycle_candidates']),'Release-train cycle missed.');
+
+$slo=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.95,'latency_p95'=>300,'error_rate'=>0.5,'error_budget_remaining'=>10],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
+$assert($slo['allow']===true,'Healthy SLO blocked.');
+$slo_bad=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.0,'latency_p95'=>800,'error_rate'=>2.0,'error_budget_remaining'=>-1],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
+$assert($slo_bad['allow']===false && count($slo_bad['violations'])>=3,'Unhealthy SLO passed.');
+$assert(SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>100],[])['reason']==='slo_objectives_missing','Missing SLO objectives did not fail closed.');
+
+$context=SPF_Platform_Engineering::new_telemetry_context();
+$assert(strlen($context['trace_id'])===32 && strlen($context['span_id'])===16,'Telemetry IDs invalid.');
+SPF_Platform_Engineering::record_metric('privacy_test',1,['module'=>'file-01','patient_name'=>'sensitive']);
+$rows=$GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION]??[];$last=end($rows);
+$assert(isset($last['labels']['module'])&&!isset($last['labels']['patient_name']),'Telemetry persisted sensitive label.');
+
+$twin=SPF_Resilience_Lab::digital_twin(['modules'=>[['module_key'=>'file-01','required'=>[]],['module_key'=>'file-20','required'=>[['module_key'=>'file-01']]],['module_key'=>'file-21','required'=>[['module_key'=>'file-20']]]]],['failed_modules'=>['file-01']]);
+$assert($twin['release_safe']===false && $twin['module_states']['file-21']['status']==='blocked','Digital twin transitive failure propagation failed.');
+$suspended=SPF_Resilience_Lab::digital_twin(['modules'=>[['module_key'=>'x','state'=>'suspended','required'=>[]]]],[]);
+$assert($suspended['release_safe']===false,'Suspended module incorrectly considered release-safe.');
+$GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION]=array_fill(0,501,['x'=>1]);
+$heal=SPF_Resilience_Lab::self_heal_plan();
+$assert($heal['owner_scope']==='file-01-only' && in_array('trim_metric_buffer',array_column($heal['actions'],'action'),true),'Bounded self-heal plan wrong.');
+$chaos=SPF_Resilience_Lab::chaos_scenarios();
+$assert(count($chaos)>=7 && isset($chaos['database_interrupt'],$chaos['duplicate_event']),'Chaos scenarios incomplete.');
+
+$GLOBALS['spf_test_options'][SPF_Resilience_Lab::SNAPSHOT_OPTION]=['snap-1'=>['id'=>'snap-1','label'=>'before','created_at'=>'2026-08-08 05:00:00','data_hash'=>'abc','data'=>['policy_catalog'=>['a'=>1],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]]];
+$diff=SPF_Resilience_Lab::diff_snapshot('snap-1',['policy_catalog'=>['a'=>2],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]);
+$assert(!is_wp_error($diff)&&$diff['changed']===true,'Snapshot diff missed change.');
+$plan=SPF_Resilience_Lab::restore_snapshot_plan('snap-1');
+$assert(!is_wp_error($plan)&&$plan['owner_scope']==='file-01-governance-config-only','Snapshot restore scope wrong.');
+$assert(in_array('activation_state',$plan['excluded_sections'],true)&&in_array('upgrade_state',$plan['excluded_sections'],true),'Runtime truth not excluded from time-travel restore.');
+
+$advice=SPF_Governance_Control_Plane::advisory_copilot(['inventory'=>['modules'=>[['module_key'=>'x','canonical_entities'=>['thing']],['module_key'=>'y','canonical_entities'=>['thing']]],'routes'=>[],'global_shell_owners'=>['file-20']],'secret_token'=>'must-not-leak']);
+$assert($advice['advisory_only']===true && $advice['autonomous_changes']===false && $advice['autonomous_approval']===false,'AI governance copilot autonomy boundary broken.');
+$assert(!empty($advice['items']),'AI governance copilot emitted no architectural advice.');
+
+$gov_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-governance-control-plane.php');
+$eng_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-platform-engineering.php');
+$res_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-resilience-lab.php');
+$assert(str_contains($gov_source,"'approve_amendment'") && str_contains($gov_source,'sanitize_advisory_input'),'Governance mutation/advisor hardening absent.');
+$assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog concurrency lock absent.');
+$assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
+$assert(str_contains($eng_source,"'rollback_required','rolled_back'") && str_contains($eng_source,"'future-rollout-'"),'Progressive rollout stale/rollback guard absent.');
+$assert(str_contains($res_source,"'spf_self_heal_recovery_stale'") && str_contains($res_source,"'self_heal_precommit'"),'Self-heal stale recovery/audit guard absent.');

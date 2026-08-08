@@ -92,8 +92,8 @@ final class SPF_Idempotency {
 
 		if ( ! self::rate_limit( $actor, $action ) ) {
 			$error = new WP_Error( 'spf_rate_limited', __( 'Too many foundation mutations.', 'sabri-platform-foundation' ), array( 'status' => 429 ) );
-			self::finalize_error( $scope_hash, $token, $error );
-			return $error;
+			$finalized = self::finalize_error( $scope_hash, $token, $error );
+			return is_wp_error( $finalized ) ? $finalized : $error;
 		}
 
 		try {
@@ -102,8 +102,8 @@ final class SPF_Idempotency {
 			$result = new WP_Error( 'spf_mutation_exception', __( 'The foundation mutation failed unexpectedly.', 'sabri-platform-foundation' ), array( 'status' => 500, 'exception_class' => get_class( $error ) ) );
 		}
 		if ( is_wp_error( $result ) ) {
-			self::finalize_error( $scope_hash, $token, $result );
-			return $result;
+			$finalized = self::finalize_error( $scope_hash, $token, $result );
+			return is_wp_error( $finalized ) ? $finalized : $result;
 		}
 		$response = array( 'success'=>true, 'result'=>$result, 'trace_id'=>SPF_Audit::trace_id() );
 		$updated = $wpdb->update(
@@ -132,12 +132,18 @@ final class SPF_Idempotency {
 				'data' => self::safe_error_data( $data ),
 			),
 		);
-		$wpdb->update(
+		$updated = $wpdb->update(
 			SPF_Installer::table( 'idempotency' ),
 			array( 'status'=>'failed','response_json'=>wp_json_encode($payload),'response_status'=>$status,'updated_at'=>SPF_Runtime::now_mysql() ),
 			array( 'scope_hash'=>$scope_hash,'owner_token'=>$token,'status'=>'processing' ),
 			array( '%s','%s','%d','%s' ), array( '%s','%s','%s' )
 		);
+		if ( 1 !== $updated ) {
+			$receipt = hash( 'sha256', $scope_hash . '|' . $token . '|error-finalize' );
+			SPF_Audit::record( 'idempotency_error_finalize_conflict', 'foundation_mutation', $receipt, 'failed', array( 'purpose'=>'idempotency_reconciliation' ) );
+			return new WP_Error( 'spf_idempotency_finalize_failed', __( 'The mutation failed but its replay record could not be finalized; reconciliation is required.', 'sabri-platform-foundation' ), array( 'status'=>503, 'recovery_receipt'=>$receipt ) );
+		}
+		return true;
 	}
 
 	private static function replay( array $row ) {

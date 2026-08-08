@@ -5,3 +5,6 @@ Scope: File 01 Platform Foundation v2.0, reopened for a third independent ten-ro
 Rule: each round must identify its own review focus; any discovered defect is corrected before proceeding, regression evidence is refreshed, and staging/live/operational remain separate gates.
 
 Status: IN PROGRESS — final round-by-round results will be written only after corrections and exact-head QA.
+
+### Round 1 — Idempotency failure durability
+**Defect found and corrected.** Failed/rate-limited mutations could return an error even when the failed replay record was not persisted, leaving a stale `processing` reservation eligible for re-execution. Error finalization now verifies the compare-and-set update, emits a recovery receipt/audit on conflict, and fails closed.

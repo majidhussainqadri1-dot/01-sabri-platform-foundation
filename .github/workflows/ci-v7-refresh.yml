@@ -1,0 +1,48 @@
+name: File 01 CI v7 Refresh
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/ci-v7-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out corrective branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Bind CI housekeeping and regenerate exact evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/ci-v7-refresh.yml
+          cat >> SIXTH-TEN-ROUND-REVIEW-2026-08-08.md <<'EOF'
+
+Post-cycle CI housekeeping: the final automated run also exposed a non-product GitHub Actions Node.js 20 deprecation warning from the previously pinned `actions/checkout` and `actions/upload-artifact` revisions. Current upstream v7.0.1 releases were verified and pinned by immutable commit SHA (`actions/checkout` `3d3c42e5aac5ba805825da76410c181273ba90b1`; `actions/upload-artifact` `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`). This is recorded as housekeeping after the ten review rounds, not as an eleventh review round. Full source/runtime/package QA is rerun after this CI-only correction.
+EOF
+          find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' -not -name 'SOURCE-CHECKSUMS.sha256' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          bash tools/build-package.sh
+      - name: Commit refreshed exact source evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add -A
+          git diff --cached --check
+          git commit -m '[ci-v7-refresh] Pin current GitHub Actions and refresh checksums'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

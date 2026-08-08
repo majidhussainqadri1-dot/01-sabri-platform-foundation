@@ -5,23 +5,48 @@ final class SPF_Purge {
 	public static function plan() {
 		global $wpdb;
 		$tables = array();
+		$query_failures = array();
 		foreach ( SPF_Installer::table_names() as $name ) {
 			$table = SPF_Installer::table( $name );
 			$exists = SPF_Runtime::table_exists( $table );
+			$rows = 0;
+			if ( $exists ) {
+				$rows_raw = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+				if ( ! empty( $wpdb->last_error ) || null === $rows_raw ) {
+					$query_failures[] = 'count:' . $name;
+					$rows = null;
+				} else {
+					$rows = (int) $rows_raw;
+				}
+			}
 			$tables[] = array(
 				'name' => $name,
 				'exists' => $exists,
-				'rows' => $exists ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) : 0, // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+				'rows' => $rows,
 				'engine' => $exists ? SPF_Runtime::table_engine( $table ) : '',
 			);
 		}
-		$holds = SPF_Runtime::table_exists( SPF_Installer::table( 'privacy_holds' ) ) ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM " . SPF_Installer::table( 'privacy_holds' ) . " WHERE active=1" ) : 0; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- allowlisted table.
+		$holds = 0;
+		$holds_table = SPF_Installer::table( 'privacy_holds' );
+		if ( SPF_Runtime::table_exists( $holds_table ) ) {
+			$holds_raw = $wpdb->get_var( "SELECT COUNT(*) FROM {$holds_table} WHERE active=1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+			if ( ! empty( $wpdb->last_error ) || null === $holds_raw ) {
+				$query_failures[] = 'count:privacy_holds_active';
+				$holds = null;
+			} else {
+				$holds = (int) $holds_raw;
+			}
+		} else {
+			$query_failures[] = 'missing:privacy_holds';
+			$holds = null;
+		}
 		return array(
 			'generated_at' => SPF_Runtime::now_mysql(),
 			'environment' => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
 			'tables' => $tables,
 			'options' => SPF_Installer::owned_options(),
 			'active_legal_holds' => $holds,
+			'query_failures' => $query_failures,
 			'audit_chain_head' => self::audit_chain_head(),
 			'stale_quarantine_tables' => self::stale_quarantine_tables(),
 			'warning' => 'This permanently removes only File 01-owned governance/runtime data after a reversible quarantine rename. Companion data and legacy pages are not deleted.',
@@ -71,6 +96,9 @@ final class SPF_Purge {
 		}
 
 		$plan = self::plan();
+		if ( ! empty( $plan['query_failures'] ) ) {
+			return new WP_Error( 'spf_purge_plan_query_failed', __( 'Destructive purge is blocked because its table/hold inventory could not be verified.', 'sabri-platform-foundation' ), array( 'status'=>503, 'failures'=>$plan['query_failures'] ) );
+		}
 		$hash = self::plan_hash( $plan );
 		if ( ! hash_equals( $hash, $expected_hash ) ) {
 			return new WP_Error( 'spf_purge_plan_changed', __( 'The purge plan changed. Generate and approve a fresh plan.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );

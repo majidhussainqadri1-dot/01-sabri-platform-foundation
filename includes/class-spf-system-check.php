@@ -25,9 +25,18 @@ final class SPF_System_Check {
 		$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>array('spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick') ) );
 		$cron_ok = ! $cron_disabled || ( is_array($external_cron) && array_key_exists('verified',$external_cron) && true===$external_cron['verified'] );
 		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without verified external scheduler evidence.', 'fail' );
-		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick' ) as $hook ) {
+		$expected_schedules = array(
+			'spf_dispatch_outbox'          => 'spf_five_minutes',
+			'spf_privacy_retention'       => 'daily',
+			'spf_reconcile_expired_flags' => 'hourly',
+			'spf_future_foundation_tick'  => 'spf_five_minutes',
+		);
+		foreach ( $expected_schedules as $hook => $expected_recurrence ) {
 			$scheduled = wp_next_scheduled( $hook );
-			$checks[] = self::check( 'schedule_'.$hook, (bool)$scheduled, $scheduled?'scheduled':'missing', 'A required File 01 scheduled job is missing.', 'fail' );
+			$recurrence = $scheduled ? wp_get_schedule( $hook ) : false;
+			$schedule_ok = (bool) $scheduled && $expected_recurrence === $recurrence;
+			$value = ! $scheduled ? 'missing' : ( $schedule_ok ? 'scheduled-' . $recurrence : 'wrong-recurrence-' . sanitize_key( (string) $recurrence ) );
+			$checks[] = self::check( 'schedule_'.$hook, $schedule_ok, $value, 'A required File 01 scheduled job is missing or has the wrong recurrence.', 'fail' );
 		}
 
 		$rules = get_option( 'rewrite_rules', array() );

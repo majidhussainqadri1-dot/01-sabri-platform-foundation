@@ -28,6 +28,8 @@ final class SPF_Authorization {
 		'run_schema_upgrade',
 	);
 
+	private const LEGACY_BOOLEAN_BRIDGE_ACTIONS = array( 'view', 'system_check' );
+
 	public static function install_capabilities() {
 		$role = get_role( 'administrator' );
 		if ( $role ) {
@@ -78,9 +80,9 @@ final class SPF_Authorization {
 			return self::validate_claim( $claim, $user_id, $action, $required, $object, $context );
 		}
 
-		// Legacy booleans remain a migration bridge only for non-sensitive
-		// read/maintenance operations. Sensitive operations always fail closed.
-		if ( ! in_array( $action, self::SENSITIVE_ACTIONS, true ) ) {
+		// Legacy booleans remain a migration bridge only for read-only diagnostics.
+		// Every mutation requires a structured actor/object/purpose-bound claim when File 00 is present.
+		if ( in_array( $action, self::LEGACY_BOOLEAN_BRIDGE_ACTIONS, true ) ) {
 			$legacy = apply_filters( 'spf_file00_capability_claim', null, $required, $user_id, $action, $object );
 			if ( is_bool( $legacy ) ) {
 				return $legacy;

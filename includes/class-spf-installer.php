@@ -725,6 +725,14 @@ final class SPF_Installer {
 			throw $error;
 		}
 		update_option( self::SNAPSHOT_OPTION, $snapshot, false );
+		$persisted_snapshot = get_option( self::SNAPSHOT_OPTION, null );
+		if ( ! is_array( $persisted_snapshot ) || SPF_Runtime::hash( $persisted_snapshot ) !== SPF_Runtime::hash( $snapshot ) ) {
+			foreach ( $snapshot['shadow_tables'] as $shadow ) {
+				$wpdb->query( "DROP TABLE IF EXISTS {$shadow}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated shadow.
+			}
+			delete_option( self::SNAPSHOT_OPTION );
+			throw new RuntimeException( 'The activation snapshot could not be verified after persistence.' );
+		}
 		return $snapshot;
 	}
 
@@ -762,24 +770,50 @@ final class SPF_Installer {
 			}
 		}
 		foreach ( $snapshot['options'] ?? array() as $option => $state ) {
+			$sentinel = new stdClass();
 			if ( ! empty( $state['exists'] ) ) {
 				update_option( $option, $state['value'], false );
+				$restored = get_option( $option, $sentinel );
+				if ( $sentinel === $restored || SPF_Runtime::hash( $restored ) !== SPF_Runtime::hash( $state['value'] ) ) {
+					$failures[] = $option . ':option_restore_failed';
+				}
 			} else {
 				delete_option( $option );
+				if ( $sentinel !== get_option( $option, $sentinel ) ) {
+					$failures[] = $option . ':option_delete_restore_failed';
+				}
 			}
 		}
 		$role = get_role( 'administrator' );
 		if ( $role ) {
 			foreach ( $snapshot['admin_caps'] ?? array() as $cap => $had ) {
 				$had ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
+				if ( (bool) $role->has_cap( $cap ) !== (bool) $had ) {
+					$failures[] = $cap . ':capability_restore_failed';
+				}
 			}
 		}
 		self::unschedule_jobs();
+		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick' ) as $hook ) {
+			if ( wp_next_scheduled( $hook ) ) {
+				$failures[] = $hook . ':schedule_unschedule_failed';
+			}
+		}
 		foreach ( $snapshot['schedules'] ?? array() as $hook => $timestamp ) {
 			if ( $timestamp ) {
-				$recurrence = 'spf_dispatch_outbox' === $hook ? 'spf_five_minutes' : ( 'spf_privacy_retention' === $hook ? 'daily' : 'hourly' );
+				$recurrence_map = array(
+					'spf_dispatch_outbox'          => 'spf_five_minutes',
+					'spf_privacy_retention'       => 'daily',
+					'spf_reconcile_expired_flags' => 'hourly',
+					'spf_future_foundation_tick'  => 'spf_five_minutes',
+				);
+				$recurrence = $recurrence_map[ $hook ] ?? '';
+				if ( '' === $recurrence ) {
+					$failures[] = $hook . ':schedule_recurrence_unknown';
+					continue;
+				}
 				$result = wp_schedule_event( (int) $timestamp, $recurrence, $hook, array(), true );
-				if ( is_wp_error( $result ) || false === $result ) {
+				if ( is_wp_error( $result ) || false === $result || $recurrence !== wp_get_schedule( $hook ) ) {
 					$failures[] = $hook . ':schedule_restore_failed';
 				}
 			}

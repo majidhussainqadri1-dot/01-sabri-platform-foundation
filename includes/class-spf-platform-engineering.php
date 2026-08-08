@@ -63,6 +63,9 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $required ) || is_wp_error( $optional ) ) {
 			return is_wp_error( $required ) ? $required : $optional;
 		}
+		if ( array_intersect( array_column( $required, 'module_key' ), array_column( $optional, 'module_key' ) ) ) {
+			return new WP_Error( 'spf_scaffold_dependency_ambiguity', __( 'Golden-path scaffolding cannot declare the same module as both required and optional.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		$dependency_keys = array();
 		foreach ( array_merge( $required, $optional ) as $dependency ) {
 			$dependency_key = is_array( $dependency ) ? sanitize_key( $dependency['module_key'] ?? '' ) : sanitize_key( $dependency );
@@ -179,9 +182,9 @@ final class SPF_Platform_Engineering {
 		}
 		if ( empty( $normalized['allow_additional'] ) ) {
 			foreach ( array_keys( $event ) as $field ) {
-				$field_key = sanitize_key( $field );
-				if ( '' === $field_key || ! array_key_exists( $field_key, $normalized['fields'] ) ) {
-					$errors[] = 'unknown:' . $field_key;
+				$field_key = sanitize_key( (string) $field );
+				if ( '' === $field_key || (string) $field !== $field_key || ! array_key_exists( (string) $field, $normalized['fields'] ) ) {
+					$errors[] = 'unknown:' . ( '' === $field_key ? '[invalid]' : $field_key );
 				}
 			}
 		}
@@ -470,7 +473,7 @@ final class SPF_Platform_Engineering {
 			'parent_span_id' => self::valid_hex_id( $parent['span_id'] ?? '', 16 ) ? strtolower( $parent['span_id'] ) : '',
 			'request_id'     => wp_generate_uuid4(),
 			'event_id'       => ! empty( $parent['event_id'] ) ? substr( sanitize_text_field( $parent['event_id'] ), 0, 191 ) : '',
-			'sampled'        => array_key_exists( 'sampled', $parent ) ? (bool) $parent['sampled'] : true,
+			'sampled'        => array_key_exists( 'sampled', $parent ) ? true === $parent['sampled'] : true,
 		);
 	}
 
@@ -487,9 +490,18 @@ final class SPF_Platform_Engineering {
 		$privacy_class = sanitize_key( $schema['privacy_class']??'internal' );
 		$allowed_privacy = array( 'public','internal','personal','sensitive','restricted','secret','security' );
 		if ( array_key_exists( 'allow_additional', $schema ) && ! is_bool( $schema['allow_additional'] ) ) { return new WP_Error( 'spf_event_schema_boolean_invalid', __( 'Event-schema boolean fields must be literal booleans.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
+		$raw_fields = (array) ( $schema['fields'] ?? array() );
+		if ( count( $raw_fields ) > 100 ) {
+			return new WP_Error( 'spf_event_schema_fields_too_large', __( 'Event schema fields exceed the bounded 100-field envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		$fields = array();
-		foreach ( array_slice( (array)($schema['fields']??array()), 0, 100, true ) as $field => $definition ) {
-			$field = sanitize_key( $field ); $definition = (array)$definition; $type = sanitize_key( $definition['type']??'string' );
+		foreach ( $raw_fields as $field => $definition ) {
+			$raw_field = (string) $field;
+			$field = sanitize_key( $raw_field );
+			if ( '' === $field || $raw_field !== $field || ! is_array( $definition ) ) {
+				return new WP_Error( 'spf_event_schema_field_invalid', __( 'Event schema field names must already be canonical and every field definition must be structured.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+			}
+			$type = sanitize_key( $definition['type']??'string' );
 			if ( array_key_exists( 'required', $definition ) && ! is_bool( $definition['required'] ) ) { return new WP_Error( 'spf_event_schema_boolean_invalid', __( 'Event-schema boolean fields must be literal booleans.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
 			if ( $field && in_array( $type, array('string','integer','number','boolean','array','object','timestamp'), true ) ) { $fields[$field] = array( 'type'=>$type, 'required'=>true === ($definition['required']??false) ); }
 		}
@@ -539,9 +551,12 @@ final class SPF_Platform_Engineering {
 
 
 	private static function normalize_scaffold_dependencies( array $dependencies ) {
+		if ( count( $dependencies ) > 64 ) {
+			return new WP_Error( 'spf_scaffold_dependency_list_too_large', __( 'Golden-path dependency lists must remain within the canonical 64-dependency registry bound.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		$out = array();
 		$seen = array();
-		foreach ( array_slice( $dependencies, 0, 100 ) as $dependency ) {
+		foreach ( $dependencies as $dependency ) {
 			if ( is_array( $dependency ) ) {
 				$key = sanitize_key( $dependency['module_key'] ?? '' );
 				$minimum = sanitize_text_field( $dependency['minimum_version'] ?? '0.0.0' );
@@ -555,7 +570,9 @@ final class SPF_Platform_Engineering {
 				|| ( $maximum && ! SPF_Registry::valid_semver( $maximum ) ) || ( $maximum && version_compare( $minimum, $maximum, '>' ) ) ) {
 				return new WP_Error( 'spf_scaffold_dependency_invalid', __( 'Generated module dependencies require a canonical module key and valid semantic version range.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}
-			if ( isset( $seen[ $key ] ) ) { continue; }
+			if ( isset( $seen[ $key ] ) ) {
+				return new WP_Error( 'spf_scaffold_duplicate_dependency', __( 'Golden-path scaffolding rejects duplicate dependencies instead of silently collapsing them.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+			}
 			$seen[ $key ] = true;
 			$out[] = array( 'module_key'=>$key, 'minimum_version'=>$minimum, 'maximum_version'=>$maximum );
 		}

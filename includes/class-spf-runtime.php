@@ -47,16 +47,26 @@ final class SPF_Runtime {
 		}
 		$option = self::LOCK_PREFIX . $name;
 		$token = wp_generate_uuid4();
+		$ttl = max( 30, min( DAY_IN_SECONDS, absint( $ttl ) ) );
+		$created = time();
 		$payload = array(
 			'token'   => $token,
-			'created' => time(),
+			'created' => $created,
+			'expires' => $created + $ttl,
+			'ttl'     => $ttl,
 			'owner'   => absint( $owner ),
 		);
 		if ( add_option( $option, $payload, '', 'no' ) ) {
 			return $token;
 		}
 		$current = get_option( $option, array() );
-		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && ( time() - (int) $current['created'] ) > max( 30, absint( $ttl ) ) ) {
+		$current_expires = is_array( $current ) && isset( $current['expires'] ) ? (int) $current['expires'] : 0;
+		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && $current_expires <= 0 ) {
+			// Legacy locks did not persist their own TTL. Use a conservative one-hour
+			// safety window rather than allowing a contender's shorter TTL to steal it.
+			$current_expires = (int) $current['created'] + HOUR_IN_SECONDS;
+		}
+		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && $current_expires > 0 && time() > $current_expires ) {
 			// Stale takeover is compare-and-delete at the database row itself. An
 			// unconditional delete_option() here could delete a newer owner's lock
 			// if another worker replaced the stale value between read and delete.

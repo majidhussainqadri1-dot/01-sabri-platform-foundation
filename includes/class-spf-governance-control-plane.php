@@ -94,12 +94,15 @@ final class SPF_Governance_Control_Plane {
 				}
 			}
 			if ( ! $found ) {
+				if ( count( $policies ) >= 250 ) {
+					return new WP_Error( 'spf_policy_catalog_full', __( 'The bounded governance policy catalog is full; retire or consolidate a policy before adding another.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+				}
 				$policies[] = $normalized;
 			}
 			usort( $policies, static function ( $a, $b ) {
 				return (int) ( $b['priority'] ?? 0 ) <=> (int) ( $a['priority'] ?? 0 );
 			} );
-			$expected = array_slice( $policies, 0, 250 );
+			$expected = $policies;
 			update_option( self::POLICY_OPTION, $expected, false );
 			$persisted = get_option( self::POLICY_OPTION, array() );
 			if ( SPF_Runtime::hash( $persisted ) !== SPF_Runtime::hash( $expected ) ) {

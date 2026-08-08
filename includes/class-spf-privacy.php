@@ -170,7 +170,8 @@ final class SPF_Privacy {
 		global $wpdb;
 		$table = SPF_Installer::table( 'privacy_holds' );
 		if ( ! SPF_Runtime::table_exists( $table ) ) {
-			return false;
+			SPF_Audit::record( 'privacy_hold_registry_missing', 'foundation_privacy', 'hold-registry', 'failed', array( 'purpose'=>'privacy_hold_fail_closed' ) );
+			return true;
 		}
 		$active = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE subject_type=%s AND subject_id=%s AND active=1 LIMIT 1", sanitize_key( $subject_type ), substr( sanitize_text_field( $subject_id ), 0, 191 ) ) );
 		if ( ! empty( $wpdb->last_error ) ) {

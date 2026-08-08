@@ -387,14 +387,20 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_manifest_boolean', __( 'Manifest architecture ownership flags must be boolean.', 'sabri-platform-foundation' ) );
 			}
 		}
+		if ( count( (array) ( $manifest['canonical_entities'] ?? array() ) ) > 128 || count( (array) ( $manifest['writes'] ?? array() ) ) > 128 ) {
+			return new WP_Error( 'spf_manifest_architecture_too_large', __( 'Manifest architecture declarations exceed the bounded registry envelope.', 'sabri-platform-foundation' ) );
+		}
 		$canonical_entities = array();
-		foreach ( array_slice( (array) ( $manifest['canonical_entities'] ?? array() ), 0, 128 ) as $entity ) {
+		foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
 			$key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
-			if ( $key ) { $canonical_entities[] = $key; }
+			if ( '' === $key ) {
+				return new WP_Error( 'spf_invalid_manifest_entity', __( 'Every canonical entity declaration requires a valid canonical key.', 'sabri-platform-foundation' ) );
+			}
+			$canonical_entities[] = $key;
 		}
 		$manifest['canonical_entities'] = array_values( array_unique( $canonical_entities ) );
 		$writes = array();
-		foreach ( array_slice( (array) ( $manifest['writes'] ?? array() ), 0, 128 ) as $write ) {
+		foreach ( (array) ( $manifest['writes'] ?? array() ) as $write ) {
 			if ( ! is_array( $write ) ) {
 				return new WP_Error( 'spf_invalid_manifest_write', __( 'Every manifest write declaration must be structured.', 'sabri-platform-foundation' ) );
 			}
@@ -402,9 +408,13 @@ final class SPF_Registry {
 			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $target ) ) {
 				return new WP_Error( 'spf_invalid_manifest_write_owner', __( 'Manifest write declarations require a canonical owner module.', 'sabri-platform-foundation' ) );
 			}
+			$operation = substr( sanitize_key( $write['operation'] ?? 'write' ), 0, 64 );
+			if ( '' === $operation ) {
+				return new WP_Error( 'spf_invalid_manifest_write_operation', __( 'Manifest write declarations require a valid operation.', 'sabri-platform-foundation' ) );
+			}
 			$writes[] = array(
 				'owner_module' => $target,
-				'operation'    => substr( sanitize_key( $write['operation'] ?? 'write' ), 0, 64 ),
+				'operation'    => $operation,
 				'purpose'      => substr( sanitize_text_field( $write['purpose'] ?? '' ), 0, 191 ),
 			);
 		}
@@ -416,6 +426,9 @@ final class SPF_Registry {
 		$manifest['owner_name'] = substr( sanitize_text_field( $manifest['owner_name'] ), 0, 191 );
 		$manifest['slug'] = sanitize_title( $manifest['slug'] );
 		$manifest['namespace_prefix'] = substr( preg_replace( '/[^A-Za-z0-9_\\\\]/', '', (string) $manifest['namespace_prefix'] ), 0, 64 );
+		if ( '' === $manifest['owner_name'] || '' === $manifest['slug'] || '' === $manifest['namespace_prefix'] ) {
+			return new WP_Error( 'spf_invalid_manifest_identity', __( 'Manifest owner name, slug and namespace prefix must remain non-empty after canonical normalization.', 'sabri-platform-foundation' ) );
+		}
 		$manifest['software_version'] = sanitize_text_field( $manifest['software_version'] );
 		$manifest['contract_version'] = sanitize_text_field( $manifest['contract_version'] );
 		$manifest['state'] = $state;
@@ -431,6 +444,9 @@ final class SPF_Registry {
 		$optional_keys = array_column( $manifest['optional'], 'module_key' );
 		if ( array_intersect( $required_keys, $optional_keys ) ) {
 			return new WP_Error( 'spf_dependency_ambiguity', __( 'A module cannot be both a required and optional dependency.', 'sabri-platform-foundation' ) );
+		}
+		if ( in_array( $module_key, $required_keys, true ) || in_array( $module_key, $optional_keys, true ) ) {
+			return new WP_Error( 'spf_manifest_self_dependency', __( 'A canonical module manifest cannot depend on itself.', 'sabri-platform-foundation' ) );
 		}
 		foreach ( array( 'capabilities','commands','queries','events','routes','data_classes' ) as $field ) {
 			if ( count( $manifest[ $field ] ) > 256 ) {
@@ -491,6 +507,14 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_contract_consumer', __( 'Contract consumer is not a canonical module key.', 'sabri-platform-foundation' ) );
 			}
 		}
+		$deprecation_at = null;
+		if ( ! empty( $contract['deprecation_at'] ) ) {
+			$deprecation_ts = strtotime( (string) $contract['deprecation_at'] );
+			if ( false === $deprecation_ts ) {
+				return new WP_Error( 'spf_invalid_contract_deprecation', __( 'Contract deprecation timestamp is invalid.', 'sabri-platform-foundation' ) );
+			}
+			$deprecation_at = gmdate( 'Y-m-d H:i:s', $deprecation_ts );
+		}
 		return array(
 			'contract_key' => $key,
 			'contract_version' => $version,
@@ -498,7 +522,7 @@ final class SPF_Registry {
 			'status' => $status,
 			'schema' => SPF_Runtime::canonicalize( $contract['schema'] ),
 			'consumers' => $consumers,
-			'deprecation_at' => empty( $contract['deprecation_at'] ) ? null : gmdate( 'Y-m-d H:i:s', strtotime( $contract['deprecation_at'] ) ),
+			'deprecation_at' => $deprecation_at,
 		);
 	}
 

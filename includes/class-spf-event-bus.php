@@ -24,6 +24,7 @@ final class SPF_Event_Bus {
 			$dedupe_key = hash( 'sha256', $dedupe_key );
 		}
 		$now = SPF_Runtime::now_mysql();
+		$previous_suppress = $wpdb->suppress_errors( true );
 		$inserted = $wpdb->insert(
 			SPF_Installer::table( 'outbox' ),
 			array(
@@ -33,7 +34,9 @@ final class SPF_Event_Bus {
 			),
 			array( '%s','%s','%d','%s','%s','%s','%s','%s','%s','%d','%s','%s' )
 		);
-		if ( false === $inserted && false !== stripos( (string) $wpdb->last_error, 'duplicate' ) ) {
+		$insert_error = (string) $wpdb->last_error;
+		$wpdb->suppress_errors( $previous_suppress );
+		if ( false === $inserted && false !== stripos( $insert_error, 'duplicate' ) ) {
 			return true;
 		}
 		return false === $inserted ? new WP_Error( 'spf_event_store_failed', __( 'The event could not be stored.', 'sabri-platform-foundation' ) ) : true;

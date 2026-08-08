@@ -38,6 +38,7 @@ final class SPF_Idempotency {
 		$token = wp_generate_uuid4();
 		$now = SPF_Runtime::now_mysql();
 		$expires = gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS );
+		$previous_suppress = $wpdb->suppress_errors( true );
 		$inserted = $wpdb->insert(
 			$table,
 			array(
@@ -58,6 +59,8 @@ final class SPF_Idempotency {
 			),
 			array( '%s','%s','%d','%s','%s','%s','%s','%s','%d','%d','%s','%s','%s','%s' )
 		);
+		$insert_error = (string) $wpdb->last_error;
+		$wpdb->suppress_errors( $previous_suppress );
 
 		if ( false === $inserted ) {
 			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE scope_hash=%s", $scope_hash ), ARRAY_A );

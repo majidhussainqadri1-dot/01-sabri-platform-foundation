@@ -29,10 +29,12 @@ $assert( str_contains( $files['includes/class-spf-idempotency.php']??'', "'statu
 $assert( str_contains( $files['includes/class-spf-idempotency.php']??'', "'route'  => \$request->get_route()" ), 'Idempotency request route binding missing.' );
 $assert( str_contains( $files['includes/class-spf-idempotency.php']??'', "'actor'  => \$actor" ), 'Idempotency actor binding missing.' );
 $assert( str_contains( $files['includes/class-spf-idempotency.php']??'', 'recovery_receipt' ), 'Idempotency recovery receipt missing.' );
+$assert( str_contains( $files['includes/class-spf-idempotency.php']??'', '$wpdb->suppress_errors( true )' ), 'Expected idempotency duplicate insert noise is not suppressed.' );
 $assert( str_contains( $files['includes/class-spf-authorization.php']??'', "'object_hash', 'purpose', 'institutional_role'" ), 'Mandatory authorization object/purpose/institutional-role binding missing.' );
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_chain_head_invalid' ), 'Malformed audit-head fail-closed guard missing.' );
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_verification_incomplete' ), 'Partial audit-chain verification blocker missing.' );
 $assert( str_contains( $files['includes/class-spf-event-bus.php']??'', "'stale_processing_recovered'" ), 'Outbox stale-lease recovery missing.' );
+$assert( str_contains( $files['includes/class-spf-event-bus.php']??'', '$wpdb->suppress_errors( true )' ), 'Expected outbox dedupe insert noise is not suppressed.' );
 $assert( str_contains( $files['includes/class-spf-event-bus.php']??'', '$privacy_class' ) && str_contains( $files['includes/class-spf-installer.php']??'', 'privacy_class varchar(32)' ), 'Durable event privacy classification missing.' );
 $assert( str_contains( $files['includes/class-spf-registry.php']??'', 'spf_dependency_ambiguity' ), 'Required/optional dependency ambiguity rejection missing.' );
 $assert( str_contains( $files['includes/class-spf-registry.php']??'', 'spf_contract_too_large' ), 'Bounded contract envelope missing.' );

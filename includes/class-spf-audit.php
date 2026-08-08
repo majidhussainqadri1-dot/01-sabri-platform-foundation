@@ -12,7 +12,7 @@ final class SPF_Audit {
 		$written = self::write( $action, $object_type, $object_id, $result, $context, $trace_id );
 		if ( is_wp_error( $written ) ) {
 			do_action( 'spf_audit_failure', $written, $action, $object_type, $object_id );
-			return $trace_id ? $trace_id : self::trace_id();
+			return $trace_id && wp_is_uuid( $trace_id ) ? $trace_id : self::trace_id();
 		}
 		return $written;
 	}
@@ -23,7 +23,10 @@ final class SPF_Audit {
 
 	private static function write( $action, $object_type, $object_id, $result, array $context, $trace_id ) {
 		global $wpdb;
-		$trace_id = $trace_id ? sanitize_text_field( $trace_id ) : self::trace_id();
+		if ( $trace_id && ! wp_is_uuid( $trace_id ) ) {
+			return new WP_Error( 'spf_audit_trace_invalid', __( 'The audit trace identifier is invalid.', 'sabri-platform-foundation' ) );
+		}
+		$trace_id = $trace_id ? strtolower( sanitize_text_field( $trace_id ) ) : self::trace_id();
 		$token = SPF_Runtime::acquire_lock( self::LOCK_NAME, 30, get_current_user_id() );
 		if ( is_wp_error( $token ) ) {
 			return $token;
@@ -35,9 +38,13 @@ final class SPF_Audit {
 			}
 			$context = self::sanitize_context( $context );
 			$context_hash = SPF_Runtime::hash( $context );
-			$previous_hash = (string) $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
-			if ( ! preg_match( '/^[a-f0-9]{64}$/', $previous_hash ) ) {
+			$previous_raw = $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+			if ( null === $previous_raw || '' === (string) $previous_raw ) {
 				$previous_hash = str_repeat( '0', 64 );
+			} elseif ( preg_match( '/^[a-f0-9]{64}$/', (string) $previous_raw ) ) {
+				$previous_hash = (string) $previous_raw;
+			} else {
+				return new WP_Error( 'spf_audit_chain_head_invalid', __( 'The audit chain head is malformed; a new entry was not appended.', 'sabri-platform-foundation' ) );
 			}
 			$created_at = SPF_Runtime::now_mysql();
 			$actor_id = get_current_user_id();
@@ -46,6 +53,9 @@ final class SPF_Audit {
 			$object_type = substr( sanitize_key( $object_type ), 0, 64 );
 			$object_id = substr( sanitize_text_field( (string) $object_id ), 0, 191 );
 			$result_code = substr( sanitize_key( $result ), 0, 64 );
+			if ( '' === $action_name || '' === $object_type || '' === $result_code ) {
+				return new WP_Error( 'spf_audit_record_invalid', __( 'The mandatory audit record is incomplete.', 'sabri-platform-foundation' ) );
+			}
 			$entry_hash = self::entry_hash( $previous_hash, $trace_id, $action_name, $object_type, $object_id, $actor_id, $purpose, $result_code, $context_hash, $created_at );
 			$ok = $wpdb->insert(
 				$table,
@@ -65,6 +75,11 @@ final class SPF_Audit {
 		}
 	}
 
+	/**
+	 * Verify the complete chain up to the requested hard ceiling. Returning a
+	 * partial prefix as "verified" would be misleading, so oversized chains fail
+	 * closed and must be verified with an explicitly larger bounded ceiling.
+	 */
 	public static function verify_chain( $limit = 10000 ) {
 		global $wpdb;
 		$table = SPF_Installer::table( 'audit' );
@@ -72,9 +87,16 @@ final class SPF_Audit {
 			return new WP_Error( 'spf_audit_table_missing', __( 'Audit chain is unavailable.', 'sabri-platform-foundation' ) );
 		}
 		$limit = max( 1, min( 50000, absint( $limit ) ) );
+		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		if ( $total > $limit ) {
+			return new WP_Error( 'spf_audit_verification_incomplete', __( 'The audit chain exceeds the bounded verification limit; no partial verification claim was made.', 'sabri-platform-foundation' ), array( 'rows'=>$total, 'limit'=>$limit ) );
+		}
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} ORDER BY id ASC LIMIT %d", $limit ), ARRAY_A );
 		$previous = str_repeat( '0', 64 );
 		foreach ( $rows as $row ) {
+			if ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $row['previous_hash'] ) || ! preg_match( '/^[a-f0-9]{64}$/', (string) $row['entry_hash'] ) || ! wp_is_uuid( (string) $row['trace_id'] ) ) {
+				return new WP_Error( 'spf_audit_chain_broken', __( 'Audit chain contains malformed integrity fields.', 'sabri-platform-foundation' ), array( 'row_id'=>(int)$row['id'] ) );
+			}
 			if ( ! hash_equals( $previous, (string) $row['previous_hash'] ) ) {
 				return new WP_Error( 'spf_audit_chain_broken', __( 'Audit chain predecessor mismatch.', 'sabri-platform-foundation' ), array( 'row_id'=>(int)$row['id'] ) );
 			}
@@ -84,21 +106,31 @@ final class SPF_Audit {
 			}
 			$previous = $row['entry_hash'];
 		}
-		return array( 'verified'=>true,'rows'=>count($rows),'head'=>$previous );
+		$stored_head = (string) $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		if ( $total > 0 && ! hash_equals( $previous, $stored_head ) ) {
+			return new WP_Error( 'spf_audit_chain_head_mismatch', __( 'Audit chain verification did not reach the stored head.', 'sabri-platform-foundation' ) );
+		}
+		return array( 'verified'=>true,'complete'=>true,'rows'=>count($rows),'head'=>$previous );
 	}
 
 	private static function entry_hash( $previous_hash, $trace_id, $action_name, $object_type, $object_id, $actor_id, $purpose, $result_code, $context_hash, $created_at ) {
 		return hash( 'sha256', implode( '|', array( $previous_hash,$trace_id,$action_name,$object_type,$object_id,(string)$actor_id,$purpose,$result_code,$context_hash,$created_at ) ) );
 	}
 
-	private static function sanitize_context( array $context ) {
+	private static function sanitize_context( array $context, $depth = 0 ) {
+		if ( $depth > 5 ) {
+			return array( '_truncated' => true );
+		}
 		$result = array();
-		foreach ( $context as $key => $value ) {
-			$key = substr( sanitize_key( $key ), 0, 128 );
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message_body|payment|identity_document/i', (string) $key ) ) {
+		foreach ( array_slice( $context, 0, 100, true ) as $key => $value ) {
+			$key = substr( sanitize_key( (string) $key ), 0, 128 );
+			if ( '' === $key ) {
+				continue;
+			}
+			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message|payment|identity|document|private|credential|key/i', $key ) ) {
 				$result[ $key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize_context( $value );
+				$result[ $key ] = self::sanitize_context( $value, $depth + 1 );
 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
 				$result[ $key ] = $value;
 			} elseif ( is_scalar( $value ) ) {
@@ -106,6 +138,9 @@ final class SPF_Audit {
 			} else {
 				$result[ $key ] = '[unsupported]';
 			}
+		}
+		if ( count( $context ) > 100 ) {
+			$result['_truncated'] = true;
 		}
 		return SPF_Runtime::canonicalize( $result );
 	}

@@ -12,15 +12,24 @@ final class SPF_Idempotency {
 			return new WP_Error( 'spf_idempotency_required', __( 'A valid 16–191 character X-Idempotency-Key is required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
 		}
 		$actor = get_current_user_id();
+		if ( $actor < 1 || ! is_user_logged_in() ) {
+			return new WP_Error( 'spf_idempotency_actor_required', __( 'An authenticated actor is required for a foundation mutation.', 'sabri-platform-foundation' ), array( 'status' => 401 ) );
+		}
 		$action = sanitize_key( $action );
+		if ( '' === $action ) {
+			return new WP_Error( 'spf_idempotency_action_required', __( 'A valid mutation action is required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
+		}
 		$body = $request->get_json_params();
 		if ( null === $body ) {
 			$body = $request->get_body_params();
 		}
 		$request_hash = SPF_Runtime::hash(
 			array(
+				'actor'  => $actor,
+				'action' => $action,
 				'route'  => $request->get_route(),
 				'method' => strtoupper( $request->get_method() ),
+				'query'  => $request->get_query_params(),
 				'body'   => $body,
 			)
 		);
@@ -55,21 +64,23 @@ final class SPF_Idempotency {
 			if ( ! $existing ) {
 				return new WP_Error( 'spf_idempotency_store_failed', __( 'The idempotency reservation could not be created.', 'sabri-platform-foundation' ), array( 'status' => 503 ) );
 			}
-			if ( ! hash_equals( (string) $existing['request_hash'], $request_hash ) ) {
-				return new WP_Error( 'spf_idempotency_conflict', __( 'The idempotency key was reused with a different request.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
+			if ( (int) $existing['actor_id'] !== $actor || sanitize_key( $existing['action_name'] ) !== $action || ! hash_equals( (string) $existing['request_hash'], $request_hash ) ) {
+				return new WP_Error( 'spf_idempotency_conflict', __( 'The idempotency key was reused outside its original actor/action/request scope.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 			}
 			if ( 'completed' === $existing['status'] || 'failed' === $existing['status'] ) {
 				return self::replay( $existing );
 			}
-			$stale = strtotime( (string) $existing['locked_at'] ) < time() - 300 || strtotime( (string) $existing['expires_at'] ) <= time();
+			$locked_at = strtotime( (string) $existing['locked_at'] );
+			$expires_at = strtotime( (string) $existing['expires_at'] );
+			$stale = ! $locked_at || $locked_at < time() - 300 || ! $expires_at || $expires_at <= time();
 			if ( ! $stale ) {
 				return new WP_Error( 'spf_idempotency_in_progress', __( 'An identical request is still processing.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
 			}
 			$claimed = $wpdb->update(
 				$table,
 				array( 'status'=>'processing','owner_token'=>$token,'locked_at'=>$now,'expires_at'=>$expires,'attempts'=>(int)$existing['attempts']+1,'updated_at'=>$now ),
-				array( 'id'=>(int)$existing['id'],'owner_token'=>$existing['owner_token'],'status'=>$existing['status'] ),
-				array( '%s','%s','%s','%s','%d','%s' ), array( '%d','%s','%s' )
+				array( 'id'=>(int)$existing['id'],'actor_id'=>$actor,'request_hash'=>$request_hash,'owner_token'=>$existing['owner_token'],'status'=>$existing['status'] ),
+				array( '%s','%s','%s','%s','%d','%s' ), array( '%d','%d','%s','%s','%s' )
 			);
 			if ( 1 !== $claimed ) {
 				return new WP_Error( 'spf_idempotency_in_progress', __( 'Another worker claimed the identical request.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
@@ -77,14 +88,15 @@ final class SPF_Idempotency {
 		}
 
 		if ( ! self::rate_limit( $actor, $action ) ) {
-			self::finalize_error( $scope_hash, $token, new WP_Error( 'spf_rate_limited', __( 'Too many foundation mutations.', 'sabri-platform-foundation' ), array( 'status' => 429 ) ) );
-			return new WP_Error( 'spf_rate_limited', __( 'Too many foundation mutations.', 'sabri-platform-foundation' ), array( 'status' => 429 ) );
+			$error = new WP_Error( 'spf_rate_limited', __( 'Too many foundation mutations.', 'sabri-platform-foundation' ), array( 'status' => 429 ) );
+			self::finalize_error( $scope_hash, $token, $error );
+			return $error;
 		}
 
 		try {
 			$result = $callback();
 		} catch ( Throwable $error ) {
-			$result = new WP_Error( 'spf_mutation_exception', $error->getMessage(), array( 'status' => 500 ) );
+			$result = new WP_Error( 'spf_mutation_exception', __( 'The foundation mutation failed unexpectedly.', 'sabri-platform-foundation' ), array( 'status' => 500, 'exception_class' => get_class( $error ) ) );
 		}
 		if ( is_wp_error( $result ) ) {
 			self::finalize_error( $scope_hash, $token, $result );
@@ -94,11 +106,13 @@ final class SPF_Idempotency {
 		$updated = $wpdb->update(
 			$table,
 			array( 'status'=>'completed','response_json'=>wp_json_encode($response),'response_status'=>200,'updated_at'=>SPF_Runtime::now_mysql() ),
-			array( 'scope_hash'=>$scope_hash,'owner_token'=>$token,'status'=>'processing' ),
-			array( '%s','%s','%d','%s' ), array( '%s','%s','%s' )
+			array( 'scope_hash'=>$scope_hash,'actor_id'=>$actor,'request_hash'=>$request_hash,'owner_token'=>$token,'status'=>'processing' ),
+			array( '%s','%s','%d','%s' ), array( '%s','%d','%s','%s','%s' )
 		);
 		if ( 1 !== $updated ) {
-			return new WP_Error( 'spf_idempotency_finalize_failed', __( 'The mutation completed but its replay record could not be finalized; reconciliation is required.', 'sabri-platform-foundation' ), array( 'status' => 503, 'scope_hash' => $scope_hash ) );
+			$receipt = hash( 'sha256', $scope_hash . '|' . $request_hash . '|' . $token );
+			SPF_Audit::record( 'idempotency_finalize_conflict', 'foundation_mutation', $receipt, 'failed', array( 'purpose'=>'idempotency_reconciliation','action'=>$action ) );
+			return new WP_Error( 'spf_idempotency_finalize_failed', __( 'The mutation completed but its replay record could not be finalized; reconciliation is required.', 'sabri-platform-foundation' ), array( 'status' => 503, 'recovery_receipt' => $receipt ) );
 		}
 		return rest_ensure_response( $response );
 	}
@@ -110,8 +124,8 @@ final class SPF_Idempotency {
 		$payload = array(
 			'success' => false,
 			'error' => array(
-				'code' => $error->get_error_code(),
-				'message' => $error->get_error_message(),
+				'code' => sanitize_key( $error->get_error_code() ),
+				'message' => sanitize_text_field( $error->get_error_message() ),
 				'data' => self::safe_error_data( $data ),
 			),
 		);
@@ -139,14 +153,17 @@ final class SPF_Idempotency {
 		return rest_ensure_response( $payload );
 	}
 
-	private static function safe_error_data( $data ) {
-		if ( ! is_array( $data ) ) {
+	private static function safe_error_data( $data, $depth = 0 ) {
+		if ( ! is_array( $data ) || $depth > 5 ) {
 			return array();
 		}
 		$out = array();
-		foreach ( $data as $key => $value ) {
-			if ( preg_match( '/password|token|secret|cookie|nonce|authorization|patient|message|payment/i', (string) $key ) ) {
+		foreach ( array_slice( $data, 0, 100, true ) as $key => $value ) {
+			$key = substr( sanitize_key( (string) $key ), 0, 128 );
+			if ( preg_match( '/password|token|secret|cookie|nonce|authorization|patient|message|payment|identity|document|key/i', $key ) ) {
 				$out[ $key ] = '[redacted]';
+			} elseif ( is_array( $value ) ) {
+				$out[ $key ] = self::safe_error_data( $value, $depth + 1 );
 			} elseif ( is_scalar( $value ) || null === $value ) {
 				$out[ $key ] = is_string( $value ) ? substr( sanitize_text_field( $value ), 0, 500 ) : $value;
 			}
@@ -155,12 +172,21 @@ final class SPF_Idempotency {
 	}
 
 	private static function rate_limit( $actor, $action ) {
-		$key = 'spf_rl_' . md5( $actor . '|' . $action . '|' . gmdate( 'YmdHi' ) );
-		$count = (int) get_transient( $key );
-		if ( $count >= 30 ) {
+		$bucket = gmdate( 'YmdHi' );
+		$key = 'spf_rl_' . md5( $actor . '|' . $action . '|' . $bucket );
+		$lock_name = 'rate_' . substr( hash( 'sha256', $actor . '|' . $action ), 0, 32 );
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 30, $actor );
+		if ( is_wp_error( $lock ) ) {
 			return false;
 		}
-		set_transient( $key, $count + 1, 90 );
-		return true;
+		try {
+			$count = (int) get_transient( $key );
+			if ( $count >= 30 ) {
+				return false;
+			}
+			return set_transient( $key, $count + 1, 90 );
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
+		}
 	}
 }

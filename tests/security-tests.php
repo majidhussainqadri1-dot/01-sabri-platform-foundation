@@ -73,7 +73,7 @@ $assert(str_contains($runtime, 'nocache_headers'), 'Restricted route cache prote
 // v2.0 Future Foundation: explicitly enforce canonical-domain and non-autonomous safety.
 $assert(str_contains($runtime, 'companion_data_modified') && str_contains($runtime, "'file-01-only'"), 'Bounded self-healing ownership evidence missing');
 $assert(str_contains($runtime, "'ai_autonomous_changes'") && str_contains($runtime, "'ai_autonomous_approval'"), 'AI advisory-only status fields missing');
-$assert(str_contains($runtime, "'production' !== $environment"), 'Production-safe chaos/event replay guard missing');
+$assert(str_contains($runtime, "'production' !== \$environment"), 'Production-safe chaos/event replay guard missing');
 $assert(str_contains($runtime, 'error_budget_remaining'), 'SLO/error-budget gate missing');
 $assert(str_contains($runtime, 'global_shell_owners') && str_contains($runtime, "'file-20'"), 'File 20 shell ownership linter boundary missing');
 

@@ -1,0 +1,60 @@
+name: Apply File 01 Round 10 Warning Fix
+
+on:
+  push:
+    branches:
+      - codex/file-01-second-ten-round-review-2026-08-08
+    paths:
+      - .round10-warning.ready
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout transport
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Patch target, verify warning-free source suite, refresh checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin codex/file-01-complete-foundation-1.0.0
+          git checkout -B round10-warning-fix origin/codex/file-01-complete-foundation-1.0.0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/future-foundation-tests.php')
+          s=p.read_text()
+          old='$assert(str_contains($eng_source,"\'contracts\'=>$contract_catalog") && str_contains($eng_source,"\'routes\'=>$route_catalog"),\'Developer service catalog omits contract/route summaries.\');'
+          new='$assert(str_contains($eng_source,"\'contracts\'=>\\$contract_catalog") && str_contains($eng_source,"\'routes\'=>\\$route_catalog"),\'Developer service catalog omits contract/route summaries.\');'
+          if old not in s: raise SystemExit('warning-producing catalog assertion not found')
+          p.write_text(s.replace(old,new,1))
+
+          p=Path('SECOND-TEN-ROUND-REVIEW-2026-08-08.md')
+          s=p.read_text()
+          old="| 10 | Exact-head WordPress/MySQL adversarial regression | Defect found and corrected: after canonical 00–26 enforcement, the runtime Golden-Path smoke still requested obsolete `file-27`, so exact-head CI correctly failed. The smoke was realigned to canonical `file-26`; no production rule was weakened. A fresh exact-head source/runtime/package CI is mandatory before closure. |"
+          new="| 10 | Exact-head WordPress/MySQL + warning-clean adversarial regression | Defects found and corrected: after canonical 00–26 enforcement, the runtime Golden-Path smoke still requested obsolete `file-27`, so exact-head CI correctly failed; it was realigned to canonical `file-26` without weakening production rules. The next exact-head source run also exposed two PHP warnings caused by test-string interpolation of `$contract_catalog`/`$route_catalog`; the assertions were escaped so the suite is warning-clean. Fresh exact-head source/runtime/package CI is mandatory before closure. |"
+          if old not in s: raise SystemExit('round 10 review row not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          : > SOURCE-CHECKSUMS.sha256
+          while IFS= read -r -d '' file; do
+            [ "$file" = "SOURCE-CHECKSUMS.sha256" ] && continue
+            [[ "$file" == build/* || "$file" == dist/* ]] && continue
+            [ -f "$file" ] || continue
+            printf '%s  %s\n' "$(sha256sum "$file" | awk '{print $1}')" "$file"
+          done < <(git ls-files -z) | LC_ALL=C sort -k2 > SOURCE-CHECKSUMS.sha256
+          git add -A
+          output="$(bash qa/run-tests.sh 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -E 'PHP (Warning|Notice|Deprecated|Fatal error)'; then
+            echo 'PHP diagnostic found in source QA' >&2
+            exit 1
+          fi
+          git commit -m 'Round 10: eliminate QA interpolation warnings and refresh evidence'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

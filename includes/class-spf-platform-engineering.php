@@ -63,7 +63,14 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $required ) || is_wp_error( $optional ) ) {
 			return is_wp_error( $required ) ? $required : $optional;
 		}
-		if ( in_array( $module_key, $required, true ) || in_array( $module_key, $optional, true ) ) {
+		$dependency_keys = array();
+		foreach ( array_merge( $required, $optional ) as $dependency ) {
+			$dependency_key = is_array( $dependency ) ? sanitize_key( $dependency['module_key'] ?? '' ) : sanitize_key( $dependency );
+			if ( '' !== $dependency_key ) {
+				$dependency_keys[] = $dependency_key;
+			}
+		}
+		if ( in_array( $module_key, $dependency_keys, true ) ) {
 			return new WP_Error( 'spf_scaffold_self_dependency', __( 'Golden-path scaffolding cannot generate a module that depends on itself.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$manifest = array(

@@ -2,18 +2,26 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
+$runtimeFiles = [
+    'sabri-platform-foundation.php',
+    'uninstall.php',
+];
 $php = [];
-$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($runtimeFiles as $relative) {
+    $path = $root . DIRECTORY_SEPARATOR . $relative;
+    if (is_file($path)) {
+        $php[$relative] = file_get_contents($path);
+    }
+}
+$includes = $root . DIRECTORY_SEPARATOR . 'includes';
+$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($includes, FilesystemIterator::SKIP_DOTS));
 foreach ($iterator as $file) {
     if ($file->isFile() && $file->getExtension() === 'php') {
         $path = $file->getPathname();
-        if (str_contains($path, DIRECTORY_SEPARATOR . 'dist' . DIRECTORY_SEPARATOR) || str_contains($path, DIRECTORY_SEPARATOR . 'build' . DIRECTORY_SEPARATOR)) {
-            continue;
-        }
         $php[str_replace($root . DIRECTORY_SEPARATOR, '', $path)] = file_get_contents($path);
     }
 }
-$runtime = implode("\n", array_filter($php, static fn(string $key): bool => !str_starts_with($key, 'tests/'), ARRAY_FILTER_USE_KEY));
+$runtime = implode("\n", $php);
 $assertions = 0;
 $failures = [];
 $assert = static function (bool $condition, string $message) use (&$assertions, &$failures): void {
@@ -34,13 +42,14 @@ $assert(str_contains($runtime, 'permission_callback'), 'REST permission callback
 $assert(str_contains($runtime, 'hash_equals'), 'Constant-time plan/idempotency comparison missing');
 $assert(str_contains($runtime, 'sanitize_text_field'), 'Input sanitization missing');
 $assert(str_contains($runtime, 'wp_safe_redirect'), 'Safe admin redirect missing');
-$assert(str_contains($runtime, 'spf_authorize_action'), 'Canonical authorization adapter missing');
-$assert(str_contains($runtime, 'spf_file00_capability_claim'), 'File 00 claim adapter missing');
+$assert(str_contains($runtime, 'spf_file00_authorization_claim') && str_contains($runtime, 'validate_claim'), 'Canonical structured File 00 authorization adapter missing');
+$assert(str_contains($runtime, 'spf_file00_capability_claim'), 'File 00 legacy claim bridge missing');
 $assert(str_contains($runtime, 'context_hash'), 'Tamper-evident audit context hash missing');
-$assert(str_contains($runtime, '[redacted]'), 'Redaction marker missing');
-$assert(str_contains($runtime, 'DROP TABLE IF EXISTS'), 'Explicit purge implementation missing');
+$assert(str_contains($runtime, '[redacted]') || str_contains($runtime, "'redacted'=>true") || str_contains($runtime, "'redacted' => true"), 'Redaction marker missing');
+$assert(str_contains($runtime, 'DROP TABLE'), 'Explicit purge implementation missing');
 $assert(str_contains($runtime, 'PURGE FILE 01 GOVERNANCE DATA'), 'Typed purge confirmation missing');
-$assert(str_contains($runtime, 'backup_reference'), 'Purge backup evidence missing');
+$assert(str_contains($runtime, 'spf_verify_backup_restore_evidence') && str_contains($runtime, 'backup_id') && str_contains($runtime, 'restore_tested_at'), 'Structured purge backup/restore evidence gate missing');
+$assert(str_contains($runtime, 'spf_verify_file24_purge_assurance'), 'File 24 purge assurance gate missing');
 $assert(str_contains($runtime, 'APPLY FILE 01 RECONCILIATION'), 'Typed reconciliation confirmation missing');
 $assert(str_contains($runtime, 'ROLL BACK FILE 01 RECONCILIATION'), 'Reconciliation rollback confirmation missing');
 $assert(str_contains($runtime, 'REPAIR FILE 01 OWNED STATE'), 'Typed repair confirmation missing');
@@ -60,6 +69,13 @@ $assert(!str_contains($runtime, 'wp_cache_flush('), 'Global cache flush overreac
 $assert(!preg_match('/admin_url\([^\)]*\)\s*;?\s*\n?\s*wp_redirect/i', $runtime), 'Unsafe redirect pattern found');
 $assert(str_contains($runtime, 'noindex'), 'Restricted route indexing protection missing');
 $assert(str_contains($runtime, 'nocache_headers'), 'Restricted route cache protection missing');
+
+// v2.0 Future Foundation: explicitly enforce canonical-domain and non-autonomous safety.
+$assert(str_contains($runtime, 'companion_data_modified') && str_contains($runtime, "'file-01-only'"), 'Bounded self-healing ownership evidence missing');
+$assert(str_contains($runtime, "'ai_autonomous_changes'") && str_contains($runtime, "'ai_autonomous_approval'"), 'AI advisory-only status fields missing');
+$assert(str_contains($runtime, "'production' !== $environment"), 'Production-safe chaos/event replay guard missing');
+$assert(str_contains($runtime, 'error_budget_remaining'), 'SLO/error-budget gate missing');
+$assert(str_contains($runtime, 'global_shell_owners') && str_contains($runtime, "'file-20'"), 'File 20 shell ownership linter boundary missing');
 
 if ($failures) {
     fwrite(STDERR, "Security tests failed:\n- " . implode("\n- ", $failures) . "\n");

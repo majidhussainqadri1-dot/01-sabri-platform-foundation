@@ -63,35 +63,52 @@ final class SPF_Governance_Control_Plane {
 	}
 
 	public static function save_policy( array $policy ) {
-		$allowed = SPF_Authorization::require_action(
-			'repair_owned_mapping',
-			array( 'module_key' => 'file-01', 'object_id' => 'policy-as-code' ),
-			array( 'purpose' => 'policy_as_code' )
-		);
-		if ( is_wp_error( $allowed ) ) {
-			return $allowed;
-		}
 		$normalized = self::normalize_policy( $policy );
 		if ( is_wp_error( $normalized ) ) {
 			return $normalized;
 		}
-		$policies = self::list_policies();
-		$found = false;
-		foreach ( $policies as $index => $existing ) {
-			if ( ( $existing['id'] ?? '' ) === $normalized['id'] ) {
-				$policies[ $index ] = $normalized;
-				$found = true;
-				break;
+		if ( '' === (string) ( $normalized['decision_id'] ?? '' ) ) {
+			return new WP_Error( 'spf_policy_decision_required', __( 'A Founder-approved decision id is required before changing governance policy.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
+		}
+		$allowed = SPF_Authorization::require_action(
+			'approve_amendment',
+			array( 'module_key' => 'file-01', 'object_id' => 'policy:' . $normalized['id'] ),
+			array( 'purpose' => 'policy_as_code', 'decision_id' => $normalized['decision_id'] )
+		);
+		if ( is_wp_error( $allowed ) ) {
+			return $allowed;
+		}
+		$lock_name = 'future-policy-catalog';
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		try {
+			$policies = self::list_policies();
+			$found = false;
+			foreach ( $policies as $index => $existing ) {
+				if ( ( $existing['id'] ?? '' ) === $normalized['id'] ) {
+					$policies[ $index ] = $normalized;
+					$found = true;
+					break;
+				}
 			}
+			if ( ! $found ) {
+				$policies[] = $normalized;
+			}
+			usort( $policies, static function ( $a, $b ) {
+				return (int) ( $b['priority'] ?? 0 ) <=> (int) ( $a['priority'] ?? 0 );
+			} );
+			$expected = array_slice( $policies, 0, 250 );
+			update_option( self::POLICY_OPTION, $expected, false );
+			$persisted = get_option( self::POLICY_OPTION, array() );
+			if ( SPF_Runtime::hash( $persisted ) !== SPF_Runtime::hash( $expected ) ) {
+				return new WP_Error( 'spf_policy_persistence_failed', __( 'The governance policy change could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
+			}
+			return $normalized;
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
 		}
-		if ( ! $found ) {
-			$policies[] = $normalized;
-		}
-		usort( $policies, static function ( $a, $b ) {
-			return (int) ( $b['priority'] ?? 0 ) <=> (int) ( $a['priority'] ?? 0 );
-		} );
-		update_option( self::POLICY_OPTION, array_slice( $policies, 0, 250 ), false );
-		return $normalized;
 	}
 
 	public static function evaluate_policy( $action, array $context = array(), $policies = null ) {
@@ -145,16 +162,40 @@ final class SPF_Governance_Control_Plane {
 		$changed_routes = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) ( $amendment['routes'] ?? array() ) ) ) ) );
 		$inventory = $inventory ?: self::runtime_inventory();
 		$dependents = array();
+		$dependency_map = array();
 		foreach ( (array) ( $inventory['modules'] ?? array() ) as $module ) {
 			$key = sanitize_key( $module['module_key'] ?? '' );
+			if ( ! $key ) {
+				continue;
+			}
 			$manifest = (array) ( $module['manifest'] ?? $module );
 			$deps = array_merge( (array) ( $manifest['required'] ?? array() ), (array) ( $manifest['optional'] ?? array() ) );
+			$dependency_map[ $key ] = array();
 			foreach ( $deps as $dep ) {
 				$dep_key = sanitize_key( is_array( $dep ) ? ( $dep['module_key'] ?? '' ) : $dep );
-				if ( $key && in_array( $dep_key, $affected, true ) ) {
-					$dependents[ $key ][] = $dep_key;
+				if ( $dep_key ) {
+					$dependency_map[ $key ][] = $dep_key;
 				}
 			}
+			$dependency_map[ $key ] = array_values( array_unique( $dependency_map[ $key ] ) );
+		}
+		$frontier = $affected;
+		$visited = array_fill_keys( $affected, true );
+		while ( $frontier ) {
+			$target = array_shift( $frontier );
+			foreach ( $dependency_map as $consumer => $deps ) {
+				if ( ! in_array( $target, $deps, true ) ) {
+					continue;
+				}
+				$dependents[ $consumer ][] = $target;
+				if ( empty( $visited[ $consumer ] ) ) {
+					$visited[ $consumer ] = true;
+					$frontier[] = $consumer;
+				}
+			}
+		}
+		foreach ( $dependents as $key => $deps ) {
+			$dependents[ $key ] = array_values( array_unique( $deps ) );
 		}
 		$risk = 0;
 		$risk += count( $affected ) * 2;
@@ -240,11 +281,18 @@ final class SPF_Governance_Control_Plane {
 	public static function build_traceability_report( array $requirements, array $evidence ) {
 		$rows = array();
 		$missing = array();
+		$duplicate_ids = array();
+		$seen = array();
 		foreach ( $requirements as $requirement ) {
 			$id = sanitize_text_field( is_array( $requirement ) ? ( $requirement['id'] ?? '' ) : $requirement );
 			if ( '' === $id ) {
 				continue;
 			}
+			if ( isset( $seen[ $id ] ) ) {
+				$duplicate_ids[] = $id;
+				continue;
+			}
+			$seen[ $id ] = true;
 			$item = (array) ( $evidence[ $id ] ?? array() );
 			$status = array(
 				'requirement' => $id,
@@ -254,9 +302,15 @@ final class SPF_Governance_Control_Plane {
 				'package'     => ! empty( $item['package'] ),
 				'staging'     => ! empty( $item['staging'] ),
 				'approval'    => ! empty( $item['approval'] ),
+				'live'        => ! empty( $item['live'] ) || ! empty( $item['deployed'] ),
+				'operational' => ! empty( $item['operational'] ),
 			);
 			$status['coded_complete'] = $status['design'] && $status['code'] && $status['test'];
-			$status['production_complete'] = $status['coded_complete'] && $status['package'] && $status['staging'] && $status['approval'];
+			$status['packaged_complete'] = $status['coded_complete'] && $status['package'];
+			$status['staging_complete'] = $status['packaged_complete'] && $status['staging'];
+			$status['release_ready'] = $status['staging_complete'] && $status['approval'];
+			$status['live_deployed'] = $status['release_ready'] && $status['live'];
+			$status['production_complete'] = $status['live_deployed'] && $status['operational'];
 			$rows[] = $status;
 			if ( ! $status['coded_complete'] ) {
 				$missing[] = $id;
@@ -264,15 +318,22 @@ final class SPF_Governance_Control_Plane {
 		}
 		$total = count( $rows );
 		$coded = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['coded_complete'] ); } ) );
+		$release_ready = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['release_ready'] ); } ) );
+		$live = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['live_deployed'] ); } ) );
 		$production = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['production_complete'] ); } ) );
 		return array(
-			'total'                 => $total,
-			'coded_complete'        => $coded,
-			'production_complete'   => $production,
-			'coded_percentage'      => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
-			'production_percentage' => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
-			'missing_coded_evidence'=> $missing,
-			'rows'                  => $rows,
+			'total'                   => $total,
+			'coded_complete'          => $coded,
+			'release_ready'           => $release_ready,
+			'live_deployed'           => $live,
+			'production_complete'     => $production,
+			'coded_percentage'        => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
+			'release_ready_percentage'=> $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
+			'live_percentage'         => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
+			'production_percentage'   => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
+			'missing_coded_evidence'  => $missing,
+			'duplicate_requirement_ids'=> array_values( array_unique( $duplicate_ids ) ),
+			'rows'                    => $rows,
 		);
 	}
 
@@ -302,7 +363,8 @@ final class SPF_Governance_Control_Plane {
 				$advice[] = array( 'severity'=>'medium', 'code'=>'traceability:missing-evidence', 'message'=>'Some requirements do not have complete design/code/test evidence.', 'action'=>'Close evidence gaps before claiming coded completion.' );
 			}
 		}
-		$external = apply_filters( 'spf_ai_governance_advisor', array(), $input, $advice );
+		$advisor_input = self::sanitize_advisory_input( $input );
+		$external = apply_filters( 'spf_ai_governance_advisor', array(), $advisor_input, $advice );
 		if ( is_array( $external ) ) {
 			foreach ( array_slice( $external, 0, 50 ) as $item ) {
 				if ( is_array( $item ) ) {
@@ -324,6 +386,40 @@ final class SPF_Governance_Control_Plane {
 		);
 	}
 
+	private static function sanitize_advisory_input( $value, $depth = 0, $parent_key = '' ) {
+		if ( $depth > 6 ) {
+			return array( '_truncated' => true );
+		}
+		if ( is_array( $value ) ) {
+			$out = array();
+			$count = 0;
+			foreach ( $value as $key => $item ) {
+				if ( $count++ >= 100 ) {
+					$out['_truncated'] = true;
+					break;
+				}
+				$safe_key = is_int( $key ) ? $key : sanitize_key( $key );
+				if ( ! is_int( $safe_key ) && '' === $safe_key ) {
+					continue;
+				}
+				$key_text = (string) $safe_key;
+				if ( preg_match( '/(patient|clinical|name|address|message|content|prompt|email|phone|token|secret|password|credential|cookie|authorization|document|government|national[_-]?id)/i', $key_text ) ) {
+					$out[ $safe_key ] = array( 'redacted' => true, 'value_hash' => SPF_Runtime::hash( $item ) );
+					continue;
+				}
+				$out[ $safe_key ] = self::sanitize_advisory_input( $item, $depth + 1, $key_text );
+			}
+			return $out;
+		}
+		if ( is_object( $value ) ) {
+			return self::sanitize_advisory_input( get_object_vars( $value ), $depth + 1, $parent_key );
+		}
+		if ( is_string( $value ) ) {
+			return substr( sanitize_text_field( $value ), 0, 500 );
+		}
+		return is_scalar( $value ) || null === $value ? $value : null;
+	}
+
 	private static function runtime_inventory() {
 		$modules = array();
 		foreach ( SPF_Registry::list_modules( array( 'limit' => 200 ) ) as $module ) {
@@ -338,10 +434,28 @@ final class SPF_Governance_Control_Plane {
 			}
 			$modules[] = $module;
 		}
+		$shell_owners = array();
+		foreach ( $modules as $module ) {
+			$key = sanitize_key( $module['module_key'] ?? '' );
+			$manifest = (array) ( $module['manifest'] ?? array() );
+			$claims_shell = ! empty( $manifest['global_shell_owner'] ) || ! empty( $manifest['application_shell_owner'] );
+			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
+				$entity_key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
+				if ( in_array( $entity_key, array( 'global-shell', 'application-shell', 'global-navigation' ), true ) ) {
+					$claims_shell = true;
+				}
+			}
+			if ( $key && $claims_shell ) {
+				$shell_owners[] = $key;
+			}
+		}
+		if ( ! in_array( 'file-20', $shell_owners, true ) ) {
+			$shell_owners[] = 'file-20';
+		}
 		return array(
 			'modules' => $modules,
 			'routes'  => SPF_Registry::list_routes(),
-			'global_shell_owners' => array( 'file-20' ),
+			'global_shell_owners' => array_values( array_unique( $shell_owners ) ),
 		);
 	}
 

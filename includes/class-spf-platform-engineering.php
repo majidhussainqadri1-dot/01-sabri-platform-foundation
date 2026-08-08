@@ -59,6 +59,11 @@ final class SPF_Platform_Engineering {
 		if ( '' === $module_key || '' === $owner_file || '' === $slug || '' === $prefix || strlen( $prefix ) > 16 ) {
 			return new WP_Error( 'spf_scaffold_invalid', __( 'Module key, owner file, slug and bounded namespace prefix are required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
 		}
+		$required = self::normalize_scaffold_dependencies( (array) ( $spec['required'] ?? array( 'file-01', 'file-00' ) ) );
+		$optional = self::normalize_scaffold_dependencies( (array) ( $spec['optional'] ?? array() ) );
+		if ( is_wp_error( $required ) || is_wp_error( $optional ) ) {
+			return is_wp_error( $required ) ? $required : $optional;
+		}
 		$manifest = array(
 			'module_key'       => $module_key,
 			'owner_file'       => $owner_file,
@@ -68,18 +73,18 @@ final class SPF_Platform_Engineering {
 			'software_version' => '0.1.0',
 			'contract_version' => '1.0.0',
 			'state'            => 'registered',
-			'required'         => array_values( array_filter( array_map( 'sanitize_key', (array) ( $spec['required'] ?? array( 'file-01', 'file-00' ) ) ) ) ),
-			'optional'         => array_values( array_filter( array_map( 'sanitize_key', (array) ( $spec['optional'] ?? array() ) ) ) ),
+			'required'         => $required,
+			'optional'         => $optional,
 			'commands'         => array(),
 			'queries'          => array(),
 			'events'           => array(),
 			'privacy_classes'  => array( 'internal' ),
 		);
 		$plugin_header = "<?php\n/**\n * Plugin Name: " . ( $manifest['owner_name'] ?: $module_key ) . "\n * Version: 0.1.0\n * Requires PHP: 8.1\n */\n\ndefined( 'ABSPATH' ) || exit;\n";
-		$test = "<?php\ndeclare(strict_types=1);\n// Golden-path smoke: verify bootstrap, manifest and public contracts.\n";
-		$ci = "name: Module QA\non: [push, pull_request]\njobs:\n  qa:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      - name: PHP syntax\n        run: find . -name '*.php' -print0 | xargs -0 -n1 php -l\n";
+		$test = "<?php\ndeclare(strict_types=1);\n\$manifest = json_decode( file_get_contents( dirname(__DIR__) . '/manifest.json' ), true );\nif ( ! is_array( \$manifest ) || empty( \$manifest['module_key'] ) || empty( \$manifest['owner_file'] ) ) { fwrite( STDERR, 'Invalid generated manifest.' . PHP_EOL ); exit(1); }\necho 'Generated module smoke PASS' . PHP_EOL;\n";
+		$ci = "name: Module QA\non: [push, pull_request]\njobs:\n  qa:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n      - name: PHP syntax\n        run: find . -name '*.php' -print0 | xargs -0 -n1 php -l\n      - name: Golden-path smoke\n        run: php tests/smoke.php\n";
 		return array(
-			'scaffold_version' => '1.0.0',
+			'scaffold_version' => '1.1.0',
 			'manifest'         => $manifest,
 			'files'            => array(
 				$slug . '.php'             => $plugin_header,
@@ -141,13 +146,26 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $normalized ) ) {
 			return $normalized;
 		}
-		$registry = get_option( self::EVENT_SCHEMA_OPTION, array() );
-		$registry = is_array( $registry ) ? $registry : array();
-		$key = $normalized['event_name'] . '@' . $normalized['version'];
-		$registry[ $key ] = $normalized;
-		ksort( $registry, SORT_STRING );
-		update_option( self::EVENT_SCHEMA_OPTION, array_slice( $registry, 0, 500, true ), false );
-		return $normalized;
+		$lock_name = 'future-event-schema-registry';
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		try {
+			$registry = get_option( self::EVENT_SCHEMA_OPTION, array() );
+			$registry = is_array( $registry ) ? $registry : array();
+			$key = $normalized['event_name'] . '@' . $normalized['version'];
+			$registry[ $key ] = $normalized;
+			ksort( $registry, SORT_STRING );
+			$expected = array_slice( $registry, 0, 500, true );
+			update_option( self::EVENT_SCHEMA_OPTION, $expected, false );
+			if ( SPF_Runtime::hash( get_option( self::EVENT_SCHEMA_OPTION, array() ) ) !== SPF_Runtime::hash( $expected ) ) {
+				return new WP_Error( 'spf_event_schema_persistence_failed', __( 'The event schema registry could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			return $normalized;
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
+		}
 	}
 
 	public static function list_event_schemas() {
@@ -167,6 +185,14 @@ final class SPF_Platform_Engineering {
 			}
 			if ( array_key_exists( $field, $event ) && ! self::value_matches_type( $event[ $field ], $definition['type'] ) ) {
 				$errors[] = 'type:' . $field;
+			}
+		}
+		if ( empty( $normalized['allow_additional'] ) ) {
+			foreach ( array_keys( $event ) as $field ) {
+				$field_key = sanitize_key( $field );
+				if ( '' === $field_key || ! array_key_exists( $field_key, $normalized['fields'] ) ) {
+					$errors[] = 'unknown:' . $field_key;
+				}
 			}
 		}
 		return array(
@@ -202,11 +228,24 @@ final class SPF_Platform_Engineering {
 		if ( ! in_array( $environment, array( 'development','ci','staging','production' ), true ) ) {
 			return new WP_Error( 'spf_config_environment_invalid', __( 'A supported environment is required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
-		$baseline = get_option( self::CONFIG_BASELINE_OPTION, array() );
-		$baseline = is_array( $baseline ) ? $baseline : array();
-		$baseline[ $environment ] = self::sanitize_config( $config );
-		update_option( self::CONFIG_BASELINE_OPTION, $baseline, false );
-		return array( 'environment'=>$environment, 'config_hash'=>SPF_Runtime::hash( $baseline[ $environment ] ) );
+		$sanitized = self::sanitize_config( $config );
+		$lock_name = 'future-config-baselines';
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		try {
+			$baseline = get_option( self::CONFIG_BASELINE_OPTION, array() );
+			$baseline = is_array( $baseline ) ? $baseline : array();
+			$baseline[ $environment ] = $sanitized;
+			update_option( self::CONFIG_BASELINE_OPTION, $baseline, false );
+			if ( SPF_Runtime::hash( get_option( self::CONFIG_BASELINE_OPTION, array() ) ) !== SPF_Runtime::hash( $baseline ) ) {
+				return new WP_Error( 'spf_config_baseline_persistence_failed', __( 'The configuration baseline could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			return array( 'environment'=>$environment, 'config_hash'=>SPF_Runtime::hash( $sanitized ) );
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
+		}
 	}
 
 	public static function detect_config_drift( $environment, array $current ) {
@@ -236,13 +275,28 @@ final class SPF_Platform_Engineering {
 	public static function plan_release_train( array $manifests ) {
 		$versions = array();
 		$dependencies = array();
-		foreach ( $manifests as $manifest ) {
-			$key = sanitize_key( $manifest['module_key'] ?? '' );
-			if ( ! $key ) {
+		$manifest_errors = array();
+		$seen = array();
+		foreach ( $manifests as $index => $manifest ) {
+			if ( ! is_array( $manifest ) ) {
+				$manifest_errors[] = array( 'index'=>$index, 'code'=>'manifest_not_object' );
 				continue;
 			}
-			$version = sanitize_text_field( $manifest['software_version'] ?? '0.0.0' );
-			$versions[ $key ] = SPF_Registry::valid_semver( $version ) ? $version : '0.0.0';
+			$key = sanitize_key( $manifest['module_key'] ?? '' );
+			if ( ! $key ) {
+				$manifest_errors[] = array( 'index'=>$index, 'code'=>'module_key_missing' );
+				continue;
+			}
+			if ( isset( $seen[ $key ] ) ) {
+				$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'duplicate_module_key' );
+				continue;
+			}
+			$seen[ $key ] = true;
+			$version = sanitize_text_field( $manifest['software_version'] ?? '' );
+			if ( ! SPF_Registry::valid_semver( $version ) ) {
+				$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'software_version_invalid', 'value'=>$version );
+			}
+			$versions[ $key ] = $version;
 			$dependencies[ $key ] = array();
 			foreach ( (array) ( $manifest['required'] ?? array() ) as $dependency ) {
 				if ( is_array( $dependency ) ) {
@@ -252,9 +306,22 @@ final class SPF_Platform_Engineering {
 					$dep_key = sanitize_key( $dependency );
 					$minimum = '0.0.0';
 				}
-				if ( $dep_key ) {
-					$dependencies[ $key ][ $dep_key ] = SPF_Registry::valid_semver( $minimum ) ? $minimum : '0.0.0';
+				if ( ! $dep_key ) {
+					$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'dependency_key_invalid' );
+					continue;
 				}
+				if ( $dep_key === $key ) {
+					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'self_dependency' );
+				}
+				if ( ! SPF_Registry::valid_semver( $minimum ) ) {
+					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'minimum_version_invalid', 'value'=>$minimum );
+					continue;
+				}
+				if ( isset( $dependencies[ $key ][ $dep_key ] ) && $dependencies[ $key ][ $dep_key ] !== $minimum ) {
+					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'dependency_version_conflict' );
+					continue;
+				}
+				$dependencies[ $key ][ $dep_key ] = $minimum;
 			}
 		}
 		$in_degree = array_fill_keys( array_keys( $dependencies ), 0 );
@@ -267,8 +334,8 @@ final class SPF_Platform_Engineering {
 					$missing[ $module ][] = $dep;
 					continue;
 				}
-				if ( '0.0.0' !== $minimum && version_compare( $versions[ $dep ] ?? '0.0.0', $minimum, '<' ) ) {
-					$incompatible[ $module ][] = array( 'module_key'=>$dep, 'minimum_version'=>$minimum, 'actual_version'=>$versions[ $dep ] ?? '0.0.0' );
+				if ( SPF_Registry::valid_semver( $versions[ $dep ] ?? '' ) && '0.0.0' !== $minimum && version_compare( $versions[ $dep ], $minimum, '<' ) ) {
+					$incompatible[ $module ][] = array( 'module_key'=>$dep, 'minimum_version'=>$minimum, 'actual_version'=>$versions[ $dep ] );
 				}
 				$edges[ $dep ][] = $module;
 				$in_degree[ $module ]++;
@@ -290,12 +357,13 @@ final class SPF_Platform_Engineering {
 		}
 		$cycles = array_keys( array_filter( $in_degree, static function ( $degree ) { return $degree > 0; } ) );
 		return array(
-			'valid'            => empty( $missing ) && empty( $incompatible ) && empty( $cycles ),
+			'valid'            => empty( $manifest_errors ) && empty( $missing ) && empty( $incompatible ) && empty( $cycles ),
 			'order'            => $order,
+			'manifest_errors'  => $manifest_errors,
 			'missing'          => $missing,
 			'incompatible'     => $incompatible,
 			'cycle_candidates' => $cycles,
-			'plan_hash'        => SPF_Runtime::hash( array( 'versions'=>$versions, 'dependencies'=>$dependencies, 'order'=>$order ) ),
+			'plan_hash'        => SPF_Runtime::hash( array( 'versions'=>$versions, 'dependencies'=>$dependencies, 'order'=>$order, 'errors'=>$manifest_errors ) ),
 			'execution_mode'   => 'plan-only-until-approved-deployment-adapter',
 		);
 	}
@@ -311,19 +379,44 @@ final class SPF_Platform_Engineering {
 		if ( '' === $release_id || empty( $rings ) || count( $rings ) > 20 || empty( $slo ) ) {
 			return new WP_Error( 'spf_rollout_invalid', __( 'A release id, bounded rollout rings and at least one SLO objective are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
-		$rollouts = get_option( self::ROLLOUT_OPTION, array() );
-		$rollouts = is_array( $rollouts ) ? $rollouts : array();
-		$rollouts[ $release_id ] = array(
-			'release_id' => $release_id,
-			'rings'      => $rings,
-			'index'      => 0,
-			'status'     => 'planned',
-			'slo'        => self::sanitize_numeric_map( $slo ),
-			'created_at' => SPF_Runtime::now_mysql(),
-			'updated_at' => SPF_Runtime::now_mysql(),
-		);
-		update_option( self::ROLLOUT_OPTION, array_slice( $rollouts, -100, null, true ), false );
-		return $rollouts[ $release_id ];
+		$lock_name = 'future-rollout-' . substr( SPF_Runtime::hash( $release_id ), 0, 24 );
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+		try {
+			$rollouts = get_option( self::ROLLOUT_OPTION, array() );
+			$rollouts = is_array( $rollouts ) ? $rollouts : array();
+			$requested_hash = SPF_Runtime::hash( array( 'rings'=>$rings, 'slo'=>$slo ) );
+			if ( ! empty( $rollouts[ $release_id ] ) ) {
+				$existing = (array) $rollouts[ $release_id ];
+				$existing_hash = SPF_Runtime::hash( array( 'rings'=>(array)($existing['rings'] ?? array()), 'slo'=>(array)($existing['slo'] ?? array()) ) );
+				if ( hash_equals( $existing_hash, $requested_hash ) ) {
+					return $existing;
+				}
+				return new WP_Error( 'spf_rollout_conflict', __( 'A rollout already exists for this release with different rings or SLO objectives.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			$rollouts[ $release_id ] = array(
+				'release_id'   => $release_id,
+				'rings'        => $rings,
+				'index'        => 0,
+				'current_ring' => $rings[0],
+				'status'       => 'planned',
+				'slo'          => $slo,
+				'revision'     => 1,
+				'created_at'   => SPF_Runtime::now_mysql(),
+				'updated_at'   => SPF_Runtime::now_mysql(),
+			);
+			$expected = array_slice( $rollouts, -100, null, true );
+			update_option( self::ROLLOUT_OPTION, $expected, false );
+			$persisted = get_option( self::ROLLOUT_OPTION, array() );
+			if ( empty( $persisted[ $release_id ] ) || SPF_Runtime::hash( $persisted[ $release_id ] ) !== SPF_Runtime::hash( $expected[ $release_id ] ) ) {
+				return new WP_Error( 'spf_rollout_persistence_failed', __( 'The progressive rollout could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			return $expected[ $release_id ];
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
+		}
 	}
 
 	public static function advance_rollout( $release_id, array $metrics ) {
@@ -331,60 +424,82 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
-		$rollouts = get_option( self::ROLLOUT_OPTION, array() );
 		$release_id = substr( sanitize_text_field( $release_id ), 0, 191 );
-		if ( ! is_array( $rollouts ) || empty( $rollouts[ $release_id ] ) ) {
-			return new WP_Error( 'spf_rollout_missing', __( 'The progressive rollout was not found.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
+		$lock_name = 'future-rollout-' . substr( SPF_Runtime::hash( $release_id ), 0, 24 );
+		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
 		}
-		$rollout = $rollouts[ $release_id ];
-		$gate = self::evaluate_slo_gate( $metrics, (array) $rollout['slo'] );
-		if ( empty( $gate['allow'] ) ) {
-			$rollout['status'] = 'rollback_required';
-			$rollout['rollback_reason'] = $gate['reason'];
-			$rollout['rollback_requested_at'] = SPF_Runtime::now_mysql();
-			do_action( 'spf_progressive_delivery_rollback_requested', $release_id, $rollout, $gate );
-		} else {
-			$current_index = (int) ( $rollout['index'] ?? 0 );
-			$next_index = min( $current_index + 1, count( $rollout['rings'] ) - 1 );
-			$next_ring = sanitize_key( $rollout['rings'][ $next_index ] ?? '' );
-			if ( in_array( $next_ring, array( 'production','full','all','100' ), true ) ) {
-				$founder_gate = SPF_Authorization::require_action( 'deploy_release', array( 'object_id'=>$release_id, 'next_ring'=>$next_ring ), array( 'purpose'=>'progressive_delivery_final' ) );
-				if ( is_wp_error( $founder_gate ) ) {
-					return $founder_gate;
-				}
+		try {
+			$rollouts = get_option( self::ROLLOUT_OPTION, array() );
+			if ( ! is_array( $rollouts ) || empty( $rollouts[ $release_id ] ) ) {
+				return new WP_Error( 'spf_rollout_missing', __( 'The progressive rollout was not found.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
 			}
-			if ( $next_index === $current_index ) {
-				$rollout['status'] = 'full';
+			$rollout = (array) $rollouts[ $release_id ];
+			$status = sanitize_key( $rollout['status'] ?? '' );
+			if ( in_array( $status, array( 'rollback_required','rolled_back' ), true ) ) {
+				return new WP_Error( 'spf_rollout_rollback_pending', __( 'This rollout is rollback-gated and cannot advance.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			if ( 'full' === $status ) {
+				return $rollout;
+			}
+			$gate = self::evaluate_slo_gate( $metrics, (array) ( $rollout['slo'] ?? array() ) );
+			if ( empty( $gate['allow'] ) ) {
+				$rollout['status'] = 'rollback_required';
+				$rollout['rollback_reason'] = $gate['reason'];
+				$rollout['rollback_requested_at'] = SPF_Runtime::now_mysql();
+				do_action( 'spf_progressive_delivery_rollback_requested', $release_id, $rollout, $gate );
 			} else {
-				$execution = apply_filters( 'spf_progressive_delivery_execute_ring', null, array(
-					'release_id'   => $release_id,
-					'current_ring' => sanitize_key( $rollout['rings'][ $current_index ] ?? '' ),
-					'next_ring'    => $next_ring,
-					'gate'         => $gate,
-				) );
-				$executed_at = is_array( $execution ) ? strtotime( (string) ( $execution['executed_at'] ?? '' ) ) : false;
-				$execution_valid = is_array( $execution ) && ! empty( $execution['verified'] )
-					&& sanitize_key( $execution['release_id'] ?? '' ) === sanitize_key( $release_id )
-					&& sanitize_key( $execution['ring'] ?? '' ) === $next_ring
-					&& ! empty( $execution['evidence_id'] ) && $executed_at && abs( time() - $executed_at ) <= 900;
-				if ( $execution_valid ) {
-					$rollout['index'] = $next_index;
-					$rollout['current_ring'] = $next_ring;
-					$rollout['status'] = ( $next_index >= count( $rollout['rings'] ) - 1 ) ? 'full' : 'progressing';
-					$rollout['execution_evidence_hash'] = SPF_Runtime::hash( $execution );
+				$current_index = max( 0, min( (int) ( $rollout['index'] ?? 0 ), count( (array) $rollout['rings'] ) - 1 ) );
+				$next_index = min( $current_index + 1, count( $rollout['rings'] ) - 1 );
+				$next_ring = sanitize_key( $rollout['rings'][ $next_index ] ?? '' );
+				if ( in_array( $next_ring, array( 'production','full','all','100' ), true ) ) {
+					$founder_gate = SPF_Authorization::require_action( 'deploy_release', array( 'object_id'=>$release_id, 'next_ring'=>$next_ring ), array( 'purpose'=>'progressive_delivery_final' ) );
+					if ( is_wp_error( $founder_gate ) ) {
+						return $founder_gate;
+					}
+				}
+				if ( $next_index === $current_index ) {
+					$rollout['status'] = 'full';
 				} else {
-					$rollout['status'] = 'advance_pending_adapter';
-					$rollout['next_ring'] = $next_ring;
-					$rollout['advance_requested_at'] = SPF_Runtime::now_mysql();
-					do_action( 'spf_progressive_delivery_action_requested', $release_id, $next_ring, $rollout, $gate );
+					$execution = apply_filters( 'spf_progressive_delivery_execute_ring', null, array(
+						'release_id'   => $release_id,
+						'current_ring' => sanitize_key( $rollout['rings'][ $current_index ] ?? '' ),
+						'next_ring'    => $next_ring,
+						'gate'         => $gate,
+					) );
+					$executed_at = is_array( $execution ) ? strtotime( (string) ( $execution['executed_at'] ?? '' ) ) : false;
+					$execution_valid = is_array( $execution ) && ! empty( $execution['verified'] )
+						&& sanitize_key( $execution['release_id'] ?? '' ) === sanitize_key( $release_id )
+						&& sanitize_key( $execution['ring'] ?? '' ) === $next_ring
+						&& ! empty( $execution['evidence_id'] ) && strlen( (string) $execution['evidence_id'] ) <= 191
+						&& $executed_at && abs( time() - $executed_at ) <= 900;
+					if ( $execution_valid ) {
+						$rollout['index'] = $next_index;
+						$rollout['current_ring'] = $next_ring;
+						$rollout['status'] = ( $next_index >= count( $rollout['rings'] ) - 1 ) ? 'full' : 'progressing';
+						$rollout['execution_evidence_hash'] = SPF_Runtime::hash( $execution );
+					} else {
+						$rollout['status'] = 'advance_pending_adapter';
+						$rollout['next_ring'] = $next_ring;
+						$rollout['advance_requested_at'] = SPF_Runtime::now_mysql();
+						do_action( 'spf_progressive_delivery_action_requested', $release_id, $next_ring, $rollout, $gate );
+					}
 				}
 			}
+			$rollout['revision'] = max( 1, (int) ( $rollout['revision'] ?? 1 ) + 1 );
+			$rollout['updated_at'] = SPF_Runtime::now_mysql();
+			$rollout['last_gate'] = $gate;
+			$rollouts[ $release_id ] = $rollout;
+			update_option( self::ROLLOUT_OPTION, $rollouts, false );
+			$persisted = get_option( self::ROLLOUT_OPTION, array() );
+			if ( empty( $persisted[ $release_id ] ) || SPF_Runtime::hash( $persisted[ $release_id ] ) !== SPF_Runtime::hash( $rollout ) ) {
+				return new WP_Error( 'spf_rollout_persistence_failed', __( 'The progressive rollout state could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			return $rollout;
+		} finally {
+			SPF_Runtime::release_lock( $lock_name, $lock );
 		}
-		$rollout['updated_at'] = SPF_Runtime::now_mysql();
-		$rollout['last_gate'] = $gate;
-		$rollouts[ $release_id ] = $rollout;
-		update_option( self::ROLLOUT_OPTION, $rollouts, false );
-		return $rollout;
 	}
 
 	public static function evaluate_slo_gate( array $metrics, array $objectives ) {
@@ -475,8 +590,9 @@ final class SPF_Platform_Engineering {
 			'event_name'    => substr( $name, 0, 160 ),
 			'version'       => $version,
 			'owner_module'  => $owner,
-			'privacy_class' => sanitize_key( $schema['privacy_class'] ?? 'internal' ),
-			'fields'        => $fields,
+			'privacy_class'   => sanitize_key( $schema['privacy_class'] ?? 'internal' ),
+			'allow_additional' => ! empty( $schema['allow_additional'] ),
+			'fields'          => $fields,
 			'deprecated_at' => substr( sanitize_text_field( $schema['deprecated_at'] ?? '' ), 0, 40 ),
 		);
 	}
@@ -521,6 +637,33 @@ final class SPF_Platform_Engineering {
 		return $out;
 	}
 
+
+	private static function normalize_scaffold_dependencies( array $dependencies ) {
+		$out = array();
+		$seen = array();
+		foreach ( array_slice( $dependencies, 0, 100 ) as $dependency ) {
+			if ( is_array( $dependency ) ) {
+				$key = sanitize_key( $dependency['module_key'] ?? '' );
+				$minimum = sanitize_text_field( $dependency['minimum_version'] ?? '0.0.0' );
+				if ( ! $key || ! SPF_Registry::valid_semver( $minimum ) ) {
+					return new WP_Error( 'spf_scaffold_dependency_invalid', __( 'Generated module dependencies require a module key and valid minimum semantic version.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+				}
+				$value = array( 'module_key'=>$key, 'minimum_version'=>$minimum );
+			} else {
+				$key = sanitize_key( $dependency );
+				if ( ! $key ) {
+					continue;
+				}
+				$value = $key;
+			}
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[] = $value;
+		}
+		return $out;
+	}
 
 	private static function sanitize_numeric_map( array $values ) {
 		$out = array();

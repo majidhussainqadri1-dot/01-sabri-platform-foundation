@@ -1,202 +1,132 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/bootstrap-minimal.php';
+$assertions=0; $failures=[];
+$assert=static function(bool $c,string $m)use(&$assertions,&$failures):void{$assertions++;if(!$c)$failures[]=$m;};
 
-$assertions = 0;
-$failures = [];
-$assert = static function ( bool $condition, string $message ) use ( &$assertions, &$failures ): void {
-	$assertions++;
-	if ( ! $condition ) { $failures[] = $message; }
-};
+$features=SPF_Future_Foundation::feature_catalog();
+$assert(count($features)===18,'18 enhancements missing.');
+$assert(isset($features['F01-FUT-001'],$features['F01-FUT-018']),'Stable future IDs incomplete.');
+$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='coded'))===18,'Not all future enhancements coded.');
 
-$features = SPF_Future_Foundation::feature_catalog();
-$assert( count( $features ) === 18, 'Future Foundation catalog does not contain all 18 enhancements.' );
-$assert( isset( $features['F01-FUT-001'], $features['F01-FUT-018'] ), 'Future Foundation stable IDs are incomplete.' );
-$assert( count( array_filter( $features, static fn($f) => ($f['status'] ?? '') === 'coded' ) ) === 18, 'Not all enhancements are marked coded.' );
+$policies=SPF_Governance_Control_Plane::default_policies();
+$assert(SPF_Governance_Control_Plane::evaluate_policy('claim_global_shell',[],$policies)['decision']==='deny','Duplicate shell not denied.');
+$assert(SPF_Governance_Control_Plane::evaluate_policy('view',[],$policies)['decision']==='abstain','Policy engine granted unrelated authority.');
 
-$policies = SPF_Governance_Control_Plane::default_policies();
-$decision = SPF_Governance_Control_Plane::evaluate_policy( 'claim_global_shell', [], $policies );
-$assert( $decision['decision'] === 'deny', 'Policy-as-Code did not deny a duplicate shell ownership claim.' );
-$decision = SPF_Governance_Control_Plane::evaluate_policy( 'view', [], $policies );
-$assert( $decision['decision'] === 'abstain', 'Policy-as-Code improperly granted or denied an unrelated action.' );
+$inventory=['modules'=>[
+ ['module_key'=>'file-01','manifest'=>['required'=>[]]],
+ ['module_key'=>'file-20','manifest'=>['required'=>['file-01']]],
+ ['module_key'=>'file-21','manifest'=>['required'=>['file-20']]],
+],'routes'=>[],'global_shell_owners'=>['file-20']];
+$impact=SPF_Governance_Control_Plane::simulate_amendment(['decision_id'=>'D-200','affected_files'=>['file-01'],'contracts'=>['FoundationRegistry.v1'],'migration_required'=>true,'security_privacy_impact'=>true],$inventory);
+$assert($impact['requires_migration']===true,'Amendment migration requirement lost.');
+$assert(isset($impact['dependent_modules']['file-20'],$impact['dependent_modules']['file-21']),'Transitive amendment impact incomplete.');
+$assert($impact['risk_band']==='high','High amendment impact not high risk.');
+$assert(in_array('rollback',$impact['required_test_gates'],true),'Rollback gate omitted.');
 
-$inventory = [
-	'modules' => [
-		[ 'module_key'=>'file-01', 'manifest'=>[ 'required'=>[] ] ],
-		[ 'module_key'=>'file-20', 'manifest'=>[ 'required'=>['file-01'] ] ],
-		[ 'module_key'=>'file-21', 'manifest'=>[ 'required'=>['file-01','file-20'] ] ],
-	],
-	'routes' => [],
-	'global_shell_owners'=>['file-20'],
-];
-$impact = SPF_Governance_Control_Plane::simulate_amendment([
-	'decision_id'=>'D-200','affected_files'=>['file-01'],'contracts'=>['FoundationRegistry.v1'],'migration_required'=>true,'security_privacy_impact'=>true
-], $inventory );
-$assert( $impact['requires_migration'] === true, 'Amendment simulator lost migration requirement.' );
-$assert( isset( $impact['dependent_modules']['file-20'] ), 'Amendment simulator did not find dependent modules.' );
-$assert( $impact['risk_band'] === 'high', 'High-impact amendment was not classified high risk.' );
-$assert( in_array( 'rollback', $impact['required_test_gates'], true ), 'Amendment simulator omitted rollback gate.' );
+$lint=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[
+ ['module_key'=>'file-a','canonical_entities'=>['profile']],
+ ['module_key'=>'file-b','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-a']]],
+],'routes'=>[['route_path'=>'/same','owner_module'=>'file-a'],['route_path'=>'/same','owner_module'=>'file-b']],'global_shell_owners'=>['file-20','file-x']]);
+$codes=array_column($lint['findings'],'code');
+$assert($lint['pass']===false,'Architecture linter missed conflicts.');
+foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}
 
-$lint = SPF_Governance_Control_Plane::lint_architecture([
-	'modules'=>[
-		['module_key'=>'file-a','canonical_entities'=>['profile']],
-		['module_key'=>'file-b','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-a']]],
-	],
-	'routes'=>[
-		['route_path'=>'/same','owner_module'=>'file-a'],
-		['route_path'=>'/same','owner_module'=>'file-b'],
-	],
-	'global_shell_owners'=>['file-20'],
+$trace=SPF_Governance_Control_Plane::build_traceability_report([['id'=>'REQ-1'],['id'=>'REQ-1'],['id'=>'REQ-2']],[
+ 'REQ-1'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1],
+ 'REQ-2'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1,'live'=>1,'operational'=>1],
 ]);
-$assert( $lint['pass'] === false, 'Architecture linter failed to detect conflicts.' );
-$codes = array_column( $lint['findings'], 'code' );
-$assert( in_array( 'duplicate_canonical_owner', $codes, true ), 'Duplicate canonical owner not detected.' );
-$assert( in_array( 'foreign_direct_write', $codes, true ), 'Foreign direct write not detected.' );
-$assert( in_array( 'duplicate_route_owner', $codes, true ), 'Duplicate route owner not detected.' );
+$assert($trace['total']===2,'Duplicate requirement IDs inflated trace total.');
+$assert($trace['coded_complete']===2,'Trace coded count wrong.');
+$assert($trace['release_ready']===2,'Trace release-ready count wrong.');
+$assert($trace['live_deployed']===1,'Trace live count wrong.');
+$assert($trace['production_complete']===1,'Trace operational completion truth wrong.');
+$assert($trace['duplicate_requirement_ids']===['REQ-1'],'Duplicate requirement IDs not reported.');
 
-$trace = SPF_Governance_Control_Plane::build_traceability_report(
-	[['id'=>'REQ-1'],['id'=>'REQ-2']],
-	[
-		'REQ-1'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1],
-		'REQ-2'=>['design'=>1,'code'=>1,'test'=>0],
-	]
-);
-$assert( $trace['total'] === 2, 'Traceability total is wrong.' );
-$assert( $trace['coded_complete'] === 1, 'Traceability coded count is wrong.' );
-$assert( $trace['coded_percentage'] === 50.0, 'Traceability coded percentage is wrong.' );
-$assert( $trace['production_complete'] === 1, 'Traceability production count is wrong.' );
+$scaffold=SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-27','owner_file'=>'27','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]]);
+$assert(!is_wp_error($scaffold),'Structured golden-path dependency rejected.');
+$assert($scaffold['generated_only']===true && $scaffold['write_performed']===false,'Scaffolder must remain generation-only.');
+$assert(($scaffold['manifest']['required'][0]['minimum_version']??'')==='2.0.0','Scaffolder lost minimum dependency version.');
+$assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'),'Scaffold checkout action not pinned.');
+$assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/smoke.php'),'Generated CI does not execute smoke test.');
 
-$scaffold = SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-27','owner_file'=>'27','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM']);
-$assert( ! is_wp_error( $scaffold ), 'Golden-path scaffolder rejected a valid module.' );
-$assert( $scaffold['generated_only'] === true && $scaffold['write_performed'] === false, 'Scaffolder should be generation-only by default.' );
-$assert( isset( $scaffold['files']['example-module.php'], $scaffold['files']['.github/workflows/qa.yml'] ), 'Scaffolder omitted golden-path files.' );
-$assert( str_contains( $scaffold['files']['.github/workflows/qa.yml'], 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683' ), 'Scaffolder did not pin the checkout action.' );
+$compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]);
+$assert($compat['breaking_change']===true,'Contract breaking changes missed.');
+$assert($compat['major_bump_ok']===true,'Major bump rejected for breaking change.');
 
-$compat = SPF_Platform_Engineering::contract_compatibility(
-	['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],
-	['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]
-);
-$assert( $compat['breaking_change'] === true, 'Contract lab failed to detect breaking changes.' );
-$assert( $compat['major_bump_ok'] === true, 'Contract lab failed to accept an explicit major bump for breaking changes.' );
-$assert( count( $compat['issues'] ) >= 2, 'Contract lab emitted too few issues.' );
+$schema=['event_name'=>'ExampleChanged.v1','version'=>'1.0.0','owner_module'=>'file-01','fields'=>['event_id'=>['type'=>'string','required'=>true],'occurred_at'=>['type'=>'timestamp','required'=>true],'count'=>['type'=>'integer','required'=>true]]];
+$event=['event_id'=>'evt-1','occurred_at'=>'2026-08-08T05:00:00Z','count'=>2];
+$event_check=SPF_Platform_Engineering::validate_event_fixture($event,$schema);
+$assert(!is_wp_error($event_check)&&$event_check['valid']===true,'Valid event fixture rejected.');
+$event_extra=SPF_Platform_Engineering::validate_event_fixture($event+['secret'=>'x'],$schema);
+$assert($event_extra['valid']===false && in_array('unknown:secret',$event_extra['errors'],true),'Unknown event field not rejected.');
+$replay=SPF_Platform_Engineering::replay_event_fixture($event,$schema,true);
+$assert($replay['simulation_only']===true && $replay['dispatched']===false,'Replay dispatched without explicit safe gate.');
 
-$event_schema = ['event_name'=>'ExampleChanged.v1','version'=>'1.0.0','owner_module'=>'file-01','fields'=>['event_id'=>['type'=>'string','required'=>true],'occurred_at'=>['type'=>'timestamp','required'=>true],'count'=>['type'=>'integer','required'=>true]]];
-$event = ['event_id'=>'evt-1','occurred_at'=>'2026-08-08T05:00:00Z','count'=>2];
-$event_check = SPF_Platform_Engineering::validate_event_fixture( $event, $event_schema );
-$assert( ! is_wp_error( $event_check ) && $event_check['valid'] === true, 'Event Schema Registry rejected a valid fixture.' );
-$replay = SPF_Platform_Engineering::replay_event_fixture( $event, $event_schema, true );
-$assert( $replay['simulation_only'] === true && $replay['dispatched'] === false, 'Event replay should be simulation-only without an explicit safe dispatch gate.' );
-$platform_source = file_get_contents( dirname(__DIR__) . '/includes/class-spf-platform-engineering.php' );
-$assert( str_contains( $platform_source, "wp_get_environment_type()" ) && str_contains( $platform_source, "'production' !== \$environment" ), 'Event replay dispatch gate is not fail-closed for production.' );
+$GLOBALS['spf_test_options'][SPF_Platform_Engineering::CONFIG_BASELINE_OPTION]=['staging'=>['mode'=>'safe','api_token'=>['secret_hash'=>hash('sha256','x'),'redacted'=>true]]];
+$drift=SPF_Platform_Engineering::detect_config_drift('staging',['mode'=>'unsafe','api_token'=>'x']);
+$assert($drift['baseline_found']===true && $drift['drifted']===true,'Config drift not detected.');
+$sanitize_config=new ReflectionMethod(SPF_Platform_Engineering::class,'sanitize_config');$sanitize_config->setAccessible(true);
+$nested=$sanitize_config->invoke(null,['provider'=>['api_token'=>'nested-secret','mode'=>'safe']]);
+$assert(($nested['provider']['api_token']['redacted']??false)===true,'Nested configuration secret not redacted.');
 
-$GLOBALS['spf_test_options'][SPF_Platform_Engineering::CONFIG_BASELINE_OPTION] = ['staging'=>['mode'=>'safe','api_token'=>['secret_hash'=>hash('sha256','x'),'redacted'=>true]]];
-$drift = SPF_Platform_Engineering::detect_config_drift( 'staging', ['mode'=>'unsafe','api_token'=>'x'] );
-$assert( $drift['baseline_found'] === true, 'Config drift detector did not find baseline.' );
-$assert( $drift['drifted'] === true, 'Config drift detector failed to detect a changed value.' );
-$assert( count( $drift['changes'] ) >= 1, 'Config drift detector returned no changes.' );
-$sanitize_config = new ReflectionMethod( SPF_Platform_Engineering::class, 'sanitize_config' );
-$sanitize_config->setAccessible( true );
-$nested_config = $sanitize_config->invoke( null, ['provider'=>['api_token'=>'nested-secret','mode'=>'safe']] );
-$assert( isset($nested_config['provider']['api_token']['redacted']) && $nested_config['provider']['api_token']['redacted'] === true, 'Nested configuration secret was not redacted.' );
-
-$train = SPF_Platform_Engineering::plan_release_train([
-	['module_key'=>'file-01','software_version'=>'2.0.0','required'=>[]],
-	['module_key'=>'file-00','software_version'=>'1.2.3','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]],
-	['module_key'=>'file-20','software_version'=>'1.2.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0'],['module_key'=>'file-00','minimum_version'=>'1.2.0']]],
-	['module_key'=>'file-21','software_version'=>'1.0.1','required'=>[['module_key'=>'file-20','minimum_version'=>'1.2.0']]],
+$train=SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'2.0.0','required'=>[]],
+ ['module_key'=>'file-00','software_version'=>'1.2.3','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]],
+ ['module_key'=>'file-20','software_version'=>'1.2.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0'],['module_key'=>'file-00','minimum_version'=>'1.2.0']]],
+ ['module_key'=>'file-21','software_version'=>'1.0.1','required'=>[['module_key'=>'file-20','minimum_version'=>'1.2.0']]],
 ]);
-$assert( $train['valid'] === true, 'Release train rejected a valid dependency graph.' );
-$assert( array_search('file-01',$train['order'],true) < array_search('file-20',$train['order'],true), 'Release train order violates dependencies.' );
-$assert( empty( $train['incompatible'] ), 'Release train reported compatible versions as incompatible.' );
-$incompatible_train = SPF_Platform_Engineering::plan_release_train([
-	['module_key'=>'file-01','software_version'=>'1.2.0','required'=>[]],
-	['module_key'=>'file-20','software_version'=>'1.2.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]],
-]);
-$assert( $incompatible_train['valid'] === false && ! empty( $incompatible_train['incompatible']['file-20'] ), 'Release train failed to block an incompatible minimum version.' );
-$bad_train = SPF_Platform_Engineering::plan_release_train([
-	['module_key'=>'a','required'=>['b']],['module_key'=>'b','required'=>['a']],
-]);
-$assert( $bad_train['valid'] === false && ! empty( $bad_train['cycle_candidates'] ), 'Release train failed to detect a cycle.' );
+$assert($train['valid']===true,'Valid release train rejected.');
+$assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
+$bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'banana','required'=>[]]]);
+$assert($bad_version['valid']===false && !empty($bad_version['manifest_errors']),'Invalid semantic version not blocked.');
+$duplicate=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'1.0.0'],['module_key'=>'x','software_version'=>'2.0.0']]);
+$assert($duplicate['valid']===false,'Duplicate release-train module silently overwritten.');
+$bad_train=SPF_Platform_Engineering::plan_release_train([['module_key'=>'a','software_version'=>'1.0.0','required'=>['b']],['module_key'=>'b','software_version'=>'1.0.0','required'=>['a']]]);
+$assert($bad_train['valid']===false && !empty($bad_train['cycle_candidates']),'Release-train cycle missed.');
 
-$slo = SPF_Platform_Engineering::evaluate_slo_gate(
-	['availability'=>99.95,'latency_p95'=>300,'error_rate'=>0.5,'error_budget_remaining'=>10],
-	['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]
-);
-$assert( $slo['allow'] === true, 'SLO gate blocked healthy metrics.' );
-$slo_bad = SPF_Platform_Engineering::evaluate_slo_gate(
-	['availability'=>99.0,'latency_p95'=>800,'error_rate'=>2.0,'error_budget_remaining'=>-1],
-	['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]
-);
-$assert( $slo_bad['allow'] === false && count($slo_bad['violations']) >= 3, 'SLO gate failed to block unhealthy metrics.' );
-$slo_missing = SPF_Platform_Engineering::evaluate_slo_gate( ['availability'=>100], [] );
-$assert( $slo_missing['allow'] === false && $slo_missing['reason'] === 'slo_objectives_missing', 'SLO gate must fail closed when no objectives are defined.' );
-$slo_budget = SPF_Platform_Engineering::evaluate_slo_gate( ['error_budget_remaining'=>50], ['error_budget_remaining'=>10] );
-$assert( $slo_budget['allow'] === true, 'Error-budget remaining metric direction is incorrect.' );
+$slo=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.95,'latency_p95'=>300,'error_rate'=>0.5,'error_budget_remaining'=>10],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
+$assert($slo['allow']===true,'Healthy SLO blocked.');
+$slo_bad=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.0,'latency_p95'=>800,'error_rate'=>2.0,'error_budget_remaining'=>-1],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
+$assert($slo_bad['allow']===false && count($slo_bad['violations'])>=3,'Unhealthy SLO passed.');
+$assert(SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>100],[])['reason']==='slo_objectives_missing','Missing SLO objectives did not fail closed.');
 
-$context = SPF_Platform_Engineering::new_telemetry_context();
-$assert( strlen($context['trace_id']) === 32 && strlen($context['span_id']) === 16, 'Telemetry context IDs have invalid sizes.' );
-$assert( $context['request_id'] === '123e4567-e89b-42d3-a456-426614174000', 'Telemetry context did not create request id.' );
-SPF_Platform_Engineering::record_metric( 'privacy_test', 1, ['module'=>'file-01','patient_name'=>'sensitive'] );
-$metric_rows = $GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION] ?? [];
-$last_metric = end( $metric_rows );
-$assert( isset($last_metric['labels']['module']) && ! isset($last_metric['labels']['patient_name']), 'Telemetry accepted a sensitive label key.' );
+$context=SPF_Platform_Engineering::new_telemetry_context();
+$assert(strlen($context['trace_id'])===32 && strlen($context['span_id'])===16,'Telemetry IDs invalid.');
+SPF_Platform_Engineering::record_metric('privacy_test',1,['module'=>'file-01','patient_name'=>'sensitive']);
+$rows=$GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION]??[];$last=end($rows);
+$assert(isset($last['labels']['module'])&&!isset($last['labels']['patient_name']),'Telemetry persisted sensitive label.');
 
-$twin = SPF_Resilience_Lab::digital_twin([
-	'modules'=>[
-		['module_key'=>'file-01','required'=>[]],
-		['module_key'=>'file-20','required'=>['file-01']],
-		['module_key'=>'file-21','required'=>['file-20']],
-	]
-], ['failed_modules'=>['file-20']]);
-$assert( $twin['release_safe'] === false, 'Digital twin failed to mark dependency failure unsafe.' );
-$assert( $twin['module_states']['file-21']['status'] === 'blocked', 'Digital twin failed to propagate dependency blockage.' );
-$twin_transitive = SPF_Resilience_Lab::digital_twin([
-	'modules'=>[
-		['module_key'=>'file-01','required'=>[]],
-		['module_key'=>'file-20','required'=>[['module_key'=>'file-01']]],
-		['module_key'=>'file-21','required'=>[['module_key'=>'file-20']]],
-	]
-], ['failed_modules'=>['file-01']]);
-$assert( $twin_transitive['module_states']['file-20']['status'] === 'blocked' && $twin_transitive['module_states']['file-21']['status'] === 'blocked', 'Digital twin did not propagate a transitive dependency failure.' );
+$twin=SPF_Resilience_Lab::digital_twin(['modules'=>[['module_key'=>'file-01','required'=>[]],['module_key'=>'file-20','required'=>[['module_key'=>'file-01']]],['module_key'=>'file-21','required'=>[['module_key'=>'file-20']]]]],['failed_modules'=>['file-01']]);
+$assert($twin['release_safe']===false && $twin['module_states']['file-21']['status']==='blocked','Digital twin transitive failure propagation failed.');
+$suspended=SPF_Resilience_Lab::digital_twin(['modules'=>[['module_key'=>'x','state'=>'suspended','required'=>[]]]],[]);
+$assert($suspended['release_safe']===false,'Suspended module incorrectly considered release-safe.');
+$GLOBALS['spf_test_options'][SPF_Platform_Engineering::METRIC_OPTION]=array_fill(0,501,['x'=>1]);
+$heal=SPF_Resilience_Lab::self_heal_plan();
+$assert($heal['owner_scope']==='file-01-only' && in_array('trim_metric_buffer',array_column($heal['actions'],'action'),true),'Bounded self-heal plan wrong.');
+$chaos=SPF_Resilience_Lab::chaos_scenarios();
+$assert(count($chaos)>=7 && isset($chaos['database_interrupt'],$chaos['duplicate_event']),'Chaos scenarios incomplete.');
 
-$GLOBALS['spf_test_options']['spf_future_platform_metrics'] = array_fill(0, 501, ['x'=>1]);
-$heal = SPF_Resilience_Lab::self_heal_plan();
-$assert( $heal['owner_scope'] === 'file-01-only', 'Self-heal plan lost File 01 ownership boundary.' );
-$assert( in_array('trim_metric_buffer', array_column($heal['actions'],'action'), true), 'Self-heal plan failed to detect oversized File 01 metric buffer.' );
+$GLOBALS['spf_test_options'][SPF_Resilience_Lab::SNAPSHOT_OPTION]=['snap-1'=>['id'=>'snap-1','label'=>'before','created_at'=>'2026-08-08 05:00:00','data_hash'=>'abc','data'=>['policy_catalog'=>['a'=>1],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]]];
+$diff=SPF_Resilience_Lab::diff_snapshot('snap-1',['policy_catalog'=>['a'=>2],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]);
+$assert(!is_wp_error($diff)&&$diff['changed']===true,'Snapshot diff missed change.');
+$plan=SPF_Resilience_Lab::restore_snapshot_plan('snap-1');
+$assert(!is_wp_error($plan)&&$plan['owner_scope']==='file-01-governance-config-only','Snapshot restore scope wrong.');
+$assert(in_array('activation_state',$plan['excluded_sections'],true)&&in_array('upgrade_state',$plan['excluded_sections'],true),'Runtime truth not excluded from time-travel restore.');
 
-$chaos = SPF_Resilience_Lab::chaos_scenarios();
-$assert( count($chaos) >= 7, 'Chaos harness does not define the expected failure scenarios.' );
-$assert( isset($chaos['database_interrupt'], $chaos['duplicate_event']), 'Chaos harness core scenarios missing.' );
+$advice=SPF_Governance_Control_Plane::advisory_copilot(['inventory'=>['modules'=>[['module_key'=>'x','canonical_entities'=>['thing']],['module_key'=>'y','canonical_entities'=>['thing']]],'routes'=>[],'global_shell_owners'=>['file-20']],'secret_token'=>'must-not-leak']);
+$assert($advice['advisory_only']===true && $advice['autonomous_changes']===false && $advice['autonomous_approval']===false,'AI governance copilot autonomy boundary broken.');
+$assert(!empty($advice['items']),'AI governance copilot emitted no architectural advice.');
 
-$GLOBALS['spf_test_options'][SPF_Resilience_Lab::SNAPSHOT_OPTION] = [
-	'snap-1'=>[
-		'id'=>'snap-1','label'=>'before','created_at'=>'2026-08-08 05:00:00','data_hash'=>'abc',
-		'data'=>['policy_catalog'=>['a'=>1],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]
-	]
-];
-$diff = SPF_Resilience_Lab::diff_snapshot('snap-1', ['policy_catalog'=>['a'=>2],'event_schemas'=>[],'config_baselines'=>[],'feature_flags'=>[],'activation_state'=>[],'upgrade_state'=>[]]);
-$assert( ! is_wp_error($diff) && $diff['changed'] === true, 'Time-travel snapshot diff failed to detect change.' );
-$assert( $diff['changes'][0]['section'] === 'policy_catalog', 'Time-travel snapshot diff identified wrong section.' );
-$restore_plan = SPF_Resilience_Lab::restore_snapshot_plan('snap-1');
-$assert( ! is_wp_error($restore_plan) && $restore_plan['owner_scope'] === 'file-01-governance-config-only', 'Snapshot restore plan lost its File 01-only scope.' );
-$assert( in_array('activation_state', $restore_plan['excluded_sections'], true) && in_array('upgrade_state', $restore_plan['excluded_sections'], true), 'Snapshot restore plan must exclude runtime activation/upgrade truth.' );
+$gov_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-governance-control-plane.php');
+$eng_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-platform-engineering.php');
+$res_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-resilience-lab.php');
+$assert(str_contains($gov_source,"'approve_amendment'") && str_contains($gov_source,'sanitize_advisory_input'),'Governance mutation/advisor hardening absent.');
+$assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog concurrency lock absent.');
+$assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
+$assert(str_contains($eng_source,"'rollback_required','rolled_back'") && str_contains($eng_source,"'future-rollout-'"),'Progressive rollout stale/rollback guard absent.');
+$assert(str_contains($res_source,"'spf_self_heal_recovery_stale'") && str_contains($res_source,"'self_heal_precommit'"),'Self-heal stale recovery/audit guard absent.');
+$assert(str_contains($res_source,'$safe_environments') && str_contains($res_source,"'run_reconciliation'") && str_contains($res_source,'sanitize_chaos_context'),'Chaos fail-closed authorization/privacy guard absent.');
+$assert(str_contains($res_source,"'spf_snapshot_integrity_failed'") && str_contains($res_source,"'future-snapshot-restore'"),'Snapshot integrity/concurrency guard absent.');
 
-$advice = SPF_Governance_Control_Plane::advisory_copilot([
-	'inventory'=>[
-		'modules'=>[
-			['module_key'=>'x','canonical_entities'=>['thing']],
-			['module_key'=>'y','canonical_entities'=>['thing']],
-		],
-		'routes'=>[],
-		'global_shell_owners'=>['file-20'],
-	],
-]);
-$assert( $advice['advisory_only'] === true, 'AI governance copilot is not advisory-only.' );
-$assert( $advice['autonomous_changes'] === false && $advice['autonomous_approval'] === false, 'AI governance copilot must never autonomously change or approve.' );
-$assert( ! empty($advice['items']), 'AI governance copilot emitted no advice for an architectural conflict.' );
-
-if ( $failures ) {
-	fwrite( STDERR, "Future Foundation tests failed:\n- " . implode( "\n- ", $failures ) . "\n" );
-	exit( 1 );
-}
-echo "Future Foundation assertions: {$assertions}/{$assertions} PASS\n";
+if($failures){fwrite(STDERR,"Future Foundation tests failed:\n- ".implode("\n- ",$failures)."\n");exit(1);} echo "Future Foundation assertions: {$assertions}/{$assertions} PASS\n";

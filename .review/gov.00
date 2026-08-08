@@ -1,0 +1,160 @@
+--- a/includes/class-spf-governance-control-plane.php
++++ b/includes/class-spf-governance-control-plane.php
+@@ -63,35 +63,52 @@
+ 	}
+ 
+ 	public static function save_policy( array $policy ) {
++		$normalized = self::normalize_policy( $policy );
++		if ( is_wp_error( $normalized ) ) {
++			return $normalized;
++		}
++		if ( '' === (string) ( $normalized['decision_id'] ?? '' ) ) {
++			return new WP_Error( 'spf_policy_decision_required', __( 'A Founder-approved decision id is required before changing governance policy.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
++		}
+ 		$allowed = SPF_Authorization::require_action(
+-			'repair_owned_mapping',
+-			array( 'module_key' => 'file-01', 'object_id' => 'policy-as-code' ),
+-			array( 'purpose' => 'policy_as_code' )
++			'approve_amendment',
++			array( 'module_key' => 'file-01', 'object_id' => 'policy:' . $normalized['id'] ),
++			array( 'purpose' => 'policy_as_code', 'decision_id' => $normalized['decision_id'] )
+ 		);
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+-		$normalized = self::normalize_policy( $policy );
+-		if ( is_wp_error( $normalized ) ) {
++		$lock_name = 'future-policy-catalog';
++		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
++		if ( is_wp_error( $lock ) ) {
++			return $lock;
++		}
++		try {
++			$policies = self::list_policies();
++			$found = false;
++			foreach ( $policies as $index => $existing ) {
++				if ( ( $existing['id'] ?? '' ) === $normalized['id'] ) {
++					$policies[ $index ] = $normalized;
++					$found = true;
++					break;
++				}
++			}
++			if ( ! $found ) {
++				$policies[] = $normalized;
++			}
++			usort( $policies, static function ( $a, $b ) {
++				return (int) ( $b['priority'] ?? 0 ) <=> (int) ( $a['priority'] ?? 0 );
++			} );
++			$expected = array_slice( $policies, 0, 250 );
++			update_option( self::POLICY_OPTION, $expected, false );
++			$persisted = get_option( self::POLICY_OPTION, array() );
++			if ( SPF_Runtime::hash( $persisted ) !== SPF_Runtime::hash( $expected ) ) {
++				return new WP_Error( 'spf_policy_persistence_failed', __( 'The governance policy change could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
++			}
+ 			return $normalized;
++		} finally {
++			SPF_Runtime::release_lock( $lock_name, $lock );
+ 		}
+-		$policies = self::list_policies();
+-		$found = false;
+-		foreach ( $policies as $index => $existing ) {
+-			if ( ( $existing['id'] ?? '' ) === $normalized['id'] ) {
+-				$policies[ $index ] = $normalized;
+-				$found = true;
+-				break;
+-			}
+-		}
+-		if ( ! $found ) {
+-			$policies[] = $normalized;
+-		}
+-		usort( $policies, static function ( $a, $b ) {
+-			return (int) ( $b['priority'] ?? 0 ) <=> (int) ( $a['priority'] ?? 0 );
+-		} );
+-		update_option( self::POLICY_OPTION, array_slice( $policies, 0, 250 ), false );
+-		return $normalized;
+ 	}
+ 
+ 	public static function evaluate_policy( $action, array $context = array(), $policies = null ) {
+@@ -145,16 +162,40 @@
+ 		$changed_routes = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) ( $amendment['routes'] ?? array() ) ) ) ) );
+ 		$inventory = $inventory ?: self::runtime_inventory();
+ 		$dependents = array();
++		$dependency_map = array();
+ 		foreach ( (array) ( $inventory['modules'] ?? array() ) as $module ) {
+ 			$key = sanitize_key( $module['module_key'] ?? '' );
++			if ( ! $key ) {
++				continue;
++			}
+ 			$manifest = (array) ( $module['manifest'] ?? $module );
+ 			$deps = array_merge( (array) ( $manifest['required'] ?? array() ), (array) ( $manifest['optional'] ?? array() ) );
++			$dependency_map[ $key ] = array();
+ 			foreach ( $deps as $dep ) {
+ 				$dep_key = sanitize_key( is_array( $dep ) ? ( $dep['module_key'] ?? '' ) : $dep );
+-				if ( $key && in_array( $dep_key, $affected, true ) ) {
+-					$dependents[ $key ][] = $dep_key;
++				if ( $dep_key ) {
++					$dependency_map[ $key ][] = $dep_key;
+ 				}
+ 			}
++			$dependency_map[ $key ] = array_values( array_unique( $dependency_map[ $key ] ) );
++		}
++		$frontier = $affected;
++		$visited = array_fill_keys( $affected, true );
++		while ( $frontier ) {
++			$target = array_shift( $frontier );
++			foreach ( $dependency_map as $consumer => $deps ) {
++				if ( ! in_array( $target, $deps, true ) ) {
++					continue;
++				}
++				$dependents[ $consumer ][] = $target;
++				if ( empty( $visited[ $consumer ] ) ) {
++					$visited[ $consumer ] = true;
++					$frontier[] = $consumer;
++				}
++			}
++		}
++		foreach ( $dependents as $key => $deps ) {
++			$dependents[ $key ] = array_values( array_unique( $deps ) );
+ 		}
+ 		$risk = 0;
+ 		$risk += count( $affected ) * 2;
+@@ -240,11 +281,18 @@
+ 	public static function build_traceability_report( array $requirements, array $evidence ) {
+ 		$rows = array();
+ 		$missing = array();
++		$duplicate_ids = array();
++		$seen = array();
+ 		foreach ( $requirements as $requirement ) {
+ 			$id = sanitize_text_field( is_array( $requirement ) ? ( $requirement['id'] ?? '' ) : $requirement );
+ 			if ( '' === $id ) {
+ 				continue;
+ 			}
++			if ( isset( $seen[ $id ] ) ) {
++				$duplicate_ids[] = $id;
++				continue;
++			}
++			$seen[ $id ] = true;
+ 			$item = (array) ( $evidence[ $id ] ?? array() );
+ 			$status = array(
+ 				'requirement' => $id,
+@@ -254,9 +302,15 @@
+ 				'package'     => ! empty( $item['package'] ),
+ 				'staging'     => ! empty( $item['staging'] ),
+ 				'approval'    => ! empty( $item['approval'] ),
++				'live'        => ! empty( $item['live'] ) || ! empty( $item['deployed'] ),
++				'operational' => ! empty( $item['operational'] ),
+ 			);
+ 			$status['coded_complete'] = $status['design'] && $status['code'] && $status['test'];
+-			$status['production_complete'] = $status['coded_complete'] && $status['package'] && $status['staging'] && $status['approval'];
++			$status['packaged_complete'] = $status['coded_complete'] && $status['package'];
++			$status['staging_complete'] = $status['packaged_complete'] && $status['staging'];
++			$status['release_ready'] = $status['staging_complete'] && $status['approval'];
++			$status['live_deployed'] = $status['release_ready'] && $status['live'];
++			$status['production_complete'] = $status['live_deployed'] && $status['operational'];
+ 			$rows[] = $status;
+ 			if ( ! $status['coded_complete'] ) {
+ 				$missing[] = $id;
+@@ -264,15 +318,22 @@
+ 		}
+ 		$total = count( $rows );
+ 		$coded = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['coded_complete'] ); } ) );

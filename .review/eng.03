@@ -1,0 +1,77 @@
++						$rollout['status'] = ( $next_index >= count( $rollout['rings'] ) - 1 ) ? 'full' : 'progressing';
++						$rollout['execution_evidence_hash'] = SPF_Runtime::hash( $execution );
++					} else {
++						$rollout['status'] = 'advance_pending_adapter';
++						$rollout['next_ring'] = $next_ring;
++						$rollout['advance_requested_at'] = SPF_Runtime::now_mysql();
++						do_action( 'spf_progressive_delivery_action_requested', $release_id, $next_ring, $rollout, $gate );
++					}
+ 				}
+ 			}
++			$rollout['revision'] = max( 1, (int) ( $rollout['revision'] ?? 1 ) + 1 );
++			$rollout['updated_at'] = SPF_Runtime::now_mysql();
++			$rollout['last_gate'] = $gate;
++			$rollouts[ $release_id ] = $rollout;
++			update_option( self::ROLLOUT_OPTION, $rollouts, false );
++			$persisted = get_option( self::ROLLOUT_OPTION, array() );
++			if ( empty( $persisted[ $release_id ] ) || SPF_Runtime::hash( $persisted[ $release_id ] ) !== SPF_Runtime::hash( $rollout ) ) {
++				return new WP_Error( 'spf_rollout_persistence_failed', __( 'The progressive rollout state could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			return $rollout;
++		} finally {
++			SPF_Runtime::release_lock( $lock_name, $lock );
+ 		}
+-		$rollout['updated_at'] = SPF_Runtime::now_mysql();
+-		$rollout['last_gate'] = $gate;
+-		$rollouts[ $release_id ] = $rollout;
+-		update_option( self::ROLLOUT_OPTION, $rollouts, false );
+-		return $rollout;
+ 	}
+ 
+ 	public static function evaluate_slo_gate( array $metrics, array $objectives ) {
+@@ -475,8 +590,9 @@
+ 			'event_name'    => substr( $name, 0, 160 ),
+ 			'version'       => $version,
+ 			'owner_module'  => $owner,
+-			'privacy_class' => sanitize_key( $schema['privacy_class'] ?? 'internal' ),
+-			'fields'        => $fields,
++			'privacy_class'   => sanitize_key( $schema['privacy_class'] ?? 'internal' ),
++			'allow_additional' => ! empty( $schema['allow_additional'] ),
++			'fields'          => $fields,
+ 			'deprecated_at' => substr( sanitize_text_field( $schema['deprecated_at'] ?? '' ), 0, 40 ),
+ 		);
+ 	}
+@@ -522,6 +638,33 @@
+ 	}
+ 
+ 
++	private static function normalize_scaffold_dependencies( array $dependencies ) {
++		$out = array();
++		$seen = array();
++		foreach ( array_slice( $dependencies, 0, 100 ) as $dependency ) {
++			if ( is_array( $dependency ) ) {
++				$key = sanitize_key( $dependency['module_key'] ?? '' );
++				$minimum = sanitize_text_field( $dependency['minimum_version'] ?? '0.0.0' );
++				if ( ! $key || ! SPF_Registry::valid_semver( $minimum ) ) {
++					return new WP_Error( 'spf_scaffold_dependency_invalid', __( 'Generated module dependencies require a module key and valid minimum semantic version.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
++				}
++				$value = array( 'module_key'=>$key, 'minimum_version'=>$minimum );
++			} else {
++				$key = sanitize_key( $dependency );
++				if ( ! $key ) {
++					continue;
++				}
++				$value = $key;
++			}
++			if ( isset( $seen[ $key ] ) ) {
++				continue;
++			}
++			$seen[ $key ] = true;
++			$out[] = $value;
++		}
++		return $out;
++	}
++
+ 	private static function sanitize_numeric_map( array $values ) {
+ 		$out = array();
+ 		foreach ( array_slice( $values, 0, 100, true ) as $key => $value ) {

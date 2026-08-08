@@ -225,7 +225,8 @@ final class SPF_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY module_key (module_key),
-			KEY owner_file (owner_file), KEY state (state)
+			KEY owner_file (owner_file),
+			KEY state (state)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'contracts' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -242,7 +243,8 @@ final class SPF_Installer {
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY contract_version (contract_key,contract_version),
-			KEY owner_module (owner_module), KEY status (status)
+			KEY owner_module (owner_module),
+			KEY status (status)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'routes' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -258,8 +260,10 @@ final class SPF_Installer {
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY route_key (route_key), UNIQUE KEY route_path (route_path),
-			KEY owner_module (owner_module), KEY status (status)
+			UNIQUE KEY route_key (route_key),
+			UNIQUE KEY route_path (route_path),
+			KEY owner_module (owner_module),
+			KEY status (status)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'releases' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -278,8 +282,11 @@ final class SPF_Installer {
 			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY release_id (release_id), UNIQUE KEY checksum_sha256 (checksum_sha256),
-			KEY status (status), KEY software_version (software_version)
+			PRIMARY KEY  (id),
+			UNIQUE KEY release_id (release_id),
+			UNIQUE KEY checksum_sha256 (checksum_sha256),
+			KEY status (status),
+			KEY software_version (software_version)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'release_states' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -290,8 +297,10 @@ final class SPF_Installer {
 			evidence_hash char(64) NOT NULL,
 			actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY release_sequence (release_id,sequence_no),
-			KEY release_id (release_id), KEY status (status)
+			PRIMARY KEY  (id),
+			UNIQUE KEY release_sequence (release_id,sequence_no),
+			KEY release_id (release_id),
+			KEY status (status)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'amendments' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -303,7 +312,9 @@ final class SPF_Installer {
 			status varchar(32) NOT NULL DEFAULT 'approved',
 			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY amendment_id (amendment_id), KEY status (status)
+			PRIMARY KEY  (id),
+			UNIQUE KEY amendment_id (amendment_id),
+			KEY status (status)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'health' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -311,7 +322,10 @@ final class SPF_Installer {
 			overall_status varchar(32) NOT NULL,
 			results_json longtext NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY trace_id (trace_id), KEY overall_status (overall_status), KEY created_at (created_at)
+			PRIMARY KEY  (id),
+			UNIQUE KEY trace_id (trace_id),
+			KEY overall_status (overall_status),
+			KEY created_at (created_at)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'flags' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -324,7 +338,9 @@ final class SPF_Installer {
 			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY owner_flag (owner_module,flag_key,environment), KEY expires_at (expires_at)
+			PRIMARY KEY  (id),
+			UNIQUE KEY owner_flag (owner_module,flag_key,environment),
+			KEY expires_at (expires_at)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'audit' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -339,7 +355,11 @@ final class SPF_Installer {
 			previous_hash char(64) NOT NULL,
 			entry_hash char(64) NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY entry_hash (entry_hash), KEY trace_id (trace_id), KEY actor_id (actor_id), KEY created_at (created_at)
+			PRIMARY KEY  (id),
+			UNIQUE KEY entry_hash (entry_hash),
+			KEY trace_id (trace_id),
+			KEY actor_id (actor_id),
+			KEY created_at (created_at)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'idempotency' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -357,7 +377,10 @@ final class SPF_Installer {
 			expires_at datetime NOT NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY scope_hash (scope_hash), KEY expires_at (expires_at), KEY status (status)
+			PRIMARY KEY  (id),
+			UNIQUE KEY scope_hash (scope_hash),
+			KEY expires_at (expires_at),
+			KEY status (status)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'outbox' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -374,7 +397,11 @@ final class SPF_Installer {
 			sent_at datetime NULL,
 			last_error varchar(191) NOT NULL DEFAULT '',
 			created_at datetime NOT NULL,
-			PRIMARY KEY  (id), UNIQUE KEY event_id (event_id), UNIQUE KEY dedupe_key (dedupe_key), KEY due (status,available_at), KEY created_at (created_at)
+			PRIMARY KEY  (id),
+			UNIQUE KEY event_id (event_id),
+			UNIQUE KEY dedupe_key (dedupe_key),
+			KEY due (status,available_at),
+			KEY created_at (created_at)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'privacy_requests' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -389,7 +416,10 @@ final class SPF_Installer {
 			requested_at datetime NOT NULL,
 			due_at datetime NOT NULL,
 			completed_at datetime NULL,
-			PRIMARY KEY  (id), UNIQUE KEY request_id (request_id), KEY user_status (user_id,status), KEY due_at (due_at)
+			PRIMARY KEY  (id),
+			UNIQUE KEY request_id (request_id),
+			KEY user_status (user_id,status),
+			KEY due_at (due_at)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'privacy_holds' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -401,7 +431,9 @@ final class SPF_Installer {
 			active tinyint(1) NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			released_at datetime NULL,
-			PRIMARY KEY  (id), UNIQUE KEY hold_id (hold_id), KEY subject_active (subject_type,subject_id,active)
+			PRIMARY KEY  (id),
+			UNIQUE KEY hold_id (hold_id),
+			KEY subject_active (subject_type,subject_id,active)
 		) {$engine} {$charset};";
 		$sql[] = "CREATE TABLE " . self::table( 'migrations' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -414,7 +446,9 @@ final class SPF_Installer {
 			record_version bigint(20) unsigned NOT NULL DEFAULT 1,
 			started_at datetime NOT NULL,
 			completed_at datetime NULL,
-			PRIMARY KEY  (id), UNIQUE KEY migration_id (migration_id), KEY status (status)
+			PRIMARY KEY  (id),
+			UNIQUE KEY migration_id (migration_id),
+			KEY status (status)
 		) {$engine} {$charset};";
 
 		foreach ( $sql as $statement ) {

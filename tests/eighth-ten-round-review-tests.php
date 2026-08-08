@@ -17,10 +17,10 @@ $engineering = file_get_contents( $root . '/includes/class-spf-platform-engineer
 $resilience = file_get_contents( $root . '/includes/class-spf-resilience-lab.php' );
 $control_plane = file_get_contents( $root . '/includes/class-spf-governance-control-plane.php' );
 
-$assert( str_contains( $idempotency, "reconciliation_required" ), 'Round 1: stale idempotency ambiguity is not frozen for reconciliation.' );
-$assert( ! str_contains( $idempotency, "array( 'status'=>'processing','owner_token'=>$token,'locked_at'=>$now,'expires_at'=>$expires,'attempts'" ), 'Round 1: stale idempotency reservations can still be automatically reclaimed and replayed.' );
+$assert( str_contains( $idempotency, 'reconciliation_required' ), 'Round 1: stale idempotency ambiguity is not frozen for reconciliation.' );
+$assert( ! str_contains( $idempotency, '$claimed = $wpdb->update(' ), 'Round 1: stale idempotency reservations can still be automatically reclaimed and replayed.' );
 $assert( str_contains( $governance, 'validate_transition_evidence_binding' ) && str_contains( $governance, 'spf_release_staging_evidence_binding_invalid' ) && str_contains( $governance, 'spf_release_deployed_checksum_binding_invalid' ), 'Round 2: release approval/deployment evidence is not bound to staged evidence and canonical checksum.' );
-$assert( str_contains( $governance, 'spf_noncanonical_flag_identity' ) && str_contains( $governance, "'environment'=>$env" ), 'Round 3: feature-flag authorization identity is not canonicalized before the authorization decision.' );
+$assert( str_contains( $governance, 'spf_noncanonical_flag_identity' ) && str_contains( $governance, "'environment'=>\$env" ), 'Round 3: feature-flag authorization identity is not canonicalized before the authorization decision.' );
 $assert( str_contains( $reconciler, 'owner_rollback_completed' ) && str_contains( $reconciler, 'spf_reconciliation_rollback_checkpoint_failed' ), 'Round 4: reconciliation rollback lacks a durable owner-compensation checkpoint.' );
 $assert( str_contains( $system_check, 'max_interval_seconds' ) && str_contains( $system_check, '$max_interval >= 1 && $max_interval <= 300' ), 'Round 5: external scheduler evidence does not prove the required five-minute cadence.' );
 $assert( str_contains( $engineering, 'spf_event_schema_version_conflict' ), 'Round 6: an existing event-schema version can still be silently rewritten.' );

@@ -279,99 +279,26 @@ final class SPF_Platform_Engineering {
 	}
 
 	public static function plan_release_train( array $manifests ) {
-		$versions = array();
-		$dependencies = array();
-		$manifest_errors = array();
-		$seen = array();
-		foreach ( $manifests as $index => $manifest ) {
-			if ( ! is_array( $manifest ) ) {
-				$manifest_errors[] = array( 'index'=>$index, 'code'=>'manifest_not_object' );
-				continue;
-			}
-			$key = sanitize_key( $manifest['module_key'] ?? '' );
-			if ( ! $key ) {
-				$manifest_errors[] = array( 'index'=>$index, 'code'=>'module_key_missing' );
-				continue;
-			}
-			if ( isset( $seen[ $key ] ) ) {
-				$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'duplicate_module_key' );
-				continue;
-			}
-			$seen[ $key ] = true;
-			$version = sanitize_text_field( $manifest['software_version'] ?? '' );
-			if ( ! SPF_Registry::valid_semver( $version ) ) {
-				$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'software_version_invalid', 'value'=>$version );
-			}
-			$versions[ $key ] = $version;
-			$dependencies[ $key ] = array();
-			foreach ( (array) ( $manifest['required'] ?? array() ) as $dependency ) {
-				if ( is_array( $dependency ) ) {
-					$dep_key = sanitize_key( $dependency['module_key'] ?? '' );
-					$minimum = sanitize_text_field( $dependency['minimum_version'] ?? '0.0.0' );
-				} else {
-					$dep_key = sanitize_key( $dependency );
-					$minimum = '0.0.0';
-				}
-				if ( ! $dep_key ) {
-					$manifest_errors[] = array( 'module_key'=>$key, 'code'=>'dependency_key_invalid' );
-					continue;
-				}
-				if ( $dep_key === $key ) {
-					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'self_dependency' );
-				}
-				if ( ! SPF_Registry::valid_semver( $minimum ) ) {
-					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'minimum_version_invalid', 'value'=>$minimum );
-					continue;
-				}
-				if ( isset( $dependencies[ $key ][ $dep_key ] ) && $dependencies[ $key ][ $dep_key ] !== $minimum ) {
-					$manifest_errors[] = array( 'module_key'=>$key, 'dependency'=>$dep_key, 'code'=>'dependency_version_conflict' );
-					continue;
-				}
-				$dependencies[ $key ][ $dep_key ] = $minimum;
+		$versions=array(); $dependencies=array(); $ranges=array(); $manifest_errors=array(); $seen=array();
+		foreach($manifests as $index=>$manifest){
+			if(!is_array($manifest)){$manifest_errors[]=array('index'=>$index,'code'=>'manifest_not_object');continue;}
+			$key=sanitize_key($manifest['module_key']??'');
+			if(!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$key)){$manifest_errors[]=array('index'=>$index,'code'=>'module_key_invalid','value'=>$key);continue;}
+			if(isset($seen[$key])){$manifest_errors[]=array('module_key'=>$key,'code'=>'duplicate_module_key');continue;} $seen[$key]=true;
+			$version=sanitize_text_field($manifest['software_version']??''); if(!SPF_Registry::valid_semver($version)){$manifest_errors[]=array('module_key'=>$key,'code'=>'software_version_invalid','value'=>$version);} $versions[$key]=$version; $dependencies[$key]=array(); $ranges[$key]=array();
+			foreach((array)($manifest['required']??array()) as $dependency){
+				if(is_array($dependency)){$dep_key=sanitize_key($dependency['module_key']??'');$minimum=sanitize_text_field($dependency['minimum_version']??'0.0.0');$maximum=sanitize_text_field($dependency['maximum_version']??'');}else{$dep_key=sanitize_key($dependency);$minimum='0.0.0';$maximum='';}
+				if(!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$dep_key)){$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_key_invalid','value'=>$dep_key);continue;}
+				if($dep_key===$key){$manifest_errors[]=array('module_key'=>$key,'dependency'=>$dep_key,'code'=>'self_dependency');}
+				if(!SPF_Registry::valid_semver($minimum)||($maximum&&!SPF_Registry::valid_semver($maximum))||($maximum&&version_compare($minimum,$maximum,'>'))){$manifest_errors[]=array('module_key'=>$key,'dependency'=>$dep_key,'code'=>'dependency_version_range_invalid','minimum'=>$minimum,'maximum'=>$maximum);continue;}
+				$new_range=array('minimum'=>$minimum,'maximum'=>$maximum); if(isset($ranges[$key][$dep_key])&&$ranges[$key][$dep_key]!==$new_range){$manifest_errors[]=array('module_key'=>$key,'dependency'=>$dep_key,'code'=>'dependency_version_conflict');continue;}
+				$dependencies[$key][$dep_key]=$minimum; $ranges[$key][$dep_key]=$new_range;
 			}
 		}
-		$in_degree = array_fill_keys( array_keys( $dependencies ), 0 );
-		$edges = array_fill_keys( array_keys( $dependencies ), array() );
-		$missing = array();
-		$incompatible = array();
-		foreach ( $dependencies as $module => $deps ) {
-			foreach ( $deps as $dep => $minimum ) {
-				if ( ! isset( $dependencies[ $dep ] ) ) {
-					$missing[ $module ][] = $dep;
-					continue;
-				}
-				if ( SPF_Registry::valid_semver( $versions[ $dep ] ?? '' ) && '0.0.0' !== $minimum && version_compare( $versions[ $dep ], $minimum, '<' ) ) {
-					$incompatible[ $module ][] = array( 'module_key'=>$dep, 'minimum_version'=>$minimum, 'actual_version'=>$versions[ $dep ] );
-				}
-				$edges[ $dep ][] = $module;
-				$in_degree[ $module ]++;
-			}
-		}
-		$queue = array_keys( array_filter( $in_degree, static function ( $degree ) { return 0 === $degree; } ) );
-		sort( $queue, SORT_STRING );
-		$order = array();
-		while ( $queue ) {
-			$node = array_shift( $queue );
-			$order[] = $node;
-			foreach ( $edges[ $node ] as $consumer ) {
-				$in_degree[ $consumer ]--;
-				if ( 0 === $in_degree[ $consumer ] ) {
-					$queue[] = $consumer;
-					sort( $queue, SORT_STRING );
-				}
-			}
-		}
-		$cycles = array_keys( array_filter( $in_degree, static function ( $degree ) { return $degree > 0; } ) );
-		return array(
-			'valid'            => empty( $manifest_errors ) && empty( $missing ) && empty( $incompatible ) && empty( $cycles ),
-			'order'            => $order,
-			'manifest_errors'  => $manifest_errors,
-			'missing'          => $missing,
-			'incompatible'     => $incompatible,
-			'cycle_candidates' => $cycles,
-			'plan_hash'        => SPF_Runtime::hash( array( 'versions'=>$versions, 'dependencies'=>$dependencies, 'order'=>$order, 'errors'=>$manifest_errors ) ),
-			'execution_mode'   => 'plan-only-until-approved-deployment-adapter',
-		);
+		$in_degree=array_fill_keys(array_keys($dependencies),0);$edges=array_fill_keys(array_keys($dependencies),array());$missing=array();$incompatible=array();
+		foreach($dependencies as $module=>$deps){foreach($deps as $dep=>$minimum){if(!isset($dependencies[$dep])){$missing[$module][]=$dep;continue;}$maximum=$ranges[$module][$dep]['maximum']??'';$actual=$versions[$dep]??'';if(SPF_Registry::valid_semver($actual)&&(('0.0.0'!==$minimum&&version_compare($actual,$minimum,'<'))||($maximum&&version_compare($actual,$maximum,'>')))){$incompatible[$module][]=array('module_key'=>$dep,'minimum_version'=>$minimum,'maximum_version'=>$maximum,'actual_version'=>$actual);}$edges[$dep][]=$module;$in_degree[$module]++;}}
+		$queue=array_keys(array_filter($in_degree,static function($degree){return 0===$degree;}));sort($queue,SORT_STRING);$order=array();while($queue){$node=array_shift($queue);$order[]=$node;foreach($edges[$node] as $consumer){$in_degree[$consumer]--;if(0===$in_degree[$consumer]){$queue[]=$consumer;sort($queue,SORT_STRING);}}}$cycles=array_keys(array_filter($in_degree,static function($degree){return $degree>0;}));
+		return array('valid'=>empty($manifest_errors)&&empty($missing)&&empty($incompatible)&&empty($cycles),'order'=>$order,'manifest_errors'=>$manifest_errors,'missing'=>$missing,'incompatible'=>$incompatible,'cycle_candidates'=>$cycles,'plan_hash'=>SPF_Runtime::hash(array('versions'=>$versions,'dependencies'=>$ranges,'order'=>$order,'errors'=>$manifest_errors,'missing'=>$missing,'incompatible'=>$incompatible)),'execution_mode'=>'plan-only-until-approved-deployment-adapter');
 	}
 
 	public static function create_rollout( $release_id, array $rings, array $slo = array() ) {

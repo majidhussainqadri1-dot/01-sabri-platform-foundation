@@ -91,12 +91,17 @@ $train=SPF_Platform_Engineering::plan_release_train([
 ]);
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
-$bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'banana','required'=>[]]]);
+$bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'banana','required'=>[]]]);
 $assert($bad_version['valid']===false && !empty($bad_version['manifest_errors']),'Invalid semantic version not blocked.');
-$duplicate=SPF_Platform_Engineering::plan_release_train([['module_key'=>'x','software_version'=>'1.0.0'],['module_key'=>'x','software_version'=>'2.0.0']]);
+$duplicate=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'1.0.0'],['module_key'=>'file-02','software_version'=>'2.0.0']]);
 $assert($duplicate['valid']===false,'Duplicate release-train module silently overwritten.');
-$bad_train=SPF_Platform_Engineering::plan_release_train([['module_key'=>'a','software_version'=>'1.0.0','required'=>['b']],['module_key'=>'b','software_version'=>'1.0.0','required'=>['a']]]);
+$bad_train=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-01','software_version'=>'1.0.0','required'=>['file-20']],['module_key'=>'file-20','software_version'=>'1.0.0','required'=>['file-01']]]);
 $assert($bad_train['valid']===false && !empty($bad_train['cycle_candidates']),'Release-train cycle missed.');
+$too_new=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-01','software_version'=>'2.1.0','required'=>[]],['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0','maximum_version'=>'2.0.9']]]]);
+$assert($too_new['valid']===false && !empty($too_new['incompatible']['file-20']),'Maximum dependency version was not enforced.');
+$noncanonical=SPF_Platform_Engineering::plan_release_train([['module_key'=>'rogue','software_version'=>'1.0.0','required'=>[]]]);
+$assert($noncanonical['valid']===false,'Non-canonical release-train module was accepted.');
+
 
 $slo=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.95,'latency_p95'=>300,'error_rate'=>0.5,'error_budget_remaining'=>10],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);
 $assert($slo['allow']===true,'Healthy SLO blocked.');

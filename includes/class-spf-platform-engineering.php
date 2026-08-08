@@ -152,6 +152,9 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $normalized ) ) {
 			return $normalized;
 		}
+		if ( ! SPF_Registry::get_module( $normalized['owner_module'] ) ) {
+			return new WP_Error( 'spf_event_schema_owner_unregistered', __( 'The event-schema owner must be a registered canonical module.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+		}
 		$lock_name = 'future-event-schema-registry';
 		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
 		if ( is_wp_error( $lock ) ) {
@@ -504,30 +507,10 @@ final class SPF_Platform_Engineering {
 	}
 
 	private static function normalize_event_schema( array $schema ) {
-		$name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) ( $schema['event_name'] ?? '' ) );
-		$version = sanitize_text_field( $schema['version'] ?? '1.0.0' );
-		$owner = sanitize_key( $schema['owner_module'] ?? '' );
-		$fields = array();
-		foreach ( array_slice( (array) ( $schema['fields'] ?? array() ), 0, 100, true ) as $field => $definition ) {
-			$field = sanitize_key( $field );
-			$definition = (array) $definition;
-			$type = sanitize_key( $definition['type'] ?? 'string' );
-			if ( $field && in_array( $type, array( 'string','integer','number','boolean','array','object','timestamp' ), true ) ) {
-				$fields[ $field ] = array( 'type'=>$type, 'required'=>! empty( $definition['required'] ) );
-			}
-		}
-		if ( '' === $name || ! SPF_Registry::valid_semver( $version ) || '' === $owner || empty( $fields ) ) {
-			return new WP_Error( 'spf_event_schema_invalid', __( 'Event name, semantic version, owner and bounded fields are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
-		}
-		return array(
-			'event_name'    => substr( $name, 0, 160 ),
-			'version'       => $version,
-			'owner_module'  => $owner,
-			'privacy_class'   => sanitize_key( $schema['privacy_class'] ?? 'internal' ),
-			'allow_additional' => ! empty( $schema['allow_additional'] ),
-			'fields'          => $fields,
-			'deprecated_at' => substr( sanitize_text_field( $schema['deprecated_at'] ?? '' ), 0, 40 ),
-		);
+		$name=preg_replace('/[^A-Za-z0-9_.-]/','',(string)($schema['event_name']??''));$version=sanitize_text_field($schema['version']??'1.0.0');$owner=sanitize_key($schema['owner_module']??'');$privacy_class=sanitize_key($schema['privacy_class']??'internal');$allowed_privacy=array('public','internal','personal','sensitive','restricted','secret','security');$fields=array();
+		foreach(array_slice((array)($schema['fields']??array()),0,100,true) as $field=>$definition){$field=sanitize_key($field);$definition=(array)$definition;$type=sanitize_key($definition['type']??'string');if($field&&in_array($type,array('string','integer','number','boolean','array','object','timestamp'),true)){$fields[$field]=array('type'=>$type,'required'=>!empty($definition['required']));}}
+		if(''===$name||!SPF_Registry::valid_semver($version)||!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$owner)||!in_array($privacy_class,$allowed_privacy,true)||empty($fields)){return new WP_Error('spf_event_schema_invalid',__('Event name, semantic version, canonical owner, approved privacy class and bounded fields are required.','sabri-platform-foundation'),array('status'=>400));}
+		return array('event_name'=>substr($name,0,160),'version'=>$version,'owner_module'=>$owner,'privacy_class'=>$privacy_class,'allow_additional'=>!empty($schema['allow_additional']),'fields'=>$fields,'deprecated_at'=>substr(sanitize_text_field($schema['deprecated_at']??''),0,40));
 	}
 
 	private static function value_matches_type( $value, $type ) {

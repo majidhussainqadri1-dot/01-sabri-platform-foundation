@@ -71,6 +71,10 @@ $schema=['event_name'=>'ExampleChanged.v1','version'=>'1.0.0','owner_module'=>'f
 $event=['event_id'=>'evt-1','occurred_at'=>'2026-08-08T05:00:00Z','count'=>2];
 $event_check=SPF_Platform_Engineering::validate_event_fixture($event,$schema);
 $assert(!is_wp_error($event_check)&&$event_check['valid']===true,'Valid event fixture rejected.');
+$invalid_owner_schema=$schema;$invalid_owner_schema['owner_module']='rogue';
+$assert(is_wp_error(SPF_Platform_Engineering::validate_event_fixture($event,$invalid_owner_schema)),'Non-canonical event-schema owner was accepted.');
+$invalid_privacy_schema=$schema;$invalid_privacy_schema['privacy_class']='mystery';
+$assert(is_wp_error(SPF_Platform_Engineering::validate_event_fixture($event,$invalid_privacy_schema)),'Unknown event privacy class was accepted.');
 $event_extra=SPF_Platform_Engineering::validate_event_fixture($event+['secret'=>'x'],$schema);
 $assert($event_extra['valid']===false && in_array('unknown:secret',$event_extra['errors'],true),'Unknown event field not rejected.');
 $replay=SPF_Platform_Engineering::replay_event_fixture($event,$schema,true);

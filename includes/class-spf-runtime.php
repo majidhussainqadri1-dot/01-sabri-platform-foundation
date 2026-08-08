@@ -42,6 +42,9 @@ final class SPF_Runtime {
 
 	public static function acquire_lock( $name, $ttl = 300, $owner = 0 ) {
 		$name = sanitize_key( $name );
+		if ( '' === $name ) {
+			return new WP_Error( 'spf_lock_name_invalid', __( 'A valid File 01 lock name is required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
+		}
 		$option = self::LOCK_PREFIX . $name;
 		$token = wp_generate_uuid4();
 		$payload = array(
@@ -53,14 +56,13 @@ final class SPF_Runtime {
 			return $token;
 		}
 		$current = get_option( $option, array() );
-		if ( is_array( $current ) && isset( $current['created'] ) && ( time() - (int) $current['created'] ) > max( 30, absint( $ttl ) ) ) {
-			// Compare before delete to avoid deleting a renewed lock.
+		if ( is_array( $current ) && isset( $current['created'], $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && ( time() - (int) $current['created'] ) > max( 30, absint( $ttl ) ) ) {
+			// Stale takeover is compare-and-delete at the database row itself. An
+			// unconditional delete_option() here could delete a newer owner's lock
+			// if another worker replaced the stale value between read and delete.
 			$latest = get_option( $option, array() );
-			if ( $latest === $current ) {
-				delete_option( $option );
-				if ( add_option( $option, $payload, '', 'no' ) ) {
-					return $token;
-				}
+			if ( $latest === $current && self::delete_lock_if_matches( $option, $current ) && add_option( $option, $payload, '', 'no' ) ) {
+				return $token;
 			}
 		}
 		return new WP_Error( 'spf_operation_locked', __( 'The requested File 01 operation is already running.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
@@ -69,11 +71,21 @@ final class SPF_Runtime {
 	public static function release_lock( $name, $token ) {
 		$option = self::LOCK_PREFIX . sanitize_key( $name );
 		$current = get_option( $option, array() );
-		if ( is_array( $current ) && isset( $current['token'] ) && hash_equals( (string) $current['token'], (string) $token ) ) {
-			delete_option( $option );
-			return true;
+		if ( is_array( $current ) && isset( $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && hash_equals( (string) $current['token'], (string) $token ) ) {
+			return self::delete_lock_if_matches( $option, $current );
 		}
 		return false;
+	}
+
+	private static function delete_lock_if_matches( $option, array $payload ) {
+		global $wpdb;
+		$deleted = $wpdb->delete(
+			$wpdb->options,
+			array( 'option_name' => $option, 'option_value' => maybe_serialize( $payload ) ),
+			array( '%s', '%s' )
+		);
+		wp_cache_delete( $option, 'options' );
+		return 1 === $deleted;
 	}
 
 	public static function begin() {
@@ -137,7 +149,12 @@ final class SPF_Runtime {
 		if ( ! empty( $claim['expires_at'] ) && strtotime( (string) $claim['expires_at'] ) <= time() ) {
 			return new WP_Error( 'spf_evidence_expired', __( 'The external evidence verification has expired.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
 		}
-		$claim['evidence_hash'] = self::hash( $claim );
+		$canonical = self::canonicalize( $claim );
+		$encoded = wp_json_encode( $canonical );
+		if ( false === $encoded || strlen( $encoded ) > 65536 ) {
+			return new WP_Error( 'spf_evidence_oversized', __( 'The external evidence claim exceeds the bounded evidence envelope.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
+		}
+		$claim['evidence_hash'] = self::hash( $canonical );
 		return $claim;
 	}
 

@@ -1,0 +1,4 @@
+$assert(str_contains($res_source,'$safe_environments') && str_contains($res_source,"'run_reconciliation'") && str_contains($res_source,'sanitize_chaos_context'),'Chaos fail-closed authorization/privacy guard absent.');
+$assert(str_contains($res_source,"'spf_snapshot_integrity_failed'") && str_contains($res_source,"'future-snapshot-restore'"),'Snapshot integrity/concurrency guard absent.');
+
+if($failures){fwrite(STDERR,"Future Foundation tests failed:\n- ".implode("\n- ",$failures)."\n");exit(1);} echo "Future Foundation assertions: {$assertions}/{$assertions} PASS\n";

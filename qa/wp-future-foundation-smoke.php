@@ -15,8 +15,10 @@ $assert( false === $status['ai_autonomous_changes'], 'AI governance advisor must
 
 $policy = SPF_Governance_Control_Plane::evaluate_policy( 'claim_global_shell', array() );
 $assert( 'deny' === $policy['decision'], 'Policy-as-Code must deny a global shell ownership claim.' );
+$policies_before_denied_write = get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() );
 $saved_policy = SPF_Governance_Control_Plane::save_policy( array( 'id'=>'F01-POL-SMOKE-001','title'=>'Smoke deny rule','effect'=>'deny','actions'=>array('smoke_forbidden_action'),'owner'=>'file-01','decision_id'=>'F01-FUT-001','priority'=>50 ) );
-$assert( ! is_wp_error( $saved_policy ) && 'F01-POL-SMOKE-001' === $saved_policy['id'], 'Policy-as-Code write path failed.' );
+$assert( is_wp_error( $saved_policy ) && 'spf_forbidden' === $saved_policy->get_error_code(), 'Policy-as-Code mutation must fail closed without Founder amendment authority.' );
+$assert( SPF_Runtime::hash( get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() ) ) === SPF_Runtime::hash( $policies_before_denied_write ), 'Denied Policy-as-Code mutation changed the policy catalog.' );
 
 $scaffold = SPF_Platform_Engineering::scaffold_module( array( 'module_key'=>'file-27','owner_file'=>'27','owner_name'=>'Runtime Test','slug'=>'runtime-test','prefix'=>'RTT' ) );
 $assert( ! is_wp_error( $scaffold ) && empty( $scaffold['write_performed'] ), 'Golden-path scaffold must be generated without foreign writes.' );
@@ -74,8 +76,10 @@ $assert( SPF_Runtime::hash( get_option( SPF_Governance_Control_Plane::POLICY_OPT
 $heal = SPF_Resilience_Lab::self_heal_plan();
 $assert( 'file-01-only' === $heal['owner_scope'], 'Self-heal plan must remain File 01 scoped.' );
 
+$chaos_log_before_denied_run = get_option( SPF_Resilience_Lab::CHAOS_OPTION, array() );
 $chaos = SPF_Resilience_Lab::run_chaos( 'dependency_timeout', array( 'module'=>'file-20' ) );
-$assert( ! is_wp_error( $chaos ) && empty( $chaos['injected'] ), 'Chaos must remain simulation-only without SPF_CHAOS_MODE.' );
+$assert( is_wp_error( $chaos ) && 'spf_forbidden' === $chaos->get_error_code(), 'Chaos must fail closed without release-operator reconciliation authority.' );
+$assert( SPF_Runtime::hash( get_option( SPF_Resilience_Lab::CHAOS_OPTION, array() ) ) === SPF_Runtime::hash( $chaos_log_before_denied_run ), 'Denied chaos execution changed the chaos evidence log.' );
 
 $twin = SPF_Resilience_Lab::digital_twin( array( 'modules'=>array(
 	array('module_key'=>'file-01','required'=>array()),

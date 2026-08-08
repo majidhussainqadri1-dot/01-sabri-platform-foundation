@@ -21,16 +21,30 @@ final class SPF_System_Check {
 		$tx_probe = self::transaction_probe();
 		$checks[] = self::check( 'transaction_rollback_probe', true === $tx_probe, true===$tx_probe?'rollback-verified':'failed', 'Database rollback behavior could not be verified.', 'fail' );
 
-		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
-		$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>array('spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick') ) );
-		$cron_ok = ! $cron_disabled || ( is_array($external_cron) && array_key_exists('verified',$external_cron) && true===$external_cron['verified'] );
-		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without verified external scheduler evidence.', 'fail' );
 		$expected_schedules = array(
 			'spf_dispatch_outbox'          => 'spf_five_minutes',
 			'spf_privacy_retention'       => 'daily',
 			'spf_reconcile_expired_flags' => 'hourly',
 			'spf_future_foundation_tick'  => 'spf_five_minutes',
 		);
+		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+		$external_cron = null;
+		$cron_ok = ! $cron_disabled;
+		if ( $cron_disabled ) {
+			$required_hooks = array_keys( $expected_schedules );
+			$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>$required_hooks ) );
+			$reported_hooks = is_array( $external_cron ) && is_array( $external_cron['hooks'] ?? null ) ? array_values( array_unique( array_map( 'sanitize_key', $external_cron['hooks'] ) ) ) : array();
+			$verified_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['verified_at'] ?? '' ) ) : false;
+			$expires_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['expires_at'] ?? '' ) ) : false;
+			$cron_ok = is_array( $external_cron )
+				&& true === ( $external_cron['verified'] ?? false )
+				&& '' !== trim( (string) ( $external_cron['scheduler_id'] ?? '' ) )
+				&& '' !== trim( (string) ( $external_cron['verifier'] ?? '' ) )
+				&& $verified_at && $verified_at <= time() + 60 && $verified_at >= time() - 900
+				&& $expires_at && $expires_at > time()
+				&& empty( array_diff( $required_hooks, $reported_hooks ) );
+		}
+		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without fresh, complete, expiring external scheduler evidence.', 'fail' );
 		foreach ( $expected_schedules as $hook => $expected_recurrence ) {
 			$scheduled = wp_next_scheduled( $hook );
 			$recurrence = $scheduled ? wp_get_schedule( $hook ) : false;

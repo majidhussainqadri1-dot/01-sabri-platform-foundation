@@ -223,6 +223,9 @@ final class SPF_Platform_Engineering {
 			return new WP_Error( 'spf_config_environment_invalid', __( 'A supported environment is required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$sanitized = self::sanitize_config( $config );
+		if ( is_wp_error( $sanitized ) ) {
+			return $sanitized;
+		}
 		$lock_name = 'future-config-baselines';
 		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
 		if ( is_wp_error( $lock ) ) {
@@ -247,6 +250,9 @@ final class SPF_Platform_Engineering {
 		$baselines = get_option( self::CONFIG_BASELINE_OPTION, array() );
 		$baseline = is_array( $baselines ) ? (array) ( $baselines[ $environment ] ?? array() ) : array();
 		$current = self::sanitize_config( $current );
+		if ( is_wp_error( $current ) ) {
+			return $current;
+		}
 		$keys = array_values( array_unique( array_merge( array_keys( $baseline ), array_keys( $current ) ) ) );
 		$changes = array();
 		foreach ( $keys as $key ) {
@@ -527,22 +533,32 @@ final class SPF_Platform_Engineering {
 
 	private static function sanitize_config_level( array $config, $depth ) {
 		if ( $depth > 4 ) {
-			return array( '_truncated'=>true );
+			return new WP_Error( 'spf_config_too_deep', __( 'Configuration nesting exceeds the bounded drift-detection envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		if ( count( $config ) > 200 ) {
+			return new WP_Error( 'spf_config_too_large', __( 'Configuration keys exceed the bounded drift-detection envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$out = array();
-		foreach ( array_slice( $config, 0, 200, true ) as $key => $value ) {
-			$key = sanitize_key( $key );
-			if ( '' === $key ) {
-				continue;
+		foreach ( $config as $raw_key => $value ) {
+			if ( ! is_string( $raw_key ) ) {
+				return new WP_Error( 'spf_config_key_invalid', __( 'Configuration keys must be canonical strings.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}
-			if ( preg_match( '/(secret|password|token|key|credential)/i', $key ) ) {
+			$key = sanitize_key( $raw_key );
+			if ( '' === $key || $raw_key !== $key || array_key_exists( $key, $out ) ) {
+				return new WP_Error( 'spf_config_key_invalid', __( 'Configuration keys must already be unique canonical keys.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+			}
+			if ( preg_match( '/(^|_)(secret|password|token|private_key|api_key|encryption_key|credential)($|_)/i', $key ) ) {
 				$out[ $key ] = array( 'secret_hash'=>SPF_Runtime::hash( $value ), 'redacted'=>true );
 				continue;
 			}
 			if ( is_array( $value ) ) {
-				$out[ $key ] = self::sanitize_config_level( $value, $depth + 1 );
+				$nested = self::sanitize_config_level( $value, $depth + 1 );
+				if ( is_wp_error( $nested ) ) { return $nested; }
+				$out[ $key ] = $nested;
 			} elseif ( is_scalar( $value ) || null === $value ) {
 				$out[ $key ] = is_string( $value ) ? substr( sanitize_text_field( $value ), 0, 500 ) : $value;
+			} else {
+				return new WP_Error( 'spf_config_value_invalid', __( 'Configuration drift input contains an unsupported value type.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}
 		}
 		ksort( $out, SORT_STRING );

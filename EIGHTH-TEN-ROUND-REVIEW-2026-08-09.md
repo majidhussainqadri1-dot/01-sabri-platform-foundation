@@ -1,0 +1,22 @@
+# File 01 — Eighth Fresh Ten-Round Review and Fix Cycle — 2026-08-09
+
+This eighth independent adversarial cycle was opened after the seventh exact-head green candidate. The governing basis is the consolidated central plan plus the latest File 01 v2.0 ten-round-reviewed plan. Each round was completed on the corrected source from the preceding round; every confirmed defect was corrected before the next round. Staging, live deployment and operational acceptance remain separate evidence gates.
+
+1. **Idempotency ambiguous-completion truth** — stale `processing` reservations could be automatically reclaimed and execute the protected mutation again even when the original side effect may already have committed. Stale ambiguity is now frozen as `reconciliation_required`; automatic replay is blocked and a recovery receipt is emitted.
+2. **Release evidence chain binding** — Founder approval could name a non-empty staging hash without proving it matched the actual staged state, and deployment evidence could name a checksum without proving it matched the canonical release package. Approval now binds the exact staged evidence hash; deployment binds the exact canonical release checksum.
+3. **Feature-flag authorization identity** — authorization could be evaluated against a raw flag key while persistence used a normalized key/environment. Owner, key and environment must now already be canonical before authorization, and the authorization object is the exact persisted identity.
+4. **Reconciliation rollback idempotency** — a retry after owner rollback succeeded but local restoration failed could call owner rollback receipts again. Rollback now has a durable `owner_rollback_completed` checkpoint; retries resume local restoration without repeating external compensation, and completed rollback replays idempotently.
+5. **External scheduler cadence evidence** — WP-Cron-disabled health could accept an identified/fresh scheduler without proving that it ran frequently enough for File 01 five-minute jobs. Evidence must now prove `max_interval_seconds` between 1 and 300 in addition to complete hook coverage.
+6. **Event-schema version immutability** — an existing `event_name@version` entry could be silently replaced with a different schema. Exact duplicate registration is idempotent; any changed contract under the same semantic version is rejected and requires a new version.
+7. **Progressive rollout truth retention and release binding** — rollout state could be created without binding to an existing canonical release and the 101st rollout could silently evict older rollout truth. Authorized rollout creation now requires a canonical release UUID that exists and is non-terminal; capacity fails closed at 100 instead of silently evicting evidence.
+8. **Time-travel snapshot recovery truth** — the 51st snapshot silently evicted the oldest governance snapshot, and failed restore compensation was not read-back verified. Snapshot capacity now fails closed at 50, and restore compensation failures are explicitly detected and escalated.
+9. **Feature-activation evidence context binding** — migration/health evidence could be structurally valid yet not prove that it belonged to the exact owner, flag, environment and current dependency-readiness graph. Those four binding fields are now mandatory and exact-match verified.
+10. **Traceability completion truth** — malformed requirement IDs were silently skipped, duplicate requirement IDs could coexist with a 100% coded percentage, and evidence for unknown requirements was ignored. The report now records invalid requirements and orphan evidence, marks the report invalid, and blocks a coded-completion claim when the traceability input itself is defective.
+
+**Defects found:** rounds 1, 2, 3, 4, 5, 6, 7, 8, 9 and 10.
+
+**Defect-free rounds before correction:** none.
+
+Regression coverage for this cycle is recorded in `tests/eighth-ten-round-review-tests.php`. Exact-head automated evidence, deterministic package checksum and artifact identity are release evidence and must only be asserted after the final clean head completes source QA, WordPress/MySQL runtime QA, concurrency/purge smoke and deterministic packaging.
+
+Hostinger staging, real companion coexistence, browser/device/accessibility/RTL/weak-network testing, representative load/cache/cron testing, independent backup/restore/rollback proof, Founder staging acceptance, production cutover and sustained monitoring remain pending and are not implied by repository-level completion.

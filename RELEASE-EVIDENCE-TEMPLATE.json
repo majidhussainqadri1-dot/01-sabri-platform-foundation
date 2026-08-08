@@ -1,0 +1,18 @@
+{
+  "release_id": "generated-at-record-time",
+  "software_version": "1.2.0",
+  "schema_version": "1.2.0",
+  "contract_version": "1.2.0",
+  "commit_sha": "replace-with-exact-40-or-64-character-sha",
+  "package_name": "01-sabri-platform-foundation-1.2.0-CORRECTIVE-CANDIDATE.zip",
+  "checksum_sha256": "replace-with-64-character-sha256",
+  "initial_status": "planned",
+  "evidence_by_state": {
+    "planned": ["scope_reference", "owner"],
+    "built": ["source_commit_verified", "package_checksum_verified", "reproducible_build", "source_manifest", "sbom"],
+    "verified": ["ci_run", "test_summary", "zero_unresolved_critical_high", "security_review"],
+    "staged": ["staging_environment", "fresh_install", "upgrade_test", "cross_file_contracts", "backup_restore_test", "rollback_rehearsal", "browser_accessibility_rtl", "founder_acceptance_pending"],
+    "approved": ["founder_approval_id", "approved_scope", "staging_evidence_hash", "rollback_window"],
+    "deployed": ["production_change_id", "deployed_package_checksum", "smoke_test", "monitoring_window", "rollback_ready"]
+  }
+}

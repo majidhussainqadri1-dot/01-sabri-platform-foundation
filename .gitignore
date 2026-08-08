@@ -1,31 +1,6 @@
-# Packages and generated output
-*.zip
-build/
-dist/
-
-# Dependencies
-vendor/
-node_modules/
-
-# Local environment and secrets
-.env
-.env.*
-!.env.example
-*.key
-*.pem
-*.p12
-*.pfx
-auth.json
-
-# Logs, caches, and test output
+/build/
+/dist/
+/.wordpress/
+/wp-tests-config.php
 *.log
-.cache/
-coverage/
-.phpunit.result.cache
-
-# Editors and operating systems
 .DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp

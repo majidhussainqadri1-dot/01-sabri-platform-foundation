@@ -1,124 +1,155 @@
 <?php
-
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_Plugin {
+	private static $instance;
+	private $ran = false;
+
+	public static function instance() {
+		if ( ! self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
 	public function run() {
-		add_shortcode( 'sabri_platform_home', array( $this, 'home_shortcode' ) );
-		add_shortcode( 'sabri_platform_module', array( $this, 'module_shortcode' ) );
-		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
-		add_action( 'admin_notices', array( $this, 'activation_notice' ) );
-	}
-
-	public function enqueue_assets() {
-		global $post;
-		if ( ! $post instanceof WP_Post ) {
+		if ( $this->ran ) {
 			return;
 		}
-		if ( ! has_shortcode( $post->post_content, 'sabri_platform_home' ) && ! has_shortcode( $post->post_content, 'sabri_platform_module' ) ) {
-			return;
-		}
-
-		wp_enqueue_style( 'spf-foundation', SPF_URL . 'assets/css/foundation.css', array(), SPF_VERSION );
-		wp_enqueue_script( 'spf-foundation', SPF_URL . 'assets/js/foundation.js', array(), SPF_VERSION, true );
+		$this->ran = true;
+		add_action( 'spf_dispatch_outbox', array( 'SPF_Event_Bus', 'dispatch_due' ) );
+		add_action( 'spf_reconcile_expired_flags', array( 'SPF_Governance', 'reconcile_expired_flags' ) );
+		SPF_Privacy::register();
+		SPF_Future_Foundation::register();
+		add_action( 'rest_api_init', array( 'SPF_REST', 'register' ) );
+		add_action( 'admin_menu', array( 'SPF_Admin', 'register_menu' ) );
+		SPF_Admin::register_actions();
+		add_action( 'init', array( $this, 'register_restricted_routes' ), 5 );
+		add_filter( 'query_vars', array( $this, 'query_vars' ) );
+		add_action( 'template_redirect', array( $this, 'serve_restricted_route' ), 0 );
+		add_action( 'init', array( $this, 'register_with_shell' ), 20 );
+		add_filter( 'plugin_action_links_' . plugin_basename( SPF_FILE ), array( $this, 'action_links' ) );
+		add_action( 'admin_init', array( $this, 'maybe_upgrade' ) );
 	}
 
-	public function home_shortcode() {
-		return SPF_Renderer::template(
-			'home',
+	public function maybe_upgrade() {
+		$result = SPF_Installer::maybe_upgrade();
+		if ( is_wp_error( $result ) ) {
+			set_transient( 'spf_activation_notice', array( 'code'=>$result->get_error_code(),'message'=>$result->get_error_message() ), HOUR_IN_SECONDS );
+		}
+	}
+
+	public function register_restricted_routes() {
+		add_rewrite_rule( '^platform-system-check/?$', 'index.php?spf_foundation_endpoint=system-check', 'top' );
+		add_rewrite_rule( '^platform-foundation/status/?$', 'index.php?spf_foundation_endpoint=status', 'top' );
+	}
+
+	public function query_vars( $vars ) {
+		$vars[] = 'spf_foundation_endpoint';
+		return $vars;
+	}
+
+	public function serve_restricted_route() {
+		$endpoint = get_query_var( 'spf_foundation_endpoint' );
+		if ( ! $endpoint ) {
+			return;
+		}
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
+		if ( ! SPF_Authorization::can( 'view', array( 'object_id'=>$endpoint ), array( 'purpose'=>'restricted_foundation_endpoint' ) ) ) {
+			status_header( is_user_logged_in() ? 403 : 404 );
+			wp_die( esc_html__( 'This restricted foundation endpoint is unavailable.', 'sabri-platform-foundation' ) );
+		}
+		$data = 'system-check' === $endpoint ? SPF_System_Check::run( false ) : $this->status_dto();
+		wp_send_json( $data, 200, JSON_UNESCAPED_SLASHES );
+	}
+
+	public function register_with_shell() {
+		$provider = array(
+			'owner'=>'file-01','contract_version'=>SPF_CONTRACT_VERSION,'admin_route'=>admin_url('tools.php?page=sabri-foundation'),
+			'status_callback'=>'spf_foundation_status','public_shell'=>false,'search_surface'=>false,
+		);
+		do_action( 'sabri_shell_register_provider', 'file-01-foundation', $provider );
+	}
+
+	public static function builtin_contract_definitions() {
+		return array(
 			array(
-				'nav_items'    => $this->nav_items(),
-				'viral_posts'  => SPF_Renderer::posts( 'viral', 4 ),
-				'latest_posts' => SPF_Renderer::posts( 'latest', 12 ),
-				'founder_posts'=> SPF_Renderer::posts( 'founder', 4 ),
-			)
-		);
-	}
-
-	public function module_shortcode( $atts ) {
-		$atts = shortcode_atts( array( 'key' => 'news' ), $atts, 'sabri_platform_module' );
-		$key  = sanitize_key( $atts['key'] );
-		$spec = SPF_Activator::page_specs();
-		$desc = SPF_Renderer::module_descriptions();
-
-		if ( ! isset( $spec[ $key ] ) || 'home' === $key ) {
-			return '';
-		}
-
-		return SPF_Renderer::template(
-			'module',
+				'contract_key'=>'FoundationRegistry.v1','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array(
+					'module_key'=>array('type'=>'string','required'=>true),'owner_file'=>array('type'=>'string','required'=>true),'software_version'=>array('type'=>'semver','required'=>true),
+					'contract_version'=>array('type'=>'semver','required'=>true),'state'=>array('type'=>'enum','required'=>true),'required'=>array('type'=>'array','required'=>true),
+					'commands'=>array('type'=>'array','required'=>true),'queries'=>array('type'=>'array','required'=>true),'events'=>array('type'=>'array','required'=>true),
+				),
+				'consumers'=>array('file-00','file-20','file-24','file-26'),
+			),
 			array(
-				'nav_items'  => $this->nav_items(),
-				'module_key' => $key,
-				'title'      => $spec[ $key ]['label'],
-				'description'=> isset( $desc[ $key ] ) ? $desc[ $key ] : '',
-				'posts'      => SPF_Renderer::posts( 'latest', 6 ),
-			)
+				'contract_key'=>'FoundationRouteRegistry.v1','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array('route_key'=>array('type'=>'string','required'=>true),'route_path'=>array('type'=>'path','required'=>true),'owner_module'=>array('type'=>'string','required'=>true),'layout_context'=>array('type'=>'string','required'=>true),'status'=>array('type'=>'enum','required'=>true),'record_version'=>array('type'=>'integer','required'=>true)),
+				'consumers'=>array('file-20','file-26'),
+			),
+			array(
+				'contract_key'=>'FoundationAuthorizationClaim.v1','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array(
+					'claim_version'=>array('type'=>'semver','required'=>true),'claim_id'=>array('type'=>'string','required'=>true),
+					'allowed'=>array('type'=>'boolean','required'=>true),'user_id'=>array('type'=>'integer','required'=>true),'actor_id'=>array('type'=>'integer','required'=>false),
+					'action'=>array('type'=>'string','required'=>true),'capability'=>array('type'=>'string','required'=>true),'object_hash'=>array('type'=>'sha256','required'=>true),
+					'purpose'=>array('type'=>'string','required'=>true),'issued_at'=>array('type'=>'timestamp','required'=>true),'expires_at'=>array('type'=>'timestamp','required'=>true),
+					'institutional_role'=>array('type'=>'string','required'=>true),
+				),
+				'consumers'=>array('file-00','file-24'),
+			),
+			array(
+				'contract_key'=>'FoundationHealth.v1','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array('trace_id'=>array('type'=>'uuid','required'=>true),'overall_status'=>array('type'=>'enum','required'=>true),'checks'=>array('type'=>'array','required'=>true),'checked_at'=>array('type'=>'datetime','required'=>true)),
+				'consumers'=>array('file-20','file-24'),
+			),
+			array(
+				'contract_key'=>'FoundationFutureControlPlane.v2','contract_version'=>SPF_CONTRACT_VERSION,'owner_module'=>'file-01','status'=>'current',
+				'schema'=>array(
+					'future_foundation_version'=>array('type'=>'semver','required'=>true),
+					'feature_count'=>array('type'=>'integer','required'=>true),
+					'coded_count'=>array('type'=>'integer','required'=>true),
+					'policy_count'=>array('type'=>'integer','required'=>true),
+					'event_schema_count'=>array('type'=>'integer','required'=>true),
+					'snapshot_count'=>array('type'=>'integer','required'=>true),
+					'ai_autonomous_changes'=>array('type'=>'boolean','required'=>true),
+				),
+				'consumers'=>array('file-20','file-24'),
+			),
 		);
 	}
 
-	private function nav_items() {
-		$pages = (array) get_option( 'spf_page_map', array() );
-		$items = array();
-		foreach ( SPF_Activator::page_specs() as $key => $spec ) {
-			$page_id = isset( $pages[ $key ] ) ? absint( $pages[ $key ] ) : 0;
-			$items[] = array(
-				'key'   => $key,
-				'label' => $spec['label'],
-				'url'   => $page_id ? get_permalink( $page_id ) : home_url( '/' . $spec['slug'] . '/' ),
-			);
-		}
-		return $items;
-	}
-
-	public function admin_menu() {
-		add_menu_page(
-			'Sabri Platform Foundation',
-			'Sabri Platform',
-			'manage_options',
-			'sabri-platform-foundation',
-			array( $this, 'admin_page' ),
-			'dashicons-networking',
-			58
+	public function status_dto() {
+		$releases = SPF_Governance::list_releases( 1 );
+		$release_status = $releases ? $releases[0]['status'] : 'not-recorded';
+		$schema = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
+		$health = SPF_System_Check::latest();
+		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, array( 'release_status' => $release_status, 'health' => $health ) );
+		$operational = is_array( $operational_claim ) && array_key_exists( 'verified', $operational_claim ) && true === $operational_claim['verified'] && 'deployed' === $release_status && is_array( $health ) && 'pass' === ( $health['overall_status'] ?? '' );
+		return array(
+			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
+			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),
+			'upgrade_state'=>get_option('spf_upgrade_state',array('status'=>'not-required')),
+			'module_count'=>count(SPF_Registry::list_modules(array('limit'=>200))),'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
+			'contract_count'=>count(SPF_Registry::list_contracts(array('limit'=>200))),'route_count'=>count(SPF_Registry::list_routes()),
+			'latest_health'=>$health,'legacy_state'=>get_option('spf_reconciliation_state',array('status'=>'not_run')),'latest_release_status'=>$release_status,
+			'future_foundation'=>SPF_Future_Foundation::status(),
+			'completion_statuses'=>array(
+				'specified'=>true,
+				'coded'=>true,
+				'packaged'=>in_array($release_status,array('built','verified','staged','approved','deployed'),true),
+				'automated_qa_green'=>in_array($release_status,array('verified','staged','approved','deployed'),true),
+				'staging_accepted'=>in_array($release_status,array('staged','approved','deployed'),true),
+				'live_deployed'=>'deployed'===$release_status,
+				'operational'=>$operational,
+			),
+			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
 	}
 
-	public function admin_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return;
-		}
-		$pages   = (array) get_option( 'spf_page_map', array() );
-		$home_id = isset( $pages['home'] ) ? absint( $pages['home'] ) : 0;
-		?>
-		<div class="wrap">
-			<h1>Sabri Platform Foundation</h1>
-			<p>Version <?php echo esc_html( SPF_VERSION ); ?> provides the modular public home, news feed and central navigation foundation.</p>
-			<?php if ( $home_id ) : ?>
-				<p><a class="button button-primary" href="<?php echo esc_url( get_permalink( $home_id ) ); ?>" target="_blank" rel="noopener">View Sabri Platform Home</a></p>
-			<?php endif; ?>
-			<p><strong>Safety:</strong> This plugin does not automatically replace the live homepage or modify the active theme.</p>
-			<p><strong>Google Login:</strong> OAuth credentials and account completion will be connected in the dedicated Authentication module.</p>
-		</div>
-		<?php
-	}
-
-	public function activation_notice() {
-		if ( ! current_user_can( 'manage_options' ) || ! get_transient( 'spf_activation_notice' ) ) {
-			return;
-		}
-		delete_transient( 'spf_activation_notice' );
-		$pages = (array) get_option( 'spf_page_map', array() );
-		$url   = isset( $pages['home'] ) ? get_permalink( absint( $pages['home'] ) ) : '';
-		?>
-		<div class="notice notice-success is-dismissible">
-			<p><strong>Sabri Platform Foundation activated.</strong>
-			<?php if ( $url ) : ?>
-				<a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener">View the new platform page</a> before making it the live homepage.
-			<?php endif; ?>
-			</p>
-		</div>
-		<?php
+	public function action_links( $links ) {
+		array_unshift( $links, '<a href="'.esc_url(admin_url('tools.php?page=sabri-foundation')).'">'.esc_html__('Foundation Status','sabri-platform-foundation').'</a>' );
+		return $links;
 	}
 }
-

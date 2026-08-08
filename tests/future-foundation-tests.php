@@ -52,10 +52,14 @@ $assert($trace['live_deployed']===1,'Trace live count wrong.');
 $assert($trace['production_complete']===1,'Trace operational completion truth wrong.');
 $assert($trace['duplicate_requirement_ids']===['REQ-1'],'Duplicate requirement IDs not reported.');
 
-$scaffold=SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-27','owner_file'=>'27','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]]);
+$scaffold=SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-26','owner_file'=>'26','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]]);
 $assert(!is_wp_error($scaffold),'Structured golden-path dependency rejected.');
 $assert($scaffold['generated_only']===true && $scaffold['write_performed']===false,'Scaffolder must remain generation-only.');
 $assert(($scaffold['manifest']['required'][0]['minimum_version']??'')==='2.0.0','Scaffolder lost minimum dependency version.');
+$assert(isset($scaffold['manifest']['capabilities'],$scaffold['manifest']['routes'],$scaffold['manifest']['data_classes'],$scaffold['manifest']['health']),'Generated manifest is missing registry-required fields.');
+$generated_manifest_check=$normalize_manifest->invoke(null,$scaffold['manifest']);
+$assert(!is_wp_error($generated_manifest_check),'Golden-path scaffold is not accepted by the File 01 manifest contract.');
+
 $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'),'Scaffold checkout action not pinned.');
 $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/smoke.php'),'Generated CI does not execute smoke test.');
 

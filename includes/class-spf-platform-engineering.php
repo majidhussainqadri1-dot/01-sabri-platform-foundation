@@ -56,8 +56,11 @@ final class SPF_Platform_Engineering {
 		$owner_file = sanitize_text_field( $spec['owner_file'] ?? '' );
 		$slug = sanitize_title( $spec['slug'] ?? $module_key );
 		$prefix = strtoupper( preg_replace( '/[^A-Za-z0-9_]/', '', (string) ( $spec['prefix'] ?? '' ) ) );
-		if ( '' === $module_key || '' === $owner_file || '' === $slug || '' === $prefix || strlen( $prefix ) > 16 ) {
-			return new WP_Error( 'spf_scaffold_invalid', __( 'Module key, owner file, slug and bounded namespace prefix are required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
+		if ( '' === $module_key || '' === $owner_file || '' === $slug || '' === $prefix || strlen( $prefix ) > 16
+			|| ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $module_key )
+			|| ! preg_match( '/^(?:0[0-9]|1[0-9]|2[0-6])$/', $owner_file )
+			|| $module_key !== 'file-' . $owner_file ) {
+			return new WP_Error( 'spf_scaffold_invalid', __( 'A currently approved canonical module key, matching owner file, slug and bounded namespace prefix are required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
 		}
 		$required = self::normalize_scaffold_dependencies( (array) ( $spec['required'] ?? array( 'file-01', 'file-00' ) ) );
 		$optional = self::normalize_scaffold_dependencies( (array) ( $spec['optional'] ?? array() ) );
@@ -75,10 +78,17 @@ final class SPF_Platform_Engineering {
 			'state'            => 'registered',
 			'required'         => $required,
 			'optional'         => $optional,
+			'capabilities'     => array(),
 			'commands'         => array(),
 			'queries'          => array(),
 			'events'           => array(),
-			'privacy_classes'  => array( 'internal' ),
+			'routes'           => array(),
+			'data_classes'     => array( 'internal' ),
+			'health'           => array( 'callback' => '', 'contract' => '' ),
+			'canonical_entities'=> array(),
+			'writes'           => array(),
+			'global_shell_owner'=> false,
+			'application_shell_owner'=> false,
 		);
 		$plugin_header = "<?php\n/**\n * Plugin Name: " . ( $manifest['owner_name'] ?: $module_key ) . "\n * Version: 0.1.0\n * Requires PHP: 8.1\n */\n\ndefined( 'ABSPATH' ) || exit;\n";
 		$test = "<?php\ndeclare(strict_types=1);\n\$manifest = json_decode( file_get_contents( dirname(__DIR__) . '/manifest.json' ), true );\nif ( ! is_array( \$manifest ) || empty( \$manifest['module_key'] ) || empty( \$manifest['owner_file'] ) ) { fwrite( STDERR, 'Invalid generated manifest.' . PHP_EOL ); exit(1); }\necho 'Generated module smoke PASS' . PHP_EOL;\n";
@@ -645,22 +655,19 @@ final class SPF_Platform_Engineering {
 			if ( is_array( $dependency ) ) {
 				$key = sanitize_key( $dependency['module_key'] ?? '' );
 				$minimum = sanitize_text_field( $dependency['minimum_version'] ?? '0.0.0' );
-				if ( ! $key || ! SPF_Registry::valid_semver( $minimum ) ) {
-					return new WP_Error( 'spf_scaffold_dependency_invalid', __( 'Generated module dependencies require a module key and valid minimum semantic version.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
-				}
-				$value = array( 'module_key'=>$key, 'minimum_version'=>$minimum );
+				$maximum = sanitize_text_field( $dependency['maximum_version'] ?? '' );
 			} else {
 				$key = sanitize_key( $dependency );
-				if ( ! $key ) {
-					continue;
-				}
-				$value = $key;
+				$minimum = '0.0.0';
+				$maximum = '';
 			}
-			if ( isset( $seen[ $key ] ) ) {
-				continue;
+			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! SPF_Registry::valid_semver( $minimum )
+				|| ( $maximum && ! SPF_Registry::valid_semver( $maximum ) ) || ( $maximum && version_compare( $minimum, $maximum, '>' ) ) ) {
+				return new WP_Error( 'spf_scaffold_dependency_invalid', __( 'Generated module dependencies require a canonical module key and valid semantic version range.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}
+			if ( isset( $seen[ $key ] ) ) { continue; }
 			$seen[ $key ] = true;
-			$out[] = $value;
+			$out[] = array( 'module_key'=>$key, 'minimum_version'=>$minimum, 'maximum_version'=>$maximum );
 		}
 		return $out;
 	}

@@ -32,6 +32,8 @@ $assert( str_contains( $privacy, 'spf_retention_incomplete' ) && str_contains( $
 
 $assert( str_contains( $reconciler, "true !== \$owner_plan['accepted']" ) && str_contains( $reconciler, "true !== \$receipt['success']" ) && str_contains( $reconciler, 'spf_reconciliation_restore_incomplete' ) && str_contains( $reconciler, 'compensation_incomplete' ), 'Round 6: reconciliation accepts truthy receipts or claims compensation without verification.' );
 
+$assert( str_contains( $repair, "'missing_table' !== (string) \$defect_code" ) && str_contains( $repair, 'spf_repair_restore_incomplete' ) && str_contains( $repair, 'spf_repair_compensation_incomplete' ), 'Round 7: safe repair misclassifies missing tables or claims unverified compensation.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

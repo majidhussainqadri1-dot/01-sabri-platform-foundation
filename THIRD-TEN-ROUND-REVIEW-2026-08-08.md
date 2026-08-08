@@ -23,3 +23,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 6 — Cross-owner reconciliation receipts and compensation
 **Defects found and corrected.** Owner-plan acceptance, execution receipts and rollback receipts used truthiness rather than literal success; compensation was labelled successful without verifying local restoration. All acceptance/success flags are now strict booleans, local snapshot restoration is verified, compensation status distinguishes complete from incomplete, and rollback requires audit/event persistence.
+
+### Round 7 — Safe-repair schema classification and compensation
+**Defects found and corrected.** `verify_schema()` returns defect code `missing_table`, but the repair planner searched for `:missing_table`, so a safely recreatable missing File 01 table was simultaneously treated as a blocking upgrade defect. Key/code handling is now correct, and repair compensation verifies restored options/routes/tables before claiming compensation.

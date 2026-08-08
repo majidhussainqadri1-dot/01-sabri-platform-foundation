@@ -21,9 +21,9 @@ final class SPF_Repair {
 		if ( is_wp_error( $schema ) ) {
 			$data = $schema->get_error_data();
 			if ( is_array( $data ) && ! empty( $data['defects'] ) ) {
-				foreach ( $data['defects'] as $defect ) {
-					if ( false === strpos( (string) $defect, ':missing_table' ) ) {
-						$blockers[] = array( 'code' => 'schema_upgrade_required', 'defect' => sanitize_text_field( $defect ) );
+				foreach ( $data['defects'] as $defect_key => $defect_code ) {
+					if ( 'missing_table' !== (string) $defect_code ) {
+						$blockers[] = array( 'code'=>'schema_upgrade_required', 'defect'=>sanitize_text_field((string)$defect_key), 'defect_code'=>sanitize_key((string)$defect_code) );
 					}
 				}
 			}
@@ -115,9 +115,10 @@ final class SPF_Repair {
 			}
 			return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'status' => 'applied' );
 		} catch ( Throwable $error ) {
-			self::restore_snapshot( $snapshot );
-			SPF_Audit::record( 'repair_compensated', 'foundation_repair', $hash, 'failed', array( 'purpose' => 'safe_repair', 'error' => $error->getMessage() ) );
-			return new WP_Error( 'spf_repair_failed', $error->getMessage(), array( 'status' => 409 ) );
+			$restored = self::restore_snapshot( $snapshot );
+			$compensated = ! is_wp_error( $restored );
+			SPF_Audit::record( 'repair_compensated', 'foundation_repair', $hash, $compensated?'failed':'compensation_incomplete', array( 'purpose'=>'safe_repair', 'error'=>$error->getMessage() ) );
+			return new WP_Error( $compensated?'spf_repair_failed':'spf_repair_compensation_incomplete', $compensated ? $error->getMessage() : __( 'Repair failed and its compensation could not be fully verified.', 'sabri-platform-foundation' ), array( 'status'=>$compensated?409:500 ) );
 		} finally {
 			SPF_Runtime::release_lock( self::LOCK, $token );
 		}
@@ -161,20 +162,24 @@ final class SPF_Repair {
 
 	private static function restore_snapshot( array $snapshot ) {
 		global $wpdb;
+		$failures = array();
 		foreach ( $snapshot['options'] as $option => $state ) {
 			$state['exists'] ? update_option( $option, $state['value'], false ) : delete_option( $option );
+			$exists = self::option_exists( $option );
+			if ( (bool)$state['exists'] !== $exists || ( $exists && SPF_Runtime::hash(get_option($option)) !== SPF_Runtime::hash($state['value']) ) ) { $failures[] = 'option:'.$option; }
 		}
 		foreach ( $snapshot['routes'] as $route ) {
 			if ( is_array( $route ) && ! empty( $route['id'] ) && SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
-				$wpdb->replace( SPF_Installer::table( 'routes' ), $route );
+				$result = $wpdb->replace( SPF_Installer::table( 'routes' ), $route );
+				if ( false === $result ) { $failures[] = 'route:'.($route['route_key']??'unknown'); }
 			}
 		}
 		foreach ( $snapshot['created_tables'] as $name ) {
 			$table = SPF_Installer::table( $name );
-			if ( SPF_Runtime::table_exists( $table ) ) {
-				$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted File 01 table.
-			}
+			if ( SPF_Runtime::table_exists( $table ) ) { $wpdb->query( "DROP TABLE IF EXISTS {$table}" ); }
+			if ( SPF_Runtime::table_exists( $table ) ) { $failures[] = 'table:'.$name; }
 		}
+		return empty($failures) ? true : new WP_Error( 'spf_repair_restore_incomplete', __( 'Repair compensation could not be fully verified.', 'sabri-platform-foundation' ), array( 'status'=>500, 'failures'=>$failures ) );
 	}
 
 	private static function option_exists( $option ) {

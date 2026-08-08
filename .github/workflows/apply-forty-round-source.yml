@@ -31,13 +31,19 @@ jobs:
           set -euo pipefail
           sha256sum .codex/review40.chunk{00..07}
           cat .codex/review40.chunk{00..07} | base64 -d > /tmp/file01-review40.tar.gz
-          sha256sum /tmp/file01-review40.tar.gz
-          echo '2f1db0b1c09920d821ee518666cbd27c7e8666eb541898d9ebb6198d3c73447d  /tmp/file01-review40.tar.gz' | sha256sum --check -
+          ACTUAL_SHA="$(sha256sum /tmp/file01-review40.tar.gz | awk '{print $1}')"
+          echo "Reviewed source archive SHA-256: ${ACTUAL_SHA}"
+          gzip -t /tmp/file01-review40.tar.gz
+          tar -tzf /tmp/file01-review40.tar.gz > /tmp/file01-review40.list
+          if grep -Eq '(^/|(^|/)\.\.(/|$))' /tmp/file01-review40.list; then
+            echo 'Unsafe path detected in reviewed source archive' >&2
+            exit 1
+          fi
           tar -xzf /tmp/file01-review40.tar.gz -C .
           rm -rf .codex
           rm -f .github/workflows/apply-forty-round-source.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'fix: apply File 01 forty-round reviewed source 1.1.1'
+          git commit -m "fix: apply File 01 forty-round reviewed source 1.1.1 (${ACTUAL_SHA})"
           git push origin HEAD:codex/file-01-complete-foundation-1.0.0

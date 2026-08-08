@@ -33,6 +33,7 @@ $assert( str_contains( $files['includes/class-spf-authorization.php']??'', "'obj
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_chain_head_invalid' ), 'Malformed audit-head fail-closed guard missing.' );
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_verification_incomplete' ), 'Partial audit-chain verification blocker missing.' );
 $assert( str_contains( $files['includes/class-spf-event-bus.php']??'', "'stale_processing_recovered'" ), 'Outbox stale-lease recovery missing.' );
+$assert( str_contains( $files['includes/class-spf-event-bus.php']??'', '$privacy_class' ) && str_contains( $files['includes/class-spf-installer.php']??'', 'privacy_class varchar(32)' ), 'Durable event privacy classification missing.' );
 $assert( str_contains( $files['includes/class-spf-registry.php']??'', 'spf_dependency_ambiguity' ), 'Required/optional dependency ambiguity rejection missing.' );
 $assert( str_contains( $files['includes/class-spf-registry.php']??'', 'spf_contract_too_large' ), 'Bounded contract envelope missing.' );
 $assert( str_contains( $files['includes/class-spf-reconciler.php']??'', "array( 'file-20','file-21' )" ), 'Legacy reconciliation owner allowlist missing.' );
@@ -40,6 +41,8 @@ $assert( str_contains( $files['includes/class-spf-reconciler.php']??'', 'version
 $assert( str_contains( $files['includes/class-spf-runtime.php']??'', 'delete_lock_if_matches' ), 'Atomic compare-and-delete runtime lock release missing.' );
 $assert( str_contains( $files['includes/class-spf-governance.php']??'', "'planned' !== \$status" ), 'Release initial-state restriction missing.' );
 $assert( str_contains( $files['includes/class-spf-governance.php']??'', 'expected_record_version' ), 'Release optimistic record version missing.' );
+$assert( str_contains( $files['includes/class-spf-governance.php']??'', 'spf_verify_feature_activation_evidence' ) && str_contains( $files['includes/class-spf-governance.php']??'', 'spf_feature_dependency_not_ready' ), 'Fail-closed feature activation evidence gate missing.' );
+$assert( str_contains( $files['includes/class-spf-installer.php']??'', 'verify_required_indexes' ) && str_contains( $files['includes/class-spf-installer.php']??'', 'SHOW INDEX FROM' ), 'Runtime required-index integrity verification missing.' );
 $assert( str_contains( $files['includes/class-spf-privacy.php']??'', 'were retained under the approved governance purpose' ), 'Truthful immutable-audit privacy handling missing.' );
 $assert( ! preg_match( "/array\( 'audit','release_states'.*actor_id'=>0/s", $files['includes/class-spf-privacy.php']??'' ), 'Privacy erasure mutates append-only actor facts.' );
 $assert( str_contains( $files['includes/class-spf-installer.php']??'', 'CREATE TABLE {$shadow} LIKE {$table}' ), 'Activation/upgrade shadow snapshot missing.' );

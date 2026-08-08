@@ -1,6 +1,6 @@
 # File 01 — Fifth Fresh Ten-Round Review and Fix Cycle — 2026-08-08
 
-This is a fifth independent adversarial review of the exact File 01 v2.0 Future Foundation corrective source after four earlier ten-round cycles. Every defect below was corrected before the next round and receives regression protection.
+This is a fifth independent adversarial review of the File 01 v2.0 Future Foundation corrective source after four earlier ten-round cycles. Every defect below was corrected within its review round and receives regression protection.
 
 1. Traceability evidence truth: truthy strings could satisfy design/code/test/package/staging/approval/live/operational evidence. All evidence flags now require literal boolean `true`.
 2. Progressive-delivery adapter truth: truthy `verified` and normalized release-id comparison could accept weak evidence. Verification is literal boolean and evidence is exactly bound to the release identifier.
@@ -11,11 +11,11 @@ This is a fifth independent adversarial review of the exact File 01 v2.0 Future 
 7. Self-heal rollback atomicity: a later option/metadata/audit failure could leave an earlier rollback write applied. Restore state and recovery metadata are now compensated on any failure.
 8. Periodic health tick truth: expiry reconciliation or metric persistence failures were ignored. The tick now returns/surfaces failure and emits a dedicated failure hook.
 9. Privacy System Check DB truth: failed privacy-request or privacy-hold COUNT queries could look like zero healthy rows. Query failures now create explicit failing checks.
-10. Golden-Path dependency safety: scaffolding File 01 with defaults could generate a self-dependency. Any required/optional self-dependency is now rejected. The first Round-10 correction was intentionally subjected to runtime smoke; that smoke exposed that normalized dependencies are structured records rather than plain keys. Round 10 was therefore not accepted at that point. The guard was corrected to compare normalized dependency `module_key` values and the full source/runtime/package QA was rerun successfully. This is a correction within Round 10, not an eleventh review round.
+10. Golden-Path dependency safety: scaffolding File 01 with defaults could generate a self-dependency. Any required/optional self-dependency is now rejected. The first Round-10 correction was subjected to runtime smoke; that smoke exposed that normalized dependencies are structured records rather than plain keys. Round 10 was therefore not accepted at that point. The guard was corrected to compare normalized dependency `module_key` values and the full source/runtime/package QA was rerun successfully. This is a correction within Round 10, not an eleventh review round.
 
 Defects found: rounds 1, 2, 3, 4, 5, 6, 7, 8, 9, 10.
 Defect-free rounds before correction in this fifth cycle: none.
 
-Final clean-head automated evidence after correction: source suites 315/315 PASS; WordPress/MySQL runtime 60/60 PASS; Future Foundation runtime 32/32 PASS; concurrent idempotency PASS; destructive purge smoke PASS; deterministic package/checksum PASS. Hostinger staging acceptance remains separate.
+Validated automated evidence before this documentary binding update: source suites 315/315 PASS; WordPress/MySQL runtime 60/60 PASS; Future Foundation runtime 32/32 PASS; concurrent idempotency PASS; destructive purge smoke PASS; deterministic package/checksum PASS. The repository checksum manifest and package are regenerated after any documentary change before final release evidence is claimed.
 
 Acceptance remains evidence-bounded: repository/source and automated WordPress/MySQL correctness are separate from Hostinger staging acceptance, live deployment and operational acceptance.

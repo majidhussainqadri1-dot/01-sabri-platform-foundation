@@ -152,8 +152,11 @@ $assert(str_contains($gov_source,"'approve_amendment'") && str_contains($gov_sou
 $assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog concurrency lock absent.');
 $assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
 $assert(str_contains($eng_source,"'contracts'=>$contract_catalog") && str_contains($eng_source,"'routes'=>$route_catalog"),'Developer service catalog omits contract/route summaries.');
+$dependency_manifest=json_decode(file_get_contents(dirname(__DIR__).'/DEPENDENCY-MANIFEST.json'),true);
+$assert(($dependency_manifest['software_version']??'')==='2.0.0'&&($dependency_manifest['contract_version']??'')==='2.0.0','Dependency manifest version identity drift remains.');
 $installer_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-installer.php');
 $assert(str_contains($installer_source,"'policy_as_code'")&&str_contains($installer_source,"'ai_governance_advisory'"),'File 01 v2 manifest omits Future Foundation capabilities.');
+$assert(str_contains($installer_source,"'25'=>'Sabri Unified Global Visual Experience and Design System'")&&str_contains($installer_source,"'26'=>'Search, Discovery and Ranking'"),'Canonical module catalog is stale against the latest central plan.');
 
 $assert(str_contains($eng_source,"'rollback_required','rolled_back'") && str_contains($eng_source,"'future-rollout-'"),'Progressive rollout stale/rollback guard absent.');
 $assert(str_contains($eng_source,"'future-metrics'")&&str_contains($eng_source,'spf_metric_persistence_failed'),'Telemetry metric lost-update/persistence guard absent.');

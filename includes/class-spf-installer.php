@@ -601,7 +601,7 @@ final class SPF_Installer {
 		return array(
 			'module_key'       => 'file-01',
 			'owner_file'       => '01',
-			'owner_name'       => 'Platform Foundation and Master Governance',
+			'owner_name'       => 'Sabri Platform Foundation',
 			'slug'             => 'sabri-platform-foundation',
 			'namespace_prefix' => 'SPF_',
 			'software_version' => SPF_VERSION,
@@ -623,12 +623,13 @@ final class SPF_Installer {
 			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
 			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),
 			'source'           => 'SSH-F01-PLAN-2026-v1.0',
+			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0' ),
 		);
 	}
 
 	public static function canonical_module_catalog() {
 		$names = array(
-			'00'=>'Sabri Membership Core','01'=>'Platform Foundation and Master Governance','02'=>'Authentication and Accounts','03'=>'Profiles and Doctors','04'=>'News Feed and Publishing — Legacy Foundation Adapter','05'=>'Learn Sabri Classical Homeopathy','06'=>'Homeopathy Encyclopedia','07'=>'Doctors Directory and Discovery','08'=>'Worldwide Clinic and Appointments','09'=>'Global Doctor Onboarding and Verification','10'=>'Video Wall and Educational Broadcasting','11'=>'Reels and Short Video Discovery','12'=>'PDF Library and Digital Reading','13'=>'Welcome Intro Animation','14'=>'Global Clinic USP and Conversion Sections','15'=>'Radar, Symptom and Remedy Research','16'=>'Sabri Classical Homeopathy AI','17'=>'Communication Network','18'=>'Marketplace','19'=>'Unified Notifications','20'=>'Unified Application Shell','21'=>'Complete Home and News Feed','22'=>'Universal Post Composer','23'=>'Doctor and Founder Publishing Dashboard','24'=>'Security, Privacy, Compliance and Resilience Center','25'=>'Complete Public UI, Profile Timeline and Visual Experience','26'=>'Search, Discovery, Recommendations, Knowledge Graph and Classification',
+			'00'=>'Sabri Membership Core','01'=>'Sabri Platform Foundation','02'=>'Authentication and Accounts','03'=>'Profiles and Doctors','04'=>'News Feed and Publishing — Legacy Foundation Adapter','05'=>'Learn Sabri Classical Homeopathy','06'=>'Homeopathy Encyclopedia','07'=>'Doctors Directory and Discovery','08'=>'Worldwide Clinic and Appointments','09'=>'Global Doctor Onboarding and Verification','10'=>'Video Wall and Live Broadcasting','11'=>'Reels and Short Video Discovery','12'=>'PDF Library and Digital Reading','13'=>'Welcome Intro Animation','14'=>'Global Clinic USP and Conversion Integration','15'=>'Radar, Symptom, Remedy Research and Trend Intelligence','16'=>'Sabri Classical Homeopathy AI','17'=>'Communication Network','18'=>'Marketplace','19'=>'Unified Notifications and Alerts','20'=>'Sabri Unified Application Shell','21'=>'Sabri Complete Home and News Feed','22'=>'Universal Post Composer','23'=>'Doctor and Founder Publishing Dashboard','24'=>'Sabri Platform Security, Privacy, Compliance and Resilience Center','25'=>'Sabri Unified Global Visual Experience and Design System','26'=>'Search, Discovery and Ranking',
 		);
 		$result = array();
 		foreach ( $names as $file => $name ) {

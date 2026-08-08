@@ -1,0 +1,113 @@
++			$expected = array_slice( $rollouts, -100, null, true );
++			update_option( self::ROLLOUT_OPTION, $expected, false );
++			$persisted = get_option( self::ROLLOUT_OPTION, array() );
++			if ( empty( $persisted[ $release_id ] ) || SPF_Runtime::hash( $persisted[ $release_id ] ) !== SPF_Runtime::hash( $expected[ $release_id ] ) ) {
++				return new WP_Error( 'spf_rollout_persistence_failed', __( 'The progressive rollout could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			return $expected[ $release_id ];
++		} finally {
++			SPF_Runtime::release_lock( $lock_name, $lock );
++		}
+ 	}
+ 
+ 	public static function advance_rollout( $release_id, array $metrics ) {
+@@ -331,60 +424,82 @@
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+-		$rollouts = get_option( self::ROLLOUT_OPTION, array() );
+ 		$release_id = substr( sanitize_text_field( $release_id ), 0, 191 );
+-		if ( ! is_array( $rollouts ) || empty( $rollouts[ $release_id ] ) ) {
+-			return new WP_Error( 'spf_rollout_missing', __( 'The progressive rollout was not found.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
+-		}
+-		$rollout = $rollouts[ $release_id ];
+-		$gate = self::evaluate_slo_gate( $metrics, (array) $rollout['slo'] );
+-		if ( empty( $gate['allow'] ) ) {
+-			$rollout['status'] = 'rollback_required';
+-			$rollout['rollback_reason'] = $gate['reason'];
+-			$rollout['rollback_requested_at'] = SPF_Runtime::now_mysql();
+-			do_action( 'spf_progressive_delivery_rollback_requested', $release_id, $rollout, $gate );
+-		} else {
+-			$current_index = (int) ( $rollout['index'] ?? 0 );
+-			$next_index = min( $current_index + 1, count( $rollout['rings'] ) - 1 );
+-			$next_ring = sanitize_key( $rollout['rings'][ $next_index ] ?? '' );
+-			if ( in_array( $next_ring, array( 'production','full','all','100' ), true ) ) {
+-				$founder_gate = SPF_Authorization::require_action( 'deploy_release', array( 'object_id'=>$release_id, 'next_ring'=>$next_ring ), array( 'purpose'=>'progressive_delivery_final' ) );
+-				if ( is_wp_error( $founder_gate ) ) {
+-					return $founder_gate;
+-				}
+-			}
+-			if ( $next_index === $current_index ) {
+-				$rollout['status'] = 'full';
++		$lock_name = 'future-rollout-' . substr( SPF_Runtime::hash( $release_id ), 0, 24 );
++		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
++		if ( is_wp_error( $lock ) ) {
++			return $lock;
++		}
++		try {
++			$rollouts = get_option( self::ROLLOUT_OPTION, array() );
++			if ( ! is_array( $rollouts ) || empty( $rollouts[ $release_id ] ) ) {
++				return new WP_Error( 'spf_rollout_missing', __( 'The progressive rollout was not found.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
++			}
++			$rollout = (array) $rollouts[ $release_id ];
++			$status = sanitize_key( $rollout['status'] ?? '' );
++			if ( in_array( $status, array( 'rollback_required','rolled_back' ), true ) ) {
++				return new WP_Error( 'spf_rollout_rollback_pending', __( 'This rollout is rollback-gated and cannot advance.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			if ( 'full' === $status ) {
++				return $rollout;
++			}
++			$gate = self::evaluate_slo_gate( $metrics, (array) ( $rollout['slo'] ?? array() ) );
++			if ( empty( $gate['allow'] ) ) {
++				$rollout['status'] = 'rollback_required';
++				$rollout['rollback_reason'] = $gate['reason'];
++				$rollout['rollback_requested_at'] = SPF_Runtime::now_mysql();
++				do_action( 'spf_progressive_delivery_rollback_requested', $release_id, $rollout, $gate );
+ 			} else {
+-				$execution = apply_filters( 'spf_progressive_delivery_execute_ring', null, array(
+-					'release_id'   => $release_id,
+-					'current_ring' => sanitize_key( $rollout['rings'][ $current_index ] ?? '' ),
+-					'next_ring'    => $next_ring,
+-					'gate'         => $gate,
+-				) );
+-				$executed_at = is_array( $execution ) ? strtotime( (string) ( $execution['executed_at'] ?? '' ) ) : false;
+-				$execution_valid = is_array( $execution ) && ! empty( $execution['verified'] )
+-					&& sanitize_key( $execution['release_id'] ?? '' ) === sanitize_key( $release_id )
+-					&& sanitize_key( $execution['ring'] ?? '' ) === $next_ring
+-					&& ! empty( $execution['evidence_id'] ) && $executed_at && abs( time() - $executed_at ) <= 900;
+-				if ( $execution_valid ) {
+-					$rollout['index'] = $next_index;
+-					$rollout['current_ring'] = $next_ring;
+-					$rollout['status'] = ( $next_index >= count( $rollout['rings'] ) - 1 ) ? 'full' : 'progressing';
+-					$rollout['execution_evidence_hash'] = SPF_Runtime::hash( $execution );
++				$current_index = max( 0, min( (int) ( $rollout['index'] ?? 0 ), count( (array) $rollout['rings'] ) - 1 ) );
++				$next_index = min( $current_index + 1, count( $rollout['rings'] ) - 1 );
++				$next_ring = sanitize_key( $rollout['rings'][ $next_index ] ?? '' );
++				if ( in_array( $next_ring, array( 'production','full','all','100' ), true ) ) {
++					$founder_gate = SPF_Authorization::require_action( 'deploy_release', array( 'object_id'=>$release_id, 'next_ring'=>$next_ring ), array( 'purpose'=>'progressive_delivery_final' ) );
++					if ( is_wp_error( $founder_gate ) ) {
++						return $founder_gate;
++					}
++				}
++				if ( $next_index === $current_index ) {
++					$rollout['status'] = 'full';
+ 				} else {
+-					$rollout['status'] = 'advance_pending_adapter';
+-					$rollout['next_ring'] = $next_ring;
+-					$rollout['advance_requested_at'] = SPF_Runtime::now_mysql();
+-					do_action( 'spf_progressive_delivery_action_requested', $release_id, $next_ring, $rollout, $gate );
++					$execution = apply_filters( 'spf_progressive_delivery_execute_ring', null, array(
++						'release_id'   => $release_id,
++						'current_ring' => sanitize_key( $rollout['rings'][ $current_index ] ?? '' ),
++						'next_ring'    => $next_ring,
++						'gate'         => $gate,
++					) );
++					$executed_at = is_array( $execution ) ? strtotime( (string) ( $execution['executed_at'] ?? '' ) ) : false;
++					$execution_valid = is_array( $execution ) && ! empty( $execution['verified'] )
++						&& sanitize_key( $execution['release_id'] ?? '' ) === sanitize_key( $release_id )
++						&& sanitize_key( $execution['ring'] ?? '' ) === $next_ring
++						&& ! empty( $execution['evidence_id'] ) && strlen( (string) $execution['evidence_id'] ) <= 191
++						&& $executed_at && abs( time() - $executed_at ) <= 900;
++					if ( $execution_valid ) {
++						$rollout['index'] = $next_index;
++						$rollout['current_ring'] = $next_ring;

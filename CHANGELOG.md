@@ -18,3 +18,7 @@
 ## 1.1.0 — Earlier corrective baseline
 
 - Introduced structured authorization, release lifecycle, idempotency, compensation, privacy, reconciliation, purge governance, runtime CI and deterministic packaging foundations.
+
+## 2.0.0 — Seventh fresh ten-round corrective cycle (2026-08-08)
+- Hardened exact table/lock truth, registry normalization, cron evidence, event payloads, generated CI, config drift, SLO/rings, event schemas, release evidence and self-heal recovery/compensation.
+- Added seventh-cycle regression assertions and permanent review evidence; refreshed two stale historical exact-source assertions.

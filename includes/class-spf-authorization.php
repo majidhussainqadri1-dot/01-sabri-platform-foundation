@@ -147,10 +147,10 @@ final class SPF_Authorization {
 		if ( '' === $claim_id || strlen( $claim_id ) > 191 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $claim_id ) ) {
 			return false;
 		}
-		if ( absint( $claim['user_id'] ) !== absint( $user_id ) || sanitize_key( $claim['action'] ) !== sanitize_key( $action ) ) {
+		if ( ! is_int( $claim['user_id'] ) || $claim['user_id'] < 1 || $claim['user_id'] !== (int) $user_id || sanitize_key( $claim['action'] ) !== sanitize_key( $action ) ) {
 			return false;
 		}
-		if ( array_key_exists( 'actor_id', $claim ) && absint( $claim['actor_id'] ) !== absint( $user_id ) ) {
+		if ( array_key_exists( 'actor_id', $claim ) && ( ! is_int( $claim['actor_id'] ) || $claim['actor_id'] < 1 || $claim['actor_id'] !== (int) $user_id ) ) {
 			return false;
 		}
 		if ( sanitize_key( $claim['capability'] ) !== sanitize_key( $required ) ) {

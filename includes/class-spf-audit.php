@@ -39,6 +39,9 @@ final class SPF_Audit {
 			$context = self::sanitize_context( $context );
 			$context_hash = SPF_Runtime::hash( $context );
 			$previous_raw = $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+			if ( ! empty( $wpdb->last_error ) ) {
+				return new WP_Error( 'spf_audit_head_read_failed', __( 'The audit chain head could not be read safely.', 'sabri-platform-foundation' ) );
+			}
 			if ( null === $previous_raw || '' === (string) $previous_raw ) {
 				$previous_hash = str_repeat( '0', 64 );
 			} elseif ( preg_match( '/^[a-f0-9]{64}$/', (string) $previous_raw ) ) {
@@ -87,11 +90,18 @@ final class SPF_Audit {
 			return new WP_Error( 'spf_audit_table_missing', __( 'Audit chain is unavailable.', 'sabri-platform-foundation' ) );
 		}
 		$limit = max( 1, min( 50000, absint( $limit ) ) );
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		$total_raw = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		if ( ! empty( $wpdb->last_error ) || null === $total_raw ) {
+			return new WP_Error( 'spf_audit_verification_query_failed', __( 'Audit chain row count could not be verified.', 'sabri-platform-foundation' ) );
+		}
+		$total = (int) $total_raw;
 		if ( $total > $limit ) {
 			return new WP_Error( 'spf_audit_verification_incomplete', __( 'The audit chain exceeds the bounded verification limit; no partial verification claim was made.', 'sabri-platform-foundation' ), array( 'rows'=>$total, 'limit'=>$limit ) );
 		}
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} ORDER BY id ASC LIMIT %d", $limit ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new WP_Error( 'spf_audit_verification_query_failed', __( 'Audit chain rows could not be read for verification.', 'sabri-platform-foundation' ) );
+		}
 		$previous = str_repeat( '0', 64 );
 		foreach ( $rows as $row ) {
 			if ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $row['previous_hash'] ) || ! preg_match( '/^[a-f0-9]{64}$/', (string) $row['entry_hash'] ) || ! wp_is_uuid( (string) $row['trace_id'] ) ) {
@@ -106,7 +116,11 @@ final class SPF_Audit {
 			}
 			$previous = $row['entry_hash'];
 		}
-		$stored_head = (string) $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		$stored_head_raw = $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new WP_Error( 'spf_audit_verification_query_failed', __( 'Audit chain head could not be re-read after verification.', 'sabri-platform-foundation' ) );
+		}
+		$stored_head = (string) $stored_head_raw;
 		if ( $total > 0 && ! hash_equals( $previous, $stored_head ) ) {
 			return new WP_Error( 'spf_audit_chain_head_mismatch', __( 'Audit chain verification did not reach the stored head.', 'sabri-platform-foundation' ) );
 		}

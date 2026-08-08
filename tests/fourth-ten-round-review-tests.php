@@ -1,0 +1,31 @@
+<?php
+$root = dirname( __DIR__ );
+$pass = 0;
+$fail = static function ( $message ) { fwrite( STDERR, "FAIL: {$message}\n" ); exit( 1 ); };
+$expect = static function ( $condition, $message ) use ( &$pass, $fail ) { if ( ! $condition ) { $fail( $message ); } $pass++; };
+$src = static function ( $file ) use ( $root ) { return file_get_contents( $root . '/' . $file ); };
+
+$plugin = $src( 'includes/class-spf-plugin.php' );
+$expect( str_contains( $plugin, "true === \$operational_claim['verified']" ), 'Round 1 strict operational verification missing' );
+$installer = $src( 'includes/class-spf-installer.php' );
+$future = $src( 'includes/class-spf-future-foundation.php' );
+$expect( substr_count( $installer, 'spf_future_foundation_tick' ) >= 3, 'Round 2 managed future cron lifecycle missing' );
+$expect( str_contains( $future, "wp_schedule_event( time() + 300, 'spf_five_minutes', 'spf_future_foundation_tick', array(), true )" ), 'Round 2 error-aware future cron fallback missing' );
+$auth = $src( 'includes/class-spf-authorization.php' );
+$expect( str_contains( $auth, "! is_int( \$claim['user_id'] )" ) && str_contains( $auth, "! is_int( \$claim['actor_id'] )" ), 'Round 3 strict integer authorization claim checks missing' );
+$events = $src( 'includes/class-spf-event-bus.php' );
+$expect( str_contains( $events, 'spf_outbox_recovery_query_failed' ) && str_contains( $events, 'spf_outbox_select_failed' ), 'Round 4 outbox DB fail-closed checks missing' );
+$gov = $src( 'includes/class-spf-governance.php' );
+$expect( str_contains( $gov, 'spf_invalid_amendment_effective_at' ) && str_contains( $gov, 'spf_invalid_amendment_id' ), 'Round 5 amendment validation missing' );
+$expect( str_contains( $gov, 'spf_flag_expiry_query_failed' ) && str_contains( $gov, 'feature_flag_expiry_commit_failed' ), 'Round 6 transactional expiry reconciliation missing' );
+$privacy = $src( 'includes/class-spf-privacy.php' );
+$expect( str_contains( $privacy, 'spf_privacy_request_user_invalid' ) && str_contains( $privacy, 'spf_privacy_request_basis_required' ), 'Round 7 privacy request validation missing' );
+$expect( str_contains( $privacy, 'privacy_hold_query_failed' ), 'Round 8 privacy hold fail-closed behavior missing' );
+$audit = $src( 'includes/class-spf-audit.php' );
+$expect( str_contains( $audit, 'spf_audit_head_read_failed' ) && str_contains( $audit, 'spf_audit_verification_query_failed' ), 'Round 9 audit DB fail-closed checks missing' );
+$system = $src( 'includes/class-spf-system-check.php' );
+$expect( substr_count( $system, 'spf_future_foundation_tick' ) >= 2, 'Round 10 Future Foundation schedule health missing' );
+$expect( str_contains( $system, 'outbox_query' ) && str_contains( $system, 'count_raw' ), 'Round 10 health false-positive guards missing' );
+$build = $src( 'tools/build-package.sh' );
+$expect( str_contains( $build, 'FOURTH-TEN-ROUND-REVIEW-2026-08-08.md' ) && str_contains( $build, 'THIRD-TEN-ROUND-REVIEW-2026-08-08.md' ), 'Round 10 package review evidence missing' );
+printf( "Fourth ten-round review assertions: %d/%d PASS\n", $pass, 13 );

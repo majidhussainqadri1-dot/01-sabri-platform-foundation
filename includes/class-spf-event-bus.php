@@ -53,15 +53,22 @@ final class SPF_Event_Bus {
 			$table = SPF_Installer::table( 'outbox' );
 			$now = SPF_Runtime::now_mysql();
 			$stale_before = gmdate( 'Y-m-d H:i:s', time() - 600 );
-			$processed['recovered'] = (int) $wpdb->query(
+			$recovered = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$table} SET status='retry',available_at=%s,last_error='stale_processing_recovered' WHERE status='processing' AND available_at<%s",
 					$now,
 					$stale_before
 				)
 			);
+			if ( false === $recovered ) {
+				return new WP_Error( 'spf_outbox_recovery_query_failed', __( 'The outbox stale-lease recovery query failed.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+			}
+			$processed['recovered'] = (int) $recovered;
 			$limit = max( 1, min( 100, absint( $limit ) ) );
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE status IN ('pending','retry') AND available_at<=%s ORDER BY id ASC LIMIT %d", $now, $limit ), ARRAY_A );
+			if ( ! empty( $wpdb->last_error ) ) {
+				return new WP_Error( 'spf_outbox_select_failed', __( 'The outbox dispatch query failed.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+			}
 			foreach ( $rows as $row ) {
 				$lease_until = gmdate( 'Y-m-d H:i:s', time() + 600 );
 				$claimed = $wpdb->update(

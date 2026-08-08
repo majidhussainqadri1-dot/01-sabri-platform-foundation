@@ -653,6 +653,7 @@ final class SPF_Installer {
 			array( 'hook' => 'spf_dispatch_outbox', 'time' => time() + 120, 'recurrence' => 'spf_five_minutes' ),
 			array( 'hook' => 'spf_privacy_retention', 'time' => time() + HOUR_IN_SECONDS, 'recurrence' => 'daily' ),
 			array( 'hook' => 'spf_reconcile_expired_flags', 'time' => time() + 300, 'recurrence' => 'hourly' ),
+			array( 'hook' => 'spf_future_foundation_tick', 'time' => time() + 300, 'recurrence' => 'spf_five_minutes' ),
 		);
 		foreach ( $jobs as $job ) {
 			if ( wp_next_scheduled( $job['hook'] ) ) {
@@ -667,7 +668,7 @@ final class SPF_Installer {
 	}
 
 	private static function unschedule_jobs() {
-		foreach ( array( 'spf_dispatch_outbox', 'spf_privacy_retention', 'spf_reconcile_expired_flags' ) as $hook ) {
+		foreach ( array( 'spf_dispatch_outbox', 'spf_privacy_retention', 'spf_reconcile_expired_flags', 'spf_future_foundation_tick' ) as $hook ) {
 			$timestamp = wp_next_scheduled( $hook );
 			while ( $timestamp ) {
 				wp_unschedule_event( $timestamp, $hook );
@@ -699,7 +700,7 @@ final class SPF_Installer {
 				$snapshot['admin_caps'][ $cap ] = $role->has_cap( $cap );
 			}
 		}
-		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags' ) as $hook ) {
+		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick' ) as $hook ) {
 			$snapshot['schedules'][ $hook ] = wp_next_scheduled( $hook );
 		}
 		$shadow_prefix = $wpdb->prefix . 'spf_shadow_' . substr( md5( $token . $snapshot_id ), 0, 8 ) . '_';

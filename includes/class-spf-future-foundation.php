@@ -46,7 +46,10 @@ final class SPF_Future_Foundation {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest' ) );
 		add_action( 'spf_future_foundation_tick', array( 'SPF_Resilience_Lab', 'periodic_tick' ) );
 		if ( ! wp_next_scheduled( 'spf_future_foundation_tick' ) ) {
-			wp_schedule_event( time() + 300, 'spf_five_minutes', 'spf_future_foundation_tick' );
+			$scheduled = wp_schedule_event( time() + 300, 'spf_five_minutes', 'spf_future_foundation_tick', array(), true );
+			if ( is_wp_error( $scheduled ) || false === $scheduled ) {
+				do_action( 'spf_future_foundation_schedule_failure', $scheduled );
+			}
 		}
 	}
 

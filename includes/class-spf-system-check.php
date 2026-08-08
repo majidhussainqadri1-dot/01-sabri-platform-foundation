@@ -22,10 +22,10 @@ final class SPF_System_Check {
 		$checks[] = self::check( 'transaction_rollback_probe', true === $tx_probe, true===$tx_probe?'rollback-verified':'failed', 'Database rollback behavior could not be verified.', 'fail' );
 
 		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
-		$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>array('spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags') ) );
+		$external_cron = apply_filters( 'spf_external_cron_evidence', null, array( 'hooks'=>array('spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick') ) );
 		$cron_ok = ! $cron_disabled || ( is_array($external_cron) && array_key_exists('verified',$external_cron) && true===$external_cron['verified'] );
 		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without verified external scheduler evidence.', 'fail' );
-		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags' ) as $hook ) {
+		foreach ( array( 'spf_dispatch_outbox','spf_privacy_retention','spf_reconcile_expired_flags','spf_future_foundation_tick' ) as $hook ) {
 			$scheduled = wp_next_scheduled( $hook );
 			$checks[] = self::check( 'schedule_'.$hook, (bool)$scheduled, $scheduled?'scheduled':'missing', 'A required File 01 scheduled job is missing.', 'fail' );
 		}
@@ -120,9 +120,15 @@ final class SPF_System_Check {
 		if ( ! SPF_Runtime::table_exists($table) ) {
 			return array(self::check('outbox',false,'missing','Outbox table is missing.','fail'));
 		}
-		$pending=(int)$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
-		$dead=(int)$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='dead'"); // phpcs:ignore
-		$oldest=(string)$wpdb->get_var("SELECT MIN(created_at) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
+		$pending_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
+		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox health query failed.','fail'));}
+		$dead_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='dead'"); // phpcs:ignore
+		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox dead-letter query failed.','fail'));}
+		$oldest_raw=$wpdb->get_var("SELECT MIN(created_at) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
+		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox age query failed.','fail'));}
+		$pending=(int)$pending_raw;
+		$dead=(int)$dead_raw;
+		$oldest=(string)$oldest_raw;
 		$stale=$oldest && strtotime($oldest)<time()-3600;
 		return array(
 			self::check('outbox_backlog',!$stale,$stale?'stale':('pending-'.$pending),'Outbox contains events pending for more than one hour.','warning'),
@@ -150,9 +156,11 @@ final class SPF_System_Check {
 		$wpdb->query("DROP TEMPORARY TABLE IF EXISTS {$table}"); // phpcs:ignore
 		if(false===$wpdb->query("CREATE TEMPORARY TABLE {$table} (id INT PRIMARY KEY) ENGINE=InnoDB")){return false;} // phpcs:ignore
 		if(false===$wpdb->query('START TRANSACTION')){return false;}
-		$wpdb->query("INSERT INTO {$table} (id) VALUES (1)"); // phpcs:ignore
-		$wpdb->query('ROLLBACK');
-		$count=(int)$wpdb->get_var("SELECT COUNT(*) FROM {$table}"); // phpcs:ignore
+		if(false===$wpdb->query("INSERT INTO {$table} (id) VALUES (1)")){ $wpdb->query('ROLLBACK'); return false; } // phpcs:ignore
+		if(false===$wpdb->query('ROLLBACK')){return false;}
+		$count_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table}"); // phpcs:ignore
+		if(!empty($wpdb->last_error) || null===$count_raw){return false;}
+		$count=(int)$count_raw;
 		$wpdb->query("DROP TEMPORARY TABLE IF EXISTS {$table}"); // phpcs:ignore
 		return 0===$count;
 	}

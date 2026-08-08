@@ -123,22 +123,47 @@ final class SPF_Privacy {
 
 	public static function create_request( $user_id, $type, $purpose, $legal_basis ) {
 		global $wpdb;
+		$user_id = absint( $user_id );
 		$type = sanitize_key( $type );
+		$purpose = substr( sanitize_text_field( $purpose ), 0, 191 );
+		$legal_basis = substr( sanitize_text_field( $legal_basis ), 0, 191 );
+		if ( $user_id < 1 || ! get_userdata( $user_id ) ) {
+			return new WP_Error( 'spf_privacy_request_user_invalid', __( 'Privacy request requires an existing user subject.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		if ( ! in_array( $type, array( 'export','erasure','correction' ), true ) ) {
 			return new WP_Error( 'spf_privacy_request_invalid', __( 'Invalid privacy request type.', 'sabri-platform-foundation' ) );
+		}
+		if ( '' === $purpose || '' === $legal_basis ) {
+			return new WP_Error( 'spf_privacy_request_basis_required', __( 'Privacy request purpose and legal basis are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$request_id = wp_generate_uuid4();
 		$now = SPF_Runtime::now_mysql();
 		$due = gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS );
-		$ok = $wpdb->insert(
-			SPF_Installer::table( 'privacy_requests' ),
-			array( 'request_id' => $request_id, 'user_id' => absint( $user_id ), 'request_type' => $type, 'status' => 'received', 'purpose' => substr( sanitize_text_field( $purpose ), 0, 191 ), 'legal_basis' => substr( sanitize_text_field( $legal_basis ), 0, 191 ), 'result_json' => '{}', 'record_version' => 1, 'requested_at' => $now, 'due_at' => $due )
-		);
-		if ( false === $ok ) {
-			return new WP_Error( 'spf_privacy_request_failed', __( 'Privacy request could not be recorded.', 'sabri-platform-foundation' ) );
+		$tx = SPF_Runtime::begin();
+		if ( is_wp_error( $tx ) ) {
+			return $tx;
 		}
-		SPF_Audit::record_required( 'privacy_request_received', 'foundation_privacy_request', $request_id, 'success', array( 'purpose' => $purpose, 'request_type' => $type ) );
-		return array( 'request_id' => $request_id, 'status' => 'received', 'due_at' => $due );
+		try {
+			$ok = $wpdb->insert(
+				SPF_Installer::table( 'privacy_requests' ),
+				array( 'request_id' => $request_id, 'user_id' => $user_id, 'request_type' => $type, 'status' => 'received', 'purpose' => $purpose, 'legal_basis' => $legal_basis, 'result_json' => '{}', 'record_version' => 1, 'requested_at' => $now, 'due_at' => $due )
+			);
+			if ( false === $ok ) {
+				throw new RuntimeException( 'Privacy request could not be recorded.' );
+			}
+			$audit = SPF_Audit::record_required( 'privacy_request_received', 'foundation_privacy_request', $request_id, 'success', array( 'purpose' => $purpose, 'request_type' => $type ) );
+			if ( is_wp_error( $audit ) ) {
+				throw new RuntimeException( $audit->get_error_message() );
+			}
+			$commit = SPF_Runtime::commit();
+			if ( is_wp_error( $commit ) ) {
+				throw new RuntimeException( $commit->get_error_message() );
+			}
+			return array( 'request_id' => $request_id, 'status' => 'received', 'due_at' => $due );
+		} catch ( Throwable $error ) {
+			SPF_Runtime::rollback();
+			return new WP_Error( 'spf_privacy_request_failed', $error->getMessage(), array( 'status'=>503 ) );
+		}
 	}
 
 	public static function has_active_hold( $subject_type, $subject_id ) {
@@ -147,7 +172,12 @@ final class SPF_Privacy {
 		if ( ! SPF_Runtime::table_exists( $table ) ) {
 			return false;
 		}
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE subject_type=%s AND subject_id=%s AND active=1 LIMIT 1", sanitize_key( $subject_type ), substr( sanitize_text_field( $subject_id ), 0, 191 ) ) );
+		$active = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE subject_type=%s AND subject_id=%s AND active=1 LIMIT 1", sanitize_key( $subject_type ), substr( sanitize_text_field( $subject_id ), 0, 191 ) ) );
+		if ( ! empty( $wpdb->last_error ) ) {
+			SPF_Audit::record( 'privacy_hold_query_failed', 'foundation_privacy', 'hold-registry', 'failed', array( 'purpose'=>'privacy_hold_fail_closed' ) );
+			return true;
+		}
+		return null !== $active;
 	}
 
 	public static function run_retention() {

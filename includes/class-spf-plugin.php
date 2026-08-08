@@ -126,7 +126,7 @@ final class SPF_Plugin {
 		$schema = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
 		$health = SPF_System_Check::latest();
 		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, array( 'release_status' => $release_status, 'health' => $health ) );
-		$operational = is_array( $operational_claim ) && ! empty( $operational_claim['verified'] ) && 'deployed' === $release_status && is_array( $health ) && 'pass' === ( $health['overall_status'] ?? '' );
+		$operational = is_array( $operational_claim ) && array_key_exists( 'verified', $operational_claim ) && true === $operational_claim['verified'] && 'deployed' === $release_status && is_array( $health ) && 'pass' === ( $health['overall_status'] ?? '' );
 		return array(
 			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
 			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),

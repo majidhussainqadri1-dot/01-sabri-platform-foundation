@@ -191,11 +191,19 @@ final class SPF_Governance {
 		if ( ! is_array( $amendment['decision'] ) ) {
 			return new WP_Error( 'spf_invalid_amendment', __( 'Decision must be structured.', 'sabri-platform-foundation' ) );
 		}
-		$allowed = SPF_Authorization::require_action( 'approve_amendment', array( 'object_id' => $amendment['amendment_id'] ), array( 'purpose' => $context['purpose'] ?? 'change_control' ) );
+		$id = substr( sanitize_text_field( $amendment['amendment_id'] ), 0, 64 );
+		if ( '' === $id ) {
+			return new WP_Error( 'spf_invalid_amendment_id', __( 'Amendment identifier is invalid after normalization.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$effective_ts = strtotime( (string) $amendment['effective_at'] );
+		if ( false === $effective_ts ) {
+			return new WP_Error( 'spf_invalid_amendment_effective_at', __( 'Amendment effective time is invalid.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$effective_at = gmdate( 'Y-m-d H:i:s', $effective_ts );
+		$allowed = SPF_Authorization::require_action( 'approve_amendment', array( 'object_id' => $id ), array( 'purpose' => $context['purpose'] ?? 'change_control' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
-		$id = substr( sanitize_text_field( $amendment['amendment_id'] ), 0, 64 );
 		$pre = SPF_Audit::record_required( 'record_amendment_precommit', 'foundation_amendment', $id, 'authorized', array( 'purpose'=>$context['purpose']??'change_control' ) );
 		if ( is_wp_error( $pre ) ) {
 			return $pre;
@@ -205,7 +213,7 @@ final class SPF_Governance {
 			return $tx;
 		}
 		try {
-			$ok = $wpdb->insert( SPF_Installer::table( 'amendments' ), array( 'amendment_id'=>$id,'effective_at'=>gmdate('Y-m-d H:i:s',strtotime($amendment['effective_at'])),'supersedes'=>substr(sanitize_text_field($amendment['supersedes']??''),0,191),'decision_json'=>wp_json_encode(self::sanitize_evidence($amendment['decision'])),'approver_ref'=>substr(sanitize_text_field($amendment['approver_ref']),0,191),'status'=>'approved','record_version'=>1,'created_at'=>SPF_Runtime::now_mysql() ) );
+			$ok = $wpdb->insert( SPF_Installer::table( 'amendments' ), array( 'amendment_id'=>$id,'effective_at'=>$effective_at,'supersedes'=>substr(sanitize_text_field($amendment['supersedes']??''),0,191),'decision_json'=>wp_json_encode(self::sanitize_evidence($amendment['decision'])),'approver_ref'=>substr(sanitize_text_field($amendment['approver_ref']),0,191),'status'=>'approved','record_version'=>1,'created_at'=>SPF_Runtime::now_mysql() ) );
 			if ( false === $ok ) {
 				throw new RuntimeException( 'Amendment could not be stored.' );
 			}
@@ -213,7 +221,7 @@ final class SPF_Governance {
 			if ( is_wp_error( $audit ) ) {
 				throw new RuntimeException( $audit->get_error_message() );
 			}
-			$event = SPF_Event_Bus::publish( 'FoundationAmendmentApproved.v1', 'foundation_amendment', $id, array( 'effective_at'=>$amendment['effective_at'] ), 1, 'amendment-'.$id );
+			$event = SPF_Event_Bus::publish( 'FoundationAmendmentApproved.v1', 'foundation_amendment', $id, array( 'effective_at'=>$effective_at ), 1, 'amendment-'.$id );
 			if ( is_wp_error( $event ) ) {
 				throw new RuntimeException( $event->get_error_message() );
 			}
@@ -343,22 +351,40 @@ final class SPF_Governance {
 		global $wpdb;
 		$table = SPF_Installer::table( 'flags' );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=%s LIMIT 100", SPF_Runtime::now_mysql() ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new WP_Error( 'spf_flag_expiry_query_failed', __( 'Expired feature flags could not be queried safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
 		$result = array( 'expired'=>0, 'conflict'=>0, 'failed'=>0, 'event_failed'=>0 );
 		foreach ( $rows as $row ) {
+			$tx = SPF_Runtime::begin();
+			if ( is_wp_error( $tx ) ) {
+				$result['failed']++;
+				continue;
+			}
 			$updated = $wpdb->update( $table, array( 'enabled'=>0,'record_version'=>(int)$row['record_version']+1,'updated_at'=>SPF_Runtime::now_mysql(),'reason'=>substr($row['reason'].' [expired]',0,500) ), array( 'id'=>(int)$row['id'],'record_version'=>(int)$row['record_version'],'enabled'=>1 ) );
 			if ( false === $updated ) {
+				SPF_Runtime::rollback();
 				$result['failed']++;
 				SPF_Audit::record( 'feature_flag_expiry_write_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
 				continue;
 			}
 			if ( 1 !== $updated ) {
+				SPF_Runtime::rollback();
 				$result['conflict']++;
 				continue;
 			}
 			$event = SPF_Event_Bus::publish( 'FeatureFlagExpired.v1', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], array( 'owner_module'=>$row['owner_module'],'flag_key'=>$row['flag_key'],'environment'=>$row['environment'] ), 1, 'flag-expired-'.$row['id'].'-'.$row['record_version'] );
 			if ( is_wp_error( $event ) ) {
+				SPF_Runtime::rollback();
 				$result['event_failed']++;
 				SPF_Audit::record( 'feature_flag_expiry_event_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
+				continue;
+			}
+			$commit = SPF_Runtime::commit();
+			if ( is_wp_error( $commit ) ) {
+				SPF_Runtime::rollback();
+				$result['failed']++;
+				SPF_Audit::record( 'feature_flag_expiry_commit_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
 				continue;
 			}
 			$result['expired']++;

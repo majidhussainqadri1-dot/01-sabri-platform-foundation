@@ -18,3 +18,5 @@ Rule: every defect was corrected and the complete source suite rerun before the 
 | 10 | Full post-correction source regression | No new source-level defect found in the complete local automated suite after Rounds 1–9 corrections. Exact-head WordPress/MySQL CI remains the independent confirmation gate. |
 
 This record does not claim Staging-Accepted, Live-Deployed or Operational status.
+
+Exact-head corrective QA retrigger requested after the second ten-round correction set.

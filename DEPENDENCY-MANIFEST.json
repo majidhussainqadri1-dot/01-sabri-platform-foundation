@@ -1,32 +1,51 @@
 {
-  "manifest_version": "1.0.0",
+  "manifest_version": "1.1.0",
   "module_key": "file-01",
-  "software_version": "1.1.0",
-  "contract_version": "1.1.0",
+  "software_version": "1.2.0",
+  "schema_version": "1.2.0",
+  "contract_version": "1.2.0",
   "hard_dependencies": [],
   "optional_dependencies": [
     {
       "module_key": "file-00",
-      "minimum_version": "1.2.3",
-      "purpose": "Versioned authorization and institutional-role claims",
-      "fail_mode": "Sensitive actions fail closed"
+      "minimum_version": "1.2.13",
+      "purpose": "Versioned authorization, institutional-role and current Advanced Trust assertions",
+      "fail_mode": "Sensitive actions fail closed; read-only File 01 diagnostics may remain available under bootstrap policy"
     },
     {
       "module_key": "file-20",
       "minimum_version": "1.2.0",
       "purpose": "Canonical shell placement and route presentation",
-      "fail_mode": "No duplicate shell; admin-only status remains"
+      "fail_mode": "No duplicate shell; File 01 remains restricted/admin-only"
+    },
+    {
+      "module_key": "file-21",
+      "minimum_version": "1.0.1",
+      "purpose": "Canonical Home/News ownership for legacy foundation reconciliation",
+      "fail_mode": "Legacy reconciliation is blocked until a versioned reversible owner adapter is available"
     },
     {
       "module_key": "file-24",
       "minimum_version": "0.25.0",
       "purpose": "Independent backup/restore and destructive-operation assurance",
-      "fail_mode": "Destructive purge remains disabled"
+      "fail_mode": "Destructive purge remains disabled without independently verified evidence"
+    },
+    {
+      "module_key": "file-26",
+      "minimum_version": "0.1.0",
+      "purpose": "Canonical Search/Discovery/Ranking owner registration and discovery integration",
+      "fail_mode": "File 01 never creates a parallel search, discovery or ranking truth"
     }
   ],
   "canonical_catalog": {
     "first_file": "00",
     "last_file": "26",
-    "registration_law": "Only each owner module may register its real versioned manifest; File 01 does not seed placeholder truth."
+    "registration_law": "Only each canonical owner module may register its real versioned manifest; File 01 does not seed placeholder truth or duplicate domain ownership."
+  },
+  "business_law": {
+    "tier_model": "single_free_tier",
+    "approved_learning_and_ai_fee": 0,
+    "donation_only": true,
+    "donor_advantage": false
   }
 }

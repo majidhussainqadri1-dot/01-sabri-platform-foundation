@@ -1,0 +1,43 @@
+name: File 01 Fifth Review Corrective Mutator
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/fifth-review-fix.yml
+      - tools/fifth-review-fix.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Apply fifth-review fixes
+        run: python3 tools/fifth-review-fix.py
+      - name: Validate patched source
+        run: bash qa/run-tests.sh
+      - name: Commit corrected source
+        run: |
+          set -euo pipefail
+          git config user.name "majidhussainqadri1-dot"
+          git config user.email "majidhussainqadri1@gmail.com"
+          git add includes/class-spf-governance-control-plane.php \
+                  includes/class-spf-platform-engineering.php \
+                  includes/class-spf-resilience-lab.php \
+                  includes/class-spf-system-check.php \
+                  qa/wp-future-foundation-smoke.php qa/run-tests.sh \
+                  tests/fifth-ten-round-review-tests.php \
+                  FIFTH-TEN-ROUND-REVIEW-2026-08-08.md \
+                  tools/build-package.sh SOURCE-CHECKSUMS.sha256
+          git diff --cached --check
+          git commit -m "Fifth ten-round review: close ten fresh File 01 defects"
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

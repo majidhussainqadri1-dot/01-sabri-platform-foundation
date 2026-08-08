@@ -24,7 +24,7 @@ final class SPF_Reconciler {
 				$owner_module = is_array( $owner_plan ) ? sanitize_key( $owner_plan['owner_module'] ?? '' ) : '';
 				$command_version = is_array( $owner_plan ) ? sanitize_text_field( $owner_plan['command_version'] ?? '' ) : '';
 				$owner_plan_json = is_array( $owner_plan ) ? SPF_Runtime::canonical_json( $owner_plan ) : '';
-				if ( ! is_array( $owner_plan ) || empty( $owner_plan['accepted'] ) || ! in_array( $owner_module, array( 'file-20','file-21' ), true ) || ! SPF_Registry::valid_semver( $command_version ) || false === $owner_plan_json || strlen( $owner_plan_json ) > 32768 ) {
+				if ( ! is_array( $owner_plan ) || ! array_key_exists( 'accepted', $owner_plan ) || true !== $owner_plan['accepted'] || ! in_array( $owner_module, array( 'file-20','file-21' ), true ) || ! SPF_Registry::valid_semver( $command_version ) || false === $owner_plan_json || strlen( $owner_plan_json ) > 32768 ) {
 					$blockers[] = array( 'code'=>'owner_reconciliation_adapter_missing_or_invalid','legacy_key'=>sanitize_key($key),'page_id'=>$page_id );
 				}
 				$actions[] = array(
@@ -103,7 +103,7 @@ final class SPF_Reconciler {
 				$receipt_json = is_array( $receipt ) ? SPF_Runtime::canonical_json( $receipt ) : '';
 				$expected_owner = sanitize_key( $action['owner_plan']['owner_module'] ?? '' );
 				$expected_version = sanitize_text_field( $action['owner_plan']['command_version'] ?? '' );
-				if ( ! is_array( $receipt ) || empty( $receipt['success'] ) || empty( $receipt['receipt_id'] ) || empty( $receipt['owner_module'] ) || empty( $receipt['rollback_command'] ) || sanitize_key( $receipt['owner_module'] ) !== $expected_owner || sanitize_text_field( $receipt['command_version'] ?? '' ) !== $expected_version || false === $receipt_json || strlen( $receipt_json ) > 32768 || strlen( (string) $receipt['receipt_id'] ) > 191 || strlen( (string) $receipt['rollback_command'] ) > 191 ) {
+				if ( ! is_array( $receipt ) || ! array_key_exists( 'success', $receipt ) || true !== $receipt['success'] || empty( $receipt['receipt_id'] ) || empty( $receipt['owner_module'] ) || empty( $receipt['rollback_command'] ) || sanitize_key( $receipt['owner_module'] ) !== $expected_owner || sanitize_text_field( $receipt['command_version'] ?? '' ) !== $expected_version || false === $receipt_json || strlen( $receipt_json ) > 32768 || strlen( (string) $receipt['receipt_id'] ) > 191 || strlen( (string) $receipt['rollback_command'] ) > 191 ) {
 					throw new RuntimeException( 'A canonical owner did not return a bounded, version-matched reversible reconciliation receipt.' );
 				}
 				$safe_receipt = array(
@@ -144,12 +144,13 @@ final class SPF_Reconciler {
 			SPF_Runtime::release_lock( 'reconciliation', $lock );
 			return array( 'trace_id'=>$trace,'plan_hash'=>$hash,'changed'=>$changed,'owner_receipts'=>$receipts,'status'=>'applied' );
 		} catch ( Throwable $error ) {
-			self::rollback_owner_receipts( $receipts, $hash );
-			self::restore_snapshot( $snapshot );
-			update_option( 'spf_reconciliation_state', array( 'status'=>'compensated','plan_hash'=>$hash,'failed_at'=>SPF_Runtime::now_mysql(),'error_code'=>'reconciliation_compensated' ), false );
-			SPF_Audit::record( 'reconciliation_compensated', 'foundation_reconciliation', $hash, 'failed', array( 'purpose'=>'legacy_cutover','receipt_count'=>count($receipts) ) );
+			$owner_compensation = self::rollback_owner_receipts( $receipts, $hash );
+			$local_compensation = self::restore_snapshot( $snapshot );
+			$compensated = ! is_wp_error( $owner_compensation ) && ! is_wp_error( $local_compensation );
+			update_option( 'spf_reconciliation_state', array( 'status'=>$compensated?'compensated':'compensation_incomplete','plan_hash'=>$hash,'failed_at'=>SPF_Runtime::now_mysql(),'error_code'=>$compensated?'reconciliation_compensated':'reconciliation_compensation_incomplete' ), false );
+			SPF_Audit::record( 'reconciliation_compensated', 'foundation_reconciliation', $hash, $compensated?'failed':'compensation_incomplete', array( 'purpose'=>'legacy_cutover','receipt_count'=>count($receipts) ) );
 			SPF_Runtime::release_lock( 'reconciliation', $lock );
-			return new WP_Error( 'spf_reconciliation_failed', __( 'Legacy reconciliation failed and compensation was attempted. Review the reconciliation audit evidence.', 'sabri-platform-foundation' ), array( 'status'=>409,'error_class'=>get_class($error) ) );
+			return new WP_Error( $compensated?'spf_reconciliation_failed':'spf_reconciliation_compensation_incomplete', $compensated ? __( 'Legacy reconciliation failed and verified compensation completed.', 'sabri-platform-foundation' ) : __( 'Legacy reconciliation failed and compensation could not be fully verified.', 'sabri-platform-foundation' ), array( 'status'=>$compensated?409:500,'error_class'=>get_class($error) ) );
 		}
 	}
 
@@ -180,12 +181,17 @@ final class SPF_Reconciler {
 			SPF_Runtime::release_lock( 'reconciliation', $lock );
 			return $owner_result;
 		}
-		self::restore_snapshot( $snapshot );
+		$local_result = self::restore_snapshot( $snapshot );
+		if ( is_wp_error( $local_result ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return $local_result;
+		}
 		update_option( 'spf_reconciliation_state', array( 'status'=>'rolled_back','plan_hash'=>$snapshot['plan_hash'],'rolled_back_at'=>SPF_Runtime::now_mysql() ), false );
 		$trace = SPF_Audit::record_required( 'rollback_reconciliation', 'foundation_reconciliation', $snapshot['plan_hash'], 'success', array( 'purpose'=>'legacy_cutover_rollback','receipt_count'=>count($receipts) ) );
-		SPF_Event_Bus::publish( 'FoundationLegacyReconciliationRolledBack.v1', 'foundation_reconciliation', $snapshot['plan_hash'], array( 'receipt_count'=>count($receipts) ), 1, 'reconcile-rollback-'.$snapshot['plan_hash'] );
+		if ( is_wp_error( $trace ) ) { SPF_Runtime::release_lock( 'reconciliation', $lock ); return $trace; }
+		$event = SPF_Event_Bus::publish( 'FoundationLegacyReconciliationRolledBack.v1', 'foundation_reconciliation', $snapshot['plan_hash'], array( 'receipt_count'=>count($receipts) ), 1, 'reconcile-rollback-'.$snapshot['plan_hash'] );
 		SPF_Runtime::release_lock( 'reconciliation', $lock );
-		return is_wp_error( $trace ) ? $trace : array( 'trace_id'=>$trace,'status'=>'rolled_back','owner_receipts'=>count($receipts) );
+		return is_wp_error( $event ) ? $event : array( 'trace_id'=>$trace,'status'=>'rolled_back','owner_receipts'=>count($receipts) );
 	}
 
 	private static function capture_snapshot( $hash, array $plan ) {
@@ -211,25 +217,29 @@ final class SPF_Reconciler {
 	}
 
 	private static function restore_snapshot( array $snapshot ) {
-		self::restore_option_state( 'spf_page_map', $snapshot['spf_page_map'] ?? array( 'exists'=>false ) );
-		self::restore_option_state( 'spf_founder_user_id', $snapshot['spf_founder_user_id'] ?? array( 'exists'=>false ) );
+		$failures = array();
+		foreach ( array( 'spf_page_map','spf_founder_user_id' ) as $option ) {
+			$expected = $snapshot[$option] ?? array( 'exists'=>false );
+			self::restore_option_state( $option, $expected );
+			if ( SPF_Runtime::hash( self::option_state( $option ) ) !== SPF_Runtime::hash( $expected ) ) { $failures[] = $option; }
+		}
 		foreach ( $snapshot['page_meta'] ?? array() as $page_id => $keys ) {
 			foreach ( $keys as $key => $state ) {
 				delete_post_meta( absint( $page_id ), $key );
-				if ( ! empty( $state['exists'] ) ) {
-					foreach ( (array) $state['values'] as $value ) {
-						add_post_meta( absint( $page_id ), $key, $value );
-					}
-				}
+				if ( ! empty( $state['exists'] ) ) { foreach ( (array)$state['values'] as $value ) { add_post_meta( absint($page_id), $key, $value ); } }
+				$exists = metadata_exists( 'post', absint($page_id), $key );
+				$actual = array( 'exists'=>$exists, 'values'=>$exists?get_post_meta(absint($page_id),$key,false):array() );
+				if ( SPF_Runtime::hash( $actual ) !== SPF_Runtime::hash( $state ) ) { $failures[] = 'post:'.absint($page_id).':'.$key; }
 			}
 		}
+		return empty( $failures ) ? true : new WP_Error( 'spf_reconciliation_restore_incomplete', __( 'Local reconciliation snapshot restoration could not be fully verified.', 'sabri-platform-foundation' ), array( 'status'=>500, 'failures'=>$failures ) );
 	}
 
 	private static function rollback_owner_receipts( array $receipts, $plan_hash ) {
 		$errors = array();
 		foreach ( array_reverse( $receipts ) as $receipt ) {
 			$result = apply_filters( 'spf_rollback_owner_reconciliation', null, $receipt, $plan_hash );
-			if ( ! is_array( $result ) || empty( $result['success'] ) ) {
+			if ( ! is_array( $result ) || ! array_key_exists( 'success', $result ) || true !== $result['success'] ) {
 				$errors[] = $receipt['receipt_id'] ?? 'unknown';
 			}
 		}

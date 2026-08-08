@@ -30,6 +30,8 @@ $assert( str_contains( $governance, 'feature_flag_expiry_write_failed' ) && str_
 
 $assert( str_contains( $privacy, 'spf_retention_incomplete' ) && str_contains( $privacy, 'mandatory audit evidence could not be recorded' ) && str_contains( $privacy, "'done'=>false" ), 'Round 5: privacy erasure/retention can claim completion after persistence failure.' );
 
+$assert( str_contains( $reconciler, "true !== \$owner_plan['accepted']" ) && str_contains( $reconciler, "true !== \$receipt['success']" ) && str_contains( $reconciler, 'spf_reconciliation_restore_incomplete' ) && str_contains( $reconciler, 'compensation_incomplete' ), 'Round 6: reconciliation accepts truthy receipts or claims compensation without verification.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

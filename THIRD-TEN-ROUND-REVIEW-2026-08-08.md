@@ -20,3 +20,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 5 — Privacy erasure and retention truthfulness
 **Defects found and corrected.** Erasure could report `done=true` after database, mandatory-audit or completion-event failure; retention could record success after a failed delete and accepted unsafe retention overrides. Erasure now reports retry/reconciliation on any failed required step; retention windows are bounded and failed targets return an explicit error rather than false success.
+
+### Round 6 — Cross-owner reconciliation receipts and compensation
+**Defects found and corrected.** Owner-plan acceptance, execution receipts and rollback receipts used truthiness rather than literal success; compensation was labelled successful without verifying local restoration. All acceptance/success flags are now strict booleans, local snapshot restoration is verified, compensation status distinguishes complete from incomplete, and rollback requires audit/event persistence.

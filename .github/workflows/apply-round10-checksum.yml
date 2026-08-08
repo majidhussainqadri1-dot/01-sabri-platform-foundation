@@ -1,0 +1,39 @@
+name: Refresh File 01 Round 10 Checksums
+
+on:
+  push:
+    branches:
+      - codex/file-01-second-ten-round-review-2026-08-08
+    paths:
+      - .round10-checksum.ready
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout transport
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Checkout target and refresh checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin codex/file-01-complete-foundation-1.0.0
+          git checkout -B round10-fix origin/codex/file-01-complete-foundation-1.0.0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          : > SOURCE-CHECKSUMS.sha256
+          while IFS= read -r -d '' file; do
+            [ "$file" = "SOURCE-CHECKSUMS.sha256" ] && continue
+            [[ "$file" == build/* || "$file" == dist/* ]] && continue
+            [ -f "$file" ] || continue
+            printf '%s  %s\n' "$(sha256sum "$file" | awk '{print $1}')" "$file"
+          done < <(git ls-files -z) | LC_ALL=C sort -k2 > SOURCE-CHECKSUMS.sha256
+          git add SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          git commit -m 'Round 10: refresh exact source checksums after runtime smoke correction'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

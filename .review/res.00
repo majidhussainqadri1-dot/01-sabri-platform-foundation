@@ -1,0 +1,123 @@
+--- a/includes/class-spf-resilience-lab.php
++++ b/includes/class-spf-resilience-lab.php
+@@ -64,7 +64,7 @@
+ 				}
+ 			}
+ 		}
+-		$critical = array_filter( $states, static function ( $state ) { return in_array( $state['status'], array( 'blocked','unavailable','incompatible' ), true ); } );
++		$critical = array_filter( $states, static function ( $state ) { return in_array( $state['status'], array( 'blocked','unavailable','incompatible','suspended','retired' ), true ); } );
+ 		return array(
+ 			'simulation_only' => true,
+ 			'model_hash'      => SPF_Runtime::hash( $model ),
+@@ -113,54 +113,102 @@
+ 		if ( is_wp_error( $allowed ) ) {
+ 			return $allowed;
+ 		}
+-		$plan = self::self_heal_plan();
+-		if ( ! hash_equals( (string) $plan['plan_hash'], (string) $expected_hash ) ) {
+-			return new WP_Error( 'spf_self_heal_plan_changed', __( 'The self-heal plan changed; review the new dry run first.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+-		}
+ 		if ( 'APPLY FILE 01 SELF HEAL' !== trim( (string) $confirmation ) ) {
+ 			return new WP_Error( 'spf_self_heal_confirmation_required', __( 'Typed confirmation is required for bounded self-healing.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+ 		}
+-		$recovery_id = 'heal-' . gmdate( 'YmdHis' ) . '-' . substr( SPF_Runtime::hash( $plan ), 0, 10 );
+-		$recovery = array( 'id'=>$recovery_id, 'created_at'=>SPF_Runtime::now_mysql(), 'options'=>array() );
+-		foreach ( $plan['actions'] as $action ) {
+-			if ( 'quarantine_malformed_owned_option' === $action['action'] && in_array( $action['option'], self::OWNED_OPTIONS, true ) ) {
+-				$recovery['options'][ $action['option'] ] = get_option( $action['option'], null );
+-			} elseif ( 'reconcile_expired_flags' === $action['action'] ) {
+-				$recovery['options']['spf_feature_flags'] = get_option( 'spf_feature_flags', array() );
+-			} elseif ( 'trim_metric_buffer' === $action['action'] ) {
+-				$recovery['options'][ SPF_Platform_Engineering::METRIC_OPTION ] = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
+-			}
+-		}
+-		$recoveries = get_option( self::SELF_HEAL_RECOVERY_OPTION, array() );
+-		$recoveries = is_array( $recoveries ) ? $recoveries : array();
+-		$recoveries[ $recovery_id ] = $recovery;
+-		update_option( self::SELF_HEAL_RECOVERY_OPTION, array_slice( $recoveries, -20, null, true ), false );
+-		$applied = array();
+-		foreach ( $plan['actions'] as $action ) {
+-			switch ( $action['action'] ) {
+-				case 'quarantine_malformed_owned_option':
+-					$option = $action['option'];
+-					if ( in_array( $option, self::OWNED_OPTIONS, true ) ) {
+-						$old = get_option( $option, null );
+-						update_option( $option . '_quarantine_' . time(), array( 'hash'=>SPF_Runtime::hash( $old ), 'quarantined_at'=>SPF_Runtime::now_mysql() ), false );
+-						update_option( $option, array(), false );
+-						$applied[] = $action;
+-					}
+-					break;
+-				case 'reconcile_expired_flags':
+-					SPF_Governance::reconcile_expired_flags();
+-					$applied[] = $action;
+-					break;
+-				case 'trim_metric_buffer':
+-					$metrics = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
+-					if ( is_array( $metrics ) ) {
+-						update_option( SPF_Platform_Engineering::METRIC_OPTION, array_slice( $metrics, -500 ), false );
+-						$applied[] = $action;
++		$lock_name = 'future-self-heal';
++		$lock = SPF_Runtime::acquire_lock( $lock_name, 180 );
++		if ( is_wp_error( $lock ) ) {
++			return $lock;
++		}
++		try {
++			$plan = self::self_heal_plan();
++			if ( ! hash_equals( (string) $plan['plan_hash'], (string) $expected_hash ) ) {
++				return new WP_Error( 'spf_self_heal_plan_changed', __( 'The self-heal plan changed; review the new dry run first.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			$recovery_id = 'heal-' . gmdate( 'YmdHis' ) . '-' . substr( SPF_Runtime::hash( array( $plan, wp_generate_uuid4() ) ), 0, 10 );
++			$before = array();
++			foreach ( $plan['actions'] as $action ) {
++				if ( 'quarantine_malformed_owned_option' === $action['action'] && in_array( $action['option'], self::OWNED_OPTIONS, true ) ) {
++					$before[ $action['option'] ] = get_option( $action['option'], null );
++				} elseif ( 'reconcile_expired_flags' === $action['action'] ) {
++					$before['spf_feature_flags'] = get_option( 'spf_feature_flags', array() );
++				} elseif ( 'trim_metric_buffer' === $action['action'] ) {
++					$before[ SPF_Platform_Engineering::METRIC_OPTION ] = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
++				}
++			}
++			$pre = SPF_Audit::record_required( 'self_heal_precommit', 'foundation_repair', $recovery_id, 'authorized', array( 'plan_hash'=>$plan['plan_hash'], 'option_count'=>count( $before ) ) );
++			if ( is_wp_error( $pre ) ) {
++				return $pre;
++			}
++			$applied = array();
++			try {
++				foreach ( $plan['actions'] as $action ) {
++					switch ( $action['action'] ) {
++						case 'quarantine_malformed_owned_option':
++							$option = $action['option'];
++							if ( in_array( $option, self::OWNED_OPTIONS, true ) ) {
++								$old = get_option( $option, null );
++								update_option( $option . '_quarantine_' . time(), array( 'hash'=>SPF_Runtime::hash( $old ), 'quarantined_at'=>SPF_Runtime::now_mysql() ), false );
++								update_option( $option, array(), false );
++								if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( array() ) ) {
++									throw new RuntimeException( 'self_heal_option_write_failed:' . $option );
++								}
++								$applied[] = $action;
++							}
++							break;
++						case 'reconcile_expired_flags':
++							SPF_Governance::reconcile_expired_flags();
++							$applied[] = $action;
++							break;
++						case 'trim_metric_buffer':
++							$metrics = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
++							if ( is_array( $metrics ) ) {
++								$trimmed = array_slice( $metrics, -500 );
++								update_option( SPF_Platform_Engineering::METRIC_OPTION, $trimmed, false );
++								if ( SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) ) !== SPF_Runtime::hash( $trimmed ) ) {
++									throw new RuntimeException( 'self_heal_metric_write_failed' );
++								}
++								$applied[] = $action;
++							}
++							break;
+ 					}
+-					break;
++				}
++				$post_hashes = array();
++				foreach ( $before as $option => $_value ) {
++					$post_hashes[ $option ] = SPF_Runtime::hash( get_option( $option, null ) );
++				}
++				$recovery = array(
++					'id'          => $recovery_id,

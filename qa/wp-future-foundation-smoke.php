@@ -20,7 +20,7 @@ $saved_policy = SPF_Governance_Control_Plane::save_policy( array( 'id'=>'F01-POL
 $assert( is_wp_error( $saved_policy ) && 'spf_forbidden' === $saved_policy->get_error_code(), 'Policy-as-Code mutation must fail closed without Founder amendment authority.' );
 $assert( SPF_Runtime::hash( get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() ) ) === SPF_Runtime::hash( $policies_before_denied_write ), 'Denied Policy-as-Code mutation changed the policy catalog.' );
 
-$scaffold = SPF_Platform_Engineering::scaffold_module( array( 'module_key'=>'file-27','owner_file'=>'27','owner_name'=>'Runtime Test','slug'=>'runtime-test','prefix'=>'RTT' ) );
+$scaffold = SPF_Platform_Engineering::scaffold_module( array( 'module_key'=>'file-26','owner_file'=>'26','owner_name'=>'Runtime Test','slug'=>'runtime-test','prefix'=>'RTT' ) );
 $assert( ! is_wp_error( $scaffold ) && empty( $scaffold['write_performed'] ), 'Golden-path scaffold must be generated without foreign writes.' );
 
 $event_schema = array(

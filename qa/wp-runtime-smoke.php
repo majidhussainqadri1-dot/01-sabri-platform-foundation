@@ -10,9 +10,9 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 $admin = get_user_by( 'login', 'admin' );
 wp_set_current_user( $admin ? $admin->ID : 1 );
 
-$assert( defined( 'SPF_VERSION' ) && '1.2.0' === SPF_VERSION, 'Plugin version mismatch.' );
+$assert( defined( 'SPF_VERSION' ) && '2.0.0' === SPF_VERSION, 'Plugin version mismatch.' );
 $assert( '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version mismatch after activation.' );
-$assert( '1.2.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
+$assert( '2.0.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
 $schema = SPF_Installer::verify_schema();
 $assert( ! is_wp_error( $schema ), 'Schema verification failed: ' . ( is_wp_error( $schema ) ? $schema->get_error_message() : '' ) );
 $assert( true === SPF_Installer::verify_required_indexes(), 'Required File 01 index integrity failed.' );
@@ -31,13 +31,17 @@ $assert( ! $role->has_cap( SPF_Authorization::CAP_PURGE ), 'Administrator improp
 $modules = SPF_Registry::list_modules( [ 'limit'=>100 ] );
 $assert( 1 === count( $modules ) && 'file-01' === $modules[0]['module_key'], 'File 01 seeded placeholder module manifests.' );
 $assert( 27 === count( SPF_Installer::canonical_module_catalog() ), 'Canonical file catalog is incomplete.' );
-$assert( 4 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Built-in contract count mismatch.' );
+$assert( 5 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Built-in contract count mismatch.' );
 $assert( 2 === count( SPF_Registry::list_routes() ), 'Foundation route count mismatch.' );
 $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Founder option remains.' );
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
+$future = SPF_Future_Foundation::status();
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
+
 $unauthorized = SPF_Governance::record_release( [
-	'software_version'=>'1.2.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('a',40),'package_name'=>'test.zip','checksum_sha256'=>str_repeat('b',64),
+	'software_version'=>'2.0.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('a',40),'package_name'=>'test.zip','checksum_sha256'=>str_repeat('b',64),
 	'status'=>'planned','evidence'=>[ 'scope_reference'=>'runtime-test','owner'=>'file-01' ],
 ] );
 $assert( is_wp_error( $unauthorized ) && 'spf_forbidden' === $unauthorized->get_error_code(), 'Sensitive release action did not fail closed without File 00 claim.' );
@@ -54,13 +58,13 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 }, 10, 2 );
 
 $invalid_initial = SPF_Governance::record_release( [
-	'software_version'=>'1.2.1','schema_version'=>'1.2.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),
+	'software_version'=>'2.0.1','schema_version'=>'1.2.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),
 	'status'=>'deployed','evidence'=>[ 'production_change_id'=>'x' ],
 ] );
 $assert( is_wp_error( $invalid_initial ) && 'spf_release_initial_state_invalid' === $invalid_initial->get_error_code(), 'Direct deployed release creation was accepted.' );
 
 $release = SPF_Governance::record_release( [
-	'software_version'=>'1.2.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('e',40),'package_name'=>'runtime-candidate.zip','checksum_sha256'=>str_repeat('f',64),
+	'software_version'=>'2.0.0','schema_version'=>'1.2.0','commit_sha'=>str_repeat('e',40),'package_name'=>'runtime-candidate.zip','checksum_sha256'=>str_repeat('f',64),
 	'status'=>'planned','evidence'=>[ 'scope_reference'=>'SSH-F01-PLAN-2026-v1.0','owner'=>'file-01' ],
 ], [ 'purpose'=>'release_evidence' ] );
 $assert( is_array( $release ) && 'planned' === $release['status'], 'Planned release could not be recorded.' );
@@ -111,8 +115,8 @@ add_post_meta( $page_id, '_spf_legacy_quarantined', '1' );
 add_post_meta( $page_id, '_spf_legacy_quarantined', 'preexisting-second' );
 update_option( 'spf_page_map', [ 'home'=>(int)$page_id ], false );
 update_option( 'spf_founder_user_id', 999, false );
-add_filter( 'spf_owner_reconciliation_plan', static fn() => [ 'accepted'=>true,'owner_module'=>'file-20','command_version'=>'1.2.0','target'=>'canonical-shell-route' ] );
-add_filter( 'spf_execute_owner_reconciliation', static fn() => [ 'success'=>true,'receipt_id'=>'owner-receipt-1','owner_module'=>'file-20','command_version'=>'1.2.0','rollback_command'=>'rollback_owner_route_v1','state_hash'=>str_repeat('a',64) ] );
+add_filter( 'spf_owner_reconciliation_plan', static fn() => [ 'accepted'=>true,'owner_module'=>'file-20','command_version'=>'2.0.0','target'=>'canonical-shell-route' ] );
+add_filter( 'spf_execute_owner_reconciliation', static fn() => [ 'success'=>true,'receipt_id'=>'owner-receipt-1','owner_module'=>'file-20','command_version'=>'2.0.0','rollback_command'=>'rollback_owner_route_v1','state_hash'=>str_repeat('a',64) ] );
 add_filter( 'spf_rollback_owner_reconciliation', static fn() => [ 'success'=>true ] );
 $plan = SPF_Reconciler::plan();
 $assert( empty( $plan['blockers'] ), 'Accepted owner reconciliation plan remains blocked.' );
@@ -144,7 +148,7 @@ $assert( true === $upgrade && '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTI
 
 SPF_Installer::activate();
 $assert( 1 === count( SPF_Registry::list_modules( [ 'limit'=>100 ] ) ), 'Reactivation created duplicate/placeholder manifests.' );
-$assert( 4 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Reactivation duplicated contracts.' );
+$assert( 5 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Reactivation duplicated contracts.' );
 
 $health = SPF_System_Check::run( true );
 $assert( is_array( $health ) && 'fail' !== $health['overall_status'], 'System Check has a blocking failure in disposable CI.' );

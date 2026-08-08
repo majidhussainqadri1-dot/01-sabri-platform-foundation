@@ -244,22 +244,41 @@ final class SPF_Resilience_Lab {
 				return $pre;
 			}
 			$restored = array();
+			$current_values = array();
 			foreach ( (array) $recovery['options'] as $option => $value ) {
 				if ( 'spf_feature_flags' === $option || in_array( $option, self::OWNED_OPTIONS, true ) ) {
-					update_option( $option, $value, false );
-					if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( $value ) ) {
-						return new WP_Error( 'spf_self_heal_rollback_persistence_failed', __( 'A self-heal rollback option could not be verified after persistence.', 'sabri-platform-foundation' ), array( 'status'=>409, 'option'=>$option ) );
-					}
-					$restored[] = $option;
+					$current_values[ $option ] = get_option( $option, null );
 				}
 			}
-			$recovery['rolled_back'] = true;
-			$recovery['rolled_back_at'] = SPF_Runtime::now_mysql();
-			$recoveries[ $recovery_id ] = $recovery;
-			update_option( self::SELF_HEAL_RECOVERY_OPTION, $recoveries, false );
-			$audit = SPF_Audit::record_required( 'self_heal_rollback', 'foundation_repair', $recovery_id, 'success', array( 'restored_count'=>count( $restored ) ) );
-			if ( is_wp_error( $audit ) ) {
-				return $audit;
+			$recoveries_before = $recoveries;
+			try {
+				foreach ( (array) $recovery['options'] as $option => $value ) {
+					if ( 'spf_feature_flags' === $option || in_array( $option, self::OWNED_OPTIONS, true ) ) {
+						update_option( $option, $value, false );
+						if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( $value ) ) {
+							throw new RuntimeException( 'self_heal_rollback_write_failed:' . $option );
+						}
+						$restored[] = $option;
+					}
+				}
+				$recovery['rolled_back'] = true;
+				$recovery['rolled_back_at'] = SPF_Runtime::now_mysql();
+				$recoveries[ $recovery_id ] = $recovery;
+				update_option( self::SELF_HEAL_RECOVERY_OPTION, $recoveries, false );
+				$persisted_recoveries = get_option( self::SELF_HEAL_RECOVERY_OPTION, array() );
+				if ( empty( $persisted_recoveries[ $recovery_id ] ) || SPF_Runtime::hash( $persisted_recoveries[ $recovery_id ] ) !== SPF_Runtime::hash( $recovery ) ) {
+					throw new RuntimeException( 'self_heal_rollback_metadata_write_failed' );
+				}
+				$audit = SPF_Audit::record_required( 'self_heal_rollback', 'foundation_repair', $recovery_id, 'success', array( 'restored_count'=>count( $restored ) ) );
+				if ( is_wp_error( $audit ) ) {
+					throw new RuntimeException( $audit->get_error_message() );
+				}
+			} catch ( Throwable $error ) {
+				foreach ( $current_values as $option => $value ) {
+					update_option( $option, $value, false );
+				}
+				update_option( self::SELF_HEAL_RECOVERY_OPTION, $recoveries_before, false );
+				return new WP_Error( 'spf_self_heal_rollback_failed', $error->getMessage(), array( 'status'=>409 ) );
 			}
 			return array( 'rolled_back'=>true, 'recovery_id'=>$recovery_id, 'restored_options'=>$restored, 'companion_data_modified'=>false );
 		} finally {
@@ -291,7 +310,7 @@ final class SPF_Resilience_Lab {
 		}
 		$environment = function_exists( 'wp_get_environment_type' ) ? sanitize_key( wp_get_environment_type() ) : ( defined( 'WP_ENVIRONMENT_TYPE' ) ? sanitize_key( WP_ENVIRONMENT_TYPE ) : 'unknown' );
 		$safe_environments = array( 'local', 'development', 'staging', 'ci', 'test' );
-		$enabled = defined( 'SPF_CHAOS_MODE' ) && SPF_CHAOS_MODE && in_array( $environment, $safe_environments, true );
+		$enabled = defined( 'SPF_CHAOS_MODE' ) && true === SPF_CHAOS_MODE && in_array( $environment, $safe_environments, true );
 		$result = array(
 			'scenario'         => $scenario,
 			'definition'       => $catalog[ $scenario ],
@@ -497,10 +516,21 @@ final class SPF_Resilience_Lab {
 	}
 
 	public static function periodic_tick() {
-		SPF_Governance::reconcile_expired_flags();
+		$reconciled = SPF_Governance::reconcile_expired_flags();
+		if ( is_wp_error( $reconciled ) ) {
+			do_action( 'spf_future_foundation_tick_failure', $reconciled );
+			return $reconciled;
+		}
 		$plan = self::self_heal_plan();
-		SPF_Platform_Engineering::record_metric( 'future_foundation_self_heal_actions', count( $plan['actions'] ), array( 'module'=>'file-01' ) );
-		do_action( 'spf_future_foundation_health_tick', $plan );
+		$metric = SPF_Platform_Engineering::record_metric( 'future_foundation_self_heal_actions', count( $plan['actions'] ), array( 'module'=>'file-01' ) );
+		if ( is_wp_error( $metric ) || false === $metric ) {
+			$error = is_wp_error( $metric ) ? $metric : new WP_Error( 'spf_future_foundation_metric_failed', __( 'Future Foundation periodic metric persistence failed.', 'sabri-platform-foundation' ) );
+			do_action( 'spf_future_foundation_tick_failure', $error );
+			return $error;
+		}
+		$result = array( 'reconciled'=>$reconciled, 'self_heal_plan'=>$plan, 'metric_recorded'=>true );
+		do_action( 'spf_future_foundation_health_tick', $result );
+		return $result;
 	}
 
 	private static function sanitize_chaos_context( $value, $depth = 0 ) {

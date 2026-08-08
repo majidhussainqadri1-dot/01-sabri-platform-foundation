@@ -266,8 +266,10 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'high', 'duplicate_route_owner', $path, 'One canonical route is claimed by multiple owners.', array( 'owners' => $owners ) );
 			}
 		}
-		$known_shell_owners = array_values( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) );
-		if ( count( array_unique( $known_shell_owners ) ) > 1 || ( $known_shell_owners && 'file-20' !== $known_shell_owners[0] ) ) {
+		$known_shell_owners = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) ) );
+		if ( empty( $known_shell_owners ) ) {
+			$findings[] = self::finding( 'critical', 'shell_owner_missing', 'global-shell', 'The canonical File 20 application-shell owner is not present in runtime inventory.', array( 'owners' => array() ) );
+		} elseif ( count( $known_shell_owners ) > 1 || 'file-20' !== $known_shell_owners[0] ) {
 			$findings[] = self::finding( 'critical', 'shell_owner_violation', 'global-shell', 'File 20 must remain the only application-shell owner.', array( 'owners' => $known_shell_owners ) );
 		}
 		return array(
@@ -296,14 +298,14 @@ final class SPF_Governance_Control_Plane {
 			$item = (array) ( $evidence[ $id ] ?? array() );
 			$status = array(
 				'requirement' => $id,
-				'design'      => ! empty( $item['design'] ),
-				'code'        => ! empty( $item['code'] ),
-				'test'        => ! empty( $item['test'] ),
-				'package'     => ! empty( $item['package'] ),
-				'staging'     => ! empty( $item['staging'] ),
-				'approval'    => ! empty( $item['approval'] ),
-				'live'        => ! empty( $item['live'] ) || ! empty( $item['deployed'] ),
-				'operational' => ! empty( $item['operational'] ),
+				'design'      => true === ( $item['design'] ?? false ),
+				'code'        => true === ( $item['code'] ?? false ),
+				'test'        => true === ( $item['test'] ?? false ),
+				'package'     => true === ( $item['package'] ?? false ),
+				'staging'     => true === ( $item['staging'] ?? false ),
+				'approval'    => true === ( $item['approval'] ?? false ),
+				'live'        => true === ( $item['live'] ?? false ) || true === ( $item['deployed'] ?? false ),
+				'operational' => true === ( $item['operational'] ?? false ),
 			);
 			$status['coded_complete'] = $status['design'] && $status['code'] && $status['test'];
 			$status['packaged_complete'] = $status['coded_complete'] && $status['package'];
@@ -448,9 +450,6 @@ final class SPF_Governance_Control_Plane {
 			if ( $key && $claims_shell ) {
 				$shell_owners[] = $key;
 			}
-		}
-		if ( ! in_array( 'file-20', $shell_owners, true ) ) {
-			$shell_owners[] = 'file-20';
 		}
 		return array(
 			'modules' => $modules,

@@ -140,11 +140,29 @@ final class SPF_System_Check {
 		global $wpdb;
 		$checks=array();
 		$table=SPF_Installer::table('privacy_requests');
-		$overdue=SPF_Runtime::table_exists($table)?(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('completed','rejected') AND due_at<%s",SPF_Runtime::now_mysql())):0;
-		$checks[]=self::check('privacy_requests_overdue',0===$overdue,(string)$overdue,'Privacy requests are overdue.','warning');
+		if ( ! SPF_Runtime::table_exists( $table ) ) {
+			$checks[]=self::check('privacy_requests_registry',false,'missing','Privacy request registry is unavailable.','fail');
+		} else {
+			$overdue_raw=$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE status NOT IN ('completed','rejected') AND due_at<%s",SPF_Runtime::now_mysql()));
+			if ( ! empty( $wpdb->last_error ) || null === $overdue_raw ) {
+				$checks[]=self::check('privacy_requests_query',false,'query-failed','Privacy request health query failed.','fail');
+			} else {
+				$overdue=(int)$overdue_raw;
+				$checks[]=self::check('privacy_requests_overdue',0===$overdue,(string)$overdue,'Privacy requests are overdue.','warning');
+			}
+		}
 		$holds=SPF_Installer::table('privacy_holds');
-		$active=SPF_Runtime::table_exists($holds)?(int)$wpdb->get_var("SELECT COUNT(*) FROM {$holds} WHERE active=1"):0; // phpcs:ignore
-		$checks[]=self::check('privacy_holds_registry',SPF_Runtime::table_exists($holds),'active-'.$active,'Privacy hold registry is unavailable.','fail');
+		if ( ! SPF_Runtime::table_exists( $holds ) ) {
+			$checks[]=self::check('privacy_holds_registry',false,'missing','Privacy hold registry is unavailable.','fail');
+		} else {
+			$active_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$holds} WHERE active=1"); // phpcs:ignore
+			if ( ! empty( $wpdb->last_error ) || null === $active_raw ) {
+				$checks[]=self::check('privacy_holds_query',false,'query-failed','Privacy hold health query failed.','fail');
+			} else {
+				$active=(int)$active_raw;
+				$checks[]=self::check('privacy_holds_registry',true,'active-'.$active,'Privacy hold registry is unavailable.','fail');
+			}
+		}
 		$retention=wp_next_scheduled('spf_privacy_retention');
 		$checks[]=self::check('privacy_retention_schedule',(bool)$retention,$retention?'scheduled':'missing','Privacy retention job is not scheduled.','fail');
 		return $checks;

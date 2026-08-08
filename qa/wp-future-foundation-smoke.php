@@ -22,6 +22,13 @@ $assert( SPF_Runtime::hash( get_option( SPF_Governance_Control_Plane::POLICY_OPT
 
 $scaffold = SPF_Platform_Engineering::scaffold_module( array( 'module_key'=>'file-26','owner_file'=>'26','owner_name'=>'Runtime Test','slug'=>'runtime-test','prefix'=>'RTT' ) );
 $assert( ! is_wp_error( $scaffold ) && empty( $scaffold['write_performed'] ), 'Golden-path scaffold must be generated without foreign writes.' );
+$self_scaffold = SPF_Platform_Engineering::scaffold_module( array( 'module_key'=>'file-01','owner_file'=>'01','owner_name'=>'Self Test','slug'=>'self-test','prefix'=>'SELF' ) );
+$assert( is_wp_error( $self_scaffold ) && 'spf_scaffold_self_dependency' === $self_scaffold->get_error_code(), 'Golden-path scaffold must reject self-dependencies.' );
+$truthy_trace = SPF_Governance_Control_Plane::build_traceability_report( array('F01-STRICT-BOOL'), array('F01-STRICT-BOOL'=>array('design'=>'yes','code'=>'yes','test'=>'yes')) );
+$assert( 0 === (int) $truthy_trace['coded_complete'], 'Traceability must not accept truthy strings as verified evidence.' );
+$missing_shell = SPF_Governance_Control_Plane::lint_architecture( array( 'modules'=>array(), 'routes'=>array(), 'global_shell_owners'=>array() ) );
+$missing_shell_codes = array_column( (array) $missing_shell['findings'], 'code' );
+$assert( in_array( 'shell_owner_missing', $missing_shell_codes, true ), 'Architecture linter must report a missing File 20 shell owner instead of fabricating one.' );
 
 $event_schema = array(
 	'event_name'=>'FutureFoundationSmoke.v1','version'=>'1.0.0','owner_module'=>'file-01',
@@ -32,6 +39,14 @@ $event_schema = array(
 );
 $registered = SPF_Platform_Engineering::register_event_schema( $event_schema );
 $assert( ! is_wp_error( $registered ), 'Authorized File 01 event schema registration failed.' );
+$schemas_before_capacity = get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() );
+$full_registry = array();
+for ( $i = 0; $i < 500; $i++ ) { $full_registry[ 'CapacityEvent' . $i . '@1.0.0' ] = array( 'placeholder'=>true ); }
+update_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, $full_registry, false );
+$capacity_schema = $event_schema; $capacity_schema['event_name'] = 'CapacityOverflowEvent.v1';
+$capacity_result = SPF_Platform_Engineering::register_event_schema( $capacity_schema );
+$assert( is_wp_error( $capacity_result ) && 'spf_event_schema_registry_full' === $capacity_result->get_error_code(), 'Event-schema registry must reject overflow instead of silently dropping the new schema.' );
+update_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, $schemas_before_capacity, false );
 $fixture = SPF_Platform_Engineering::replay_event_fixture( array( 'event_id'=>'smoke-1','occurred_at'=>gmdate('c') ), $event_schema, false );
 $assert( ! is_wp_error( $fixture ) && ! empty( $fixture['valid'] ) && empty( $fixture['dispatched'] ), 'Event replay fixture validation failed or dispatched unexpectedly.' );
 

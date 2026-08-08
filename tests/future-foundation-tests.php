@@ -42,8 +42,8 @@ $assert(!is_wp_error($architecture_manifest)&&($architecture_manifest['canonical
 $assert(($architecture_manifest['global_shell_owner']??false)===true,'Shell-owner declaration was not preserved.');
 
 $trace=SPF_Governance_Control_Plane::build_traceability_report([['id'=>'REQ-1'],['id'=>'REQ-1'],['id'=>'REQ-2']],[
- 'REQ-1'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1],
- 'REQ-2'=>['design'=>1,'code'=>1,'test'=>1,'package'=>1,'staging'=>1,'approval'=>1,'live'=>1,'operational'=>1],
+ 'REQ-1'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true],
+ 'REQ-2'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true,'live'=>true,'operational'=>true],
 ]);
 $assert($trace['total']===2,'Duplicate requirement IDs inflated trace total.');
 $assert($trace['coded_complete']===2,'Trace coded count wrong.');

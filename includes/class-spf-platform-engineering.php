@@ -63,6 +63,9 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $required ) || is_wp_error( $optional ) ) {
 			return is_wp_error( $required ) ? $required : $optional;
 		}
+		if ( in_array( $module_key, $required, true ) || in_array( $module_key, $optional, true ) ) {
+			return new WP_Error( 'spf_scaffold_self_dependency', __( 'Golden-path scaffolding cannot generate a module that depends on itself.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		$manifest = array(
 			'module_key'       => $module_key,
 			'owner_file'       => $owner_file,
@@ -132,6 +135,9 @@ final class SPF_Platform_Engineering {
 			$registry = get_option( self::EVENT_SCHEMA_OPTION, array() );
 			$registry = is_array( $registry ) ? $registry : array();
 			$key = $normalized['event_name'] . '@' . $normalized['version'];
+			if ( ! isset( $registry[ $key ] ) && count( $registry ) >= 500 ) {
+				return new WP_Error( 'spf_event_schema_registry_full', __( 'The bounded event-schema registry is full; retire or migrate an existing schema before adding another.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
 			$registry[ $key ] = $normalized;
 			ksort( $registry, SORT_STRING );
 			$expected = array_slice( $registry, 0, 500, true );
@@ -281,8 +287,13 @@ final class SPF_Platform_Engineering {
 		$release_id = substr( sanitize_text_field( $release_id ), 0, 191 );
 		$rings = array_values( array_unique( array_filter( array_map( 'sanitize_key', $rings ) ) ) );
 		$slo = self::sanitize_numeric_map( $slo );
-		if ( '' === $release_id || empty( $rings ) || count( $rings ) > 20 || empty( $slo ) ) {
-			return new WP_Error( 'spf_rollout_invalid', __( 'A release id, bounded rollout rings and at least one SLO objective are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		$allowed_rings = array( 'local','ci','staging','staff','canary','gradual','production','full' );
+		$terminal_rings = array( 'production','full' );
+		$unknown_rings = array_values( array_diff( $rings, $allowed_rings ) );
+		$terminal_count = count( array_intersect( $rings, $terminal_rings ) );
+		$last_ring = $rings ? $rings[ count( $rings ) - 1 ] : '';
+		if ( '' === $release_id || count( $rings ) < 2 || count( $rings ) > 20 || $unknown_rings || 1 !== $terminal_count || ! in_array( $last_ring, $terminal_rings, true ) || empty( $slo ) ) {
+			return new WP_Error( 'spf_rollout_invalid', __( 'A release id, two or more canonical rollout rings ending in exactly one production/full ring, and at least one SLO objective are required.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$lock_name = 'future-rollout-' . substr( SPF_Runtime::hash( $release_id ), 0, 24 );
 		$lock = SPF_Runtime::acquire_lock( $lock_name, 120 );
@@ -365,7 +376,7 @@ final class SPF_Platform_Engineering {
 					}
 				}
 				if ( $next_index === $current_index ) {
-					$rollout['status'] = 'full';
+					return new WP_Error( 'spf_rollout_terminal_state_invalid', __( 'A non-final rollout state cannot be promoted to full without a new verified deployment-adapter transition.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
 				} else {
 					$execution = apply_filters( 'spf_progressive_delivery_execute_ring', null, array(
 						'release_id'   => $release_id,
@@ -374,8 +385,9 @@ final class SPF_Platform_Engineering {
 						'gate'         => $gate,
 					) );
 					$executed_at = is_array( $execution ) ? strtotime( (string) ( $execution['executed_at'] ?? '' ) ) : false;
-					$execution_valid = is_array( $execution ) && ! empty( $execution['verified'] )
-						&& sanitize_key( $execution['release_id'] ?? '' ) === sanitize_key( $release_id )
+					$execution_release_id = is_array( $execution ) ? substr( sanitize_text_field( (string) ( $execution['release_id'] ?? '' ) ), 0, 191 ) : '';
+					$execution_valid = is_array( $execution ) && true === ( $execution['verified'] ?? false )
+						&& '' !== $execution_release_id && hash_equals( $release_id, $execution_release_id )
 						&& sanitize_key( $execution['ring'] ?? '' ) === $next_ring
 						&& ! empty( $execution['evidence_id'] ) && strlen( (string) $execution['evidence_id'] ) <= 191
 						&& $executed_at && abs( time() - $executed_at ) <= 900;

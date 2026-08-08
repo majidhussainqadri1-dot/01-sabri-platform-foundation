@@ -1,0 +1,107 @@
++		$release_ready = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['release_ready'] ); } ) );
++		$live = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['live_deployed'] ); } ) );
+ 		$production = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['production_complete'] ); } ) );
+ 		return array(
+-			'total'                 => $total,
+-			'coded_complete'        => $coded,
+-			'production_complete'   => $production,
+-			'coded_percentage'      => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
+-			'production_percentage' => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
+-			'missing_coded_evidence'=> $missing,
+-			'rows'                  => $rows,
++			'total'                   => $total,
++			'coded_complete'          => $coded,
++			'release_ready'           => $release_ready,
++			'live_deployed'           => $live,
++			'production_complete'     => $production,
++			'coded_percentage'        => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
++			'release_ready_percentage'=> $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
++			'live_percentage'         => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
++			'production_percentage'   => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
++			'missing_coded_evidence'  => $missing,
++			'duplicate_requirement_ids'=> array_values( array_unique( $duplicate_ids ) ),
++			'rows'                    => $rows,
+ 		);
+ 	}
+ 
+@@ -302,7 +363,8 @@
+ 				$advice[] = array( 'severity'=>'medium', 'code'=>'traceability:missing-evidence', 'message'=>'Some requirements do not have complete design/code/test evidence.', 'action'=>'Close evidence gaps before claiming coded completion.' );
+ 			}
+ 		}
+-		$external = apply_filters( 'spf_ai_governance_advisor', array(), $input, $advice );
++		$advisor_input = self::sanitize_advisory_input( $input );
++		$external = apply_filters( 'spf_ai_governance_advisor', array(), $advisor_input, $advice );
+ 		if ( is_array( $external ) ) {
+ 			foreach ( array_slice( $external, 0, 50 ) as $item ) {
+ 				if ( is_array( $item ) ) {
+@@ -324,6 +386,40 @@
+ 		);
+ 	}
+ 
++	private static function sanitize_advisory_input( $value, $depth = 0, $parent_key = '' ) {
++		if ( $depth > 6 ) {
++			return array( '_truncated' => true );
++		}
++		if ( is_array( $value ) ) {
++			$out = array();
++			$count = 0;
++			foreach ( $value as $key => $item ) {
++				if ( $count++ >= 100 ) {
++					$out['_truncated'] = true;
++					break;
++				}
++				$safe_key = is_int( $key ) ? $key : sanitize_key( $key );
++				if ( ! is_int( $safe_key ) && '' === $safe_key ) {
++					continue;
++				}
++				$key_text = (string) $safe_key;
++				if ( preg_match( '/(patient|clinical|name|address|message|content|prompt|email|phone|token|secret|password|credential|cookie|authorization|document|government|national[_-]?id)/i', $key_text ) ) {
++					$out[ $safe_key ] = array( 'redacted' => true, 'value_hash' => SPF_Runtime::hash( $item ) );
++					continue;
++				}
++				$out[ $safe_key ] = self::sanitize_advisory_input( $item, $depth + 1, $key_text );
++			}
++			return $out;
++		}
++		if ( is_object( $value ) ) {
++			return self::sanitize_advisory_input( get_object_vars( $value ), $depth + 1, $parent_key );
++		}
++		if ( is_string( $value ) ) {
++			return substr( sanitize_text_field( $value ), 0, 500 );
++		}
++		return is_scalar( $value ) || null === $value ? $value : null;
++	}
++
+ 	private static function runtime_inventory() {
+ 		$modules = array();
+ 		foreach ( SPF_Registry::list_modules( array( 'limit' => 200 ) ) as $module ) {
+@@ -338,10 +434,28 @@
+ 			}
+ 			$modules[] = $module;
+ 		}
++		$shell_owners = array();
++		foreach ( $modules as $module ) {
++			$key = sanitize_key( $module['module_key'] ?? '' );
++			$manifest = (array) ( $module['manifest'] ?? array() );
++			$claims_shell = ! empty( $manifest['global_shell_owner'] ) || ! empty( $manifest['application_shell_owner'] );
++			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
++				$entity_key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
++				if ( in_array( $entity_key, array( 'global-shell', 'application-shell', 'global-navigation' ), true ) ) {
++					$claims_shell = true;
++				}
++			}
++			if ( $key && $claims_shell ) {
++				$shell_owners[] = $key;
++			}
++		}
++		if ( ! in_array( 'file-20', $shell_owners, true ) ) {
++			$shell_owners[] = 'file-20';
++		}
+ 		return array(
+ 			'modules' => $modules,
+ 			'routes'  => SPF_Registry::list_routes(),
+-			'global_shell_owners' => array( 'file-20' ),
++			'global_shell_owners' => array_values( array_unique( $shell_owners ) ),
+ 		);
+ 	}
+ 

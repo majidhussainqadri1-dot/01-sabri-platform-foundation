@@ -345,7 +345,7 @@ final class SPF_Registry {
 
 	public static function list_routes() {
 		global $wpdb;
-		$rows = $wpdb->get_results( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' ORDER BY route_path', ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' ORDER BY route_path LIMIT %d', 200 ), ARRAY_A );
 		return array_map( array( __CLASS__, 'route_dto' ), $rows );
 	}
 
@@ -393,7 +393,15 @@ final class SPF_Registry {
 		if ( is_wp_error( $manifest['optional'] ) ) {
 			return $manifest['optional'];
 		}
+		$required_keys = array_column( $manifest['required'], 'module_key' );
+		$optional_keys = array_column( $manifest['optional'], 'module_key' );
+		if ( array_intersect( $required_keys, $optional_keys ) ) {
+			return new WP_Error( 'spf_dependency_ambiguity', __( 'A module cannot be both a required and optional dependency.', 'sabri-platform-foundation' ) );
+		}
 		foreach ( array( 'capabilities','commands','queries','events','routes','data_classes' ) as $field ) {
+			if ( count( $manifest[ $field ] ) > 256 ) {
+				return new WP_Error( 'spf_manifest_collection_too_large', sprintf( __( 'Manifest collection is too large: %s', 'sabri-platform-foundation' ), $field ) );
+			}
 			$manifest[ $field ] = array_values( array_unique( array_filter( array_map( static function ( $v ) { return substr( sanitize_text_field( (string) $v ), 0, 191 ); }, $manifest[ $field ] ) ) ) );
 		}
 		$manifest['health'] = SPF_Runtime::canonicalize( $manifest['health'] );
@@ -401,7 +409,11 @@ final class SPF_Registry {
 	}
 
 	private static function normalize_dependencies( array $dependencies ) {
+		if ( count( $dependencies ) > 64 ) {
+			return new WP_Error( 'spf_dependency_list_too_large', __( 'A module dependency list exceeds the bounded limit.', 'sabri-platform-foundation' ) );
+		}
 		$result = array();
+		$seen = array();
 		foreach ( $dependencies as $dependency ) {
 			if ( ! is_array( $dependency ) || empty( $dependency['module_key'] ) || empty( $dependency['minimum_version'] ) ) {
 				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency declarations require module_key and minimum_version.', 'sabri-platform-foundation' ) );
@@ -412,6 +424,10 @@ final class SPF_Registry {
 			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && version_compare( $min, $max, '>' ) ) ) {
 				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency version range is invalid.', 'sabri-platform-foundation' ) );
 			}
+			if ( isset( $seen[ $key ] ) ) {
+				return new WP_Error( 'spf_duplicate_dependency', __( 'A dependency module may be declared only once in a dependency list.', 'sabri-platform-foundation' ) );
+			}
+			$seen[ $key ] = true;
 			$result[] = array( 'module_key' => $key, 'minimum_version' => $min, 'maximum_version' => $max, 'purpose' => substr( sanitize_text_field( $dependency['purpose'] ?? '' ), 0, 191 ) );
 		}
 		usort( $result, static function ( $a, $b ) { return strcmp( $a['module_key'], $b['module_key'] ); } );
@@ -432,6 +448,10 @@ final class SPF_Registry {
 			return new WP_Error( 'spf_invalid_contract', __( 'Invalid contract.', 'sabri-platform-foundation' ) );
 		}
 		$consumers = array_values( array_unique( array_filter( array_map( 'sanitize_key', $contract['consumers'] ) ) ) );
+		$schema_json = SPF_Runtime::canonical_json( $contract['schema'] );
+		if ( count( $consumers ) > 64 || count( $contract['schema'] ) > 256 || false === $schema_json || strlen( $schema_json ) > 262144 ) {
+			return new WP_Error( 'spf_contract_too_large', __( 'Contract schema or consumer list exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
+		}
 		foreach ( $consumers as $consumer ) {
 			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $consumer ) ) {
 				return new WP_Error( 'spf_invalid_contract_consumer', __( 'Contract consumer is not a canonical module key.', 'sabri-platform-foundation' ) );
@@ -466,8 +486,12 @@ final class SPF_Registry {
 		if ( $destination && ! self::same_origin( $destination ) ) {
 			return new WP_Error( 'spf_unsafe_route_destination', __( 'Route destination must be same-origin.', 'sabri-platform-foundation' ) );
 		}
+		$raw_redirects = (array) ( $route['redirects'] ?? array() );
+		if ( count( $raw_redirects ) > 64 ) {
+			return new WP_Error( 'spf_route_redirects_too_large', __( 'A route redirect declaration exceeds the bounded limit.', 'sabri-platform-foundation' ) );
+		}
 		$redirects = array();
-		foreach ( (array) ( $route['redirects'] ?? array() ) as $redirect ) {
+		foreach ( $raw_redirects as $redirect ) {
 			$redirect = '/' . trim( sanitize_text_field( $redirect ), '/' ) . '/';
 			if ( preg_match( '#^/[A-Za-z0-9/_-]+/$#', $redirect ) && $redirect !== $path ) {
 				$redirects[] = $redirect;

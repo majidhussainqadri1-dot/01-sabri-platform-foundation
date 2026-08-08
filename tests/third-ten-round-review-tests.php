@@ -24,6 +24,8 @@ $assert( str_contains( $idempotency, 'idempotency_error_finalize_conflict' ) && 
 
 $assert( str_contains( $runtime, "true !== \$claim['verified']" ) && str_contains( $system_check, "true===\$external_cron['verified']" ) && str_contains( $system_check, "true===\$mail['verified']" ), 'Round 2: external evidence accepts non-boolean truthy verification.' );
 
+$assert( str_contains( $governance, 'spf_invalid_flag_enabled' ) && str_contains( $governance, 'spf_invalid_flag_expiry' ) && str_contains( $governance, "true === \$flag['enabled']" ), 'Round 3: feature flag boolean/expiry is not strict and fail-closed.' );
+
 if ( $failures ) {
     fwrite( STDERR, "Third ten-round review regression failed:\n- " . implode( "\n- ", $failures ) . "\n" );
     exit( 1 );

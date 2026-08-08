@@ -11,3 +11,6 @@ Status: IN PROGRESS — final round-by-round results will be written only after 
 
 ### Round 2 — External evidence truth semantics
 **Defect found and corrected.** `verified` evidence used truthiness, so values such as the string `false` could be treated as verified. Runtime evidence, external cron evidence and mail-delivery evidence now require the literal boolean `true`.
+
+### Round 3 — Feature-flag type and expiry validation
+**Defect found and corrected.** Truthy strings could enable a flag and invalid dates could normalize to an unintended timestamp. `enabled` is now strict boolean and supplied expiry must parse to a future instant before any authorization/evidence mutation path continues.

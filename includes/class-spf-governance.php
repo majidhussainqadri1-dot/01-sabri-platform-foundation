@@ -235,6 +235,17 @@ final class SPF_Governance {
 				return new WP_Error( 'spf_invalid_flag', 'Missing '.$field );
 			}
 		}
+		if ( ! is_bool( $flag['enabled'] ) ) {
+			return new WP_Error( 'spf_invalid_flag_enabled', __( 'Feature flag enabled must be a boolean.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$expires_at = null;
+		if ( array_key_exists( 'expires_at', $flag ) && null !== $flag['expires_at'] && '' !== trim( (string) $flag['expires_at'] ) ) {
+			$expires_ts = strtotime( (string) $flag['expires_at'] );
+			if ( false === $expires_ts || $expires_ts <= time() ) {
+				return new WP_Error( 'spf_invalid_flag_expiry', __( 'Feature flag expiry must be a valid future time.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+			}
+			$expires_at = gmdate( 'Y-m-d H:i:s', $expires_ts );
+		}
 		$owner = sanitize_key( $flag['owner_module'] );
 		if ( ! SPF_Registry::get_module( $owner ) ) {
 			return new WP_Error( 'spf_flag_owner_missing', __( 'Flag owner missing.', 'sabri-platform-foundation' ) );
@@ -257,7 +268,7 @@ final class SPF_Governance {
 			return new WP_Error( 'spf_stale_record', __( 'The feature flag changed before this update.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
 		$activation_evidence_hash = '';
-		if ( ! empty( $flag['enabled'] ) ) {
+		if ( true === $flag['enabled'] ) {
 			$readiness = SPF_Dependency_Resolver::readiness( $owner );
 			if ( empty( $readiness['ready'] ) ) {
 				return new WP_Error( 'spf_feature_dependency_not_ready', __( 'Feature activation is blocked because the owner dependency graph is not ready.', 'sabri-platform-foundation' ), array( 'status'=>412, 'readiness_code'=>$readiness['code'] ?? 'not_ready' ) );
@@ -280,7 +291,7 @@ final class SPF_Governance {
 			return $tx;
 		}
 		try {
-			$data = array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>empty($flag['enabled'])?0:1,'expires_at'=>empty($flag['expires_at'])?null:gmdate('Y-m-d H:i:s',strtotime($flag['expires_at'])),'reason'=>substr(sanitize_text_field($flag['reason']),0,500),'updated_at'=>SPF_Runtime::now_mysql() );
+			$data = array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>$flag['enabled']?1:0,'expires_at'=>$expires_at,'reason'=>substr(sanitize_text_field($flag['reason']),0,500),'updated_at'=>SPF_Runtime::now_mysql() );
 			if ( $old ) {
 				$data['record_version'] = (int)$old['record_version']+1;
 				$ok = $wpdb->update( $table, $data, array( 'id'=>(int)$old['id'],'record_version'=>(int)$old['record_version'] ) );
@@ -293,11 +304,11 @@ final class SPF_Governance {
 					throw new RuntimeException( 'Flag insert failed.' );
 				}
 			}
-			$audit = SPF_Audit::record_required( 'set_flag', 'foundation_flag', $owner.':'.$key.':'.$env, 'success', array( 'purpose'=>$context['purpose']??'feature_flag','enabled'=>empty($flag['enabled'])?0:1,'activation_evidence_hash'=>$activation_evidence_hash ) );
+			$audit = SPF_Audit::record_required( 'set_flag', 'foundation_flag', $owner.':'.$key.':'.$env, 'success', array( 'purpose'=>$context['purpose']??'feature_flag','enabled'=>$flag['enabled']?1:0,'activation_evidence_hash'=>$activation_evidence_hash ) );
 			if ( is_wp_error( $audit ) ) {
 				throw new RuntimeException( $audit->get_error_message() );
 			}
-			$event = SPF_Event_Bus::publish( 'FeatureFlagChanged.v1', 'foundation_flag', $owner.':'.$key.':'.$env, array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>empty($flag['enabled'])?0:1,'expires_at'=>$data['expires_at'] ), 1, 'flag-'.$owner.'-'.$key.'-'.$env.'-'.($data['record_version']??1) );
+			$event = SPF_Event_Bus::publish( 'FeatureFlagChanged.v1', 'foundation_flag', $owner.':'.$key.':'.$env, array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>$flag['enabled']?1:0,'expires_at'=>$data['expires_at'] ), 1, 'flag-'.$owner.'-'.$key.'-'.$env.'-'.($data['record_version']??1) );
 			if ( is_wp_error( $event ) ) {
 				throw new RuntimeException( $event->get_error_message() );
 			}
@@ -305,7 +316,7 @@ final class SPF_Governance {
 			if ( is_wp_error( $commit ) ) {
 				throw new RuntimeException( $commit->get_error_message() );
 			}
-			return array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>!empty($flag['enabled']),'record_version'=>$old?(int)$old['record_version']+1:1 );
+			return array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env,'enabled'=>$flag['enabled'],'record_version'=>$old?(int)$old['record_version']+1:1 );
 		} catch ( Throwable $e ) {
 			SPF_Runtime::rollback();
 			return new WP_Error( 'spf_flag_write_failed', $e->getMessage(), array( 'status' => 409 ) );

@@ -28,11 +28,11 @@ jobs:
           from pathlib import Path
           import hashlib
 
-          # Syntax-safe fifth-cycle source assertion.
+          # Syntax-safe fifth-cycle source assertion that excludes only the old synthetic File 20 injection.
           p = Path('tests/fifth-ten-round-review-tests.php')
           s = p.read_text(encoding='utf-8')
           old = '! str_contains( $control, "$shell_owners[] = \'file-20\';" )'
-          new = "! str_contains( $control, '$shell_owners[] =' )"
+          new = "! str_contains( $control, '$shell_owners[] = \\'file-20\\';' )"
           if old not in s:
               raise SystemExit('Expected generated shell-owner assertion not found')
           p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')

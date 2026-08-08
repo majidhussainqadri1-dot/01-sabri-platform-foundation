@@ -1,0 +1,101 @@
+-		$pre = SPF_Audit::record_required( 'time_travel_restore_precommit', 'foundation_snapshot', $snapshot_id, 'authorized', array( 'plan_hash'=>$plan['plan_hash'] ) );
+-		if ( is_wp_error( $pre ) ) {
+-			return $pre;
++		$lock_name = 'future-snapshot-restore';
++		$lock = SPF_Runtime::acquire_lock( $lock_name, 180 );
++		if ( is_wp_error( $lock ) ) {
++			return $lock;
+ 		}
+ 		try {
+-			foreach ( $mapping as $section => $option ) {
+-				update_option( $option, SPF_Runtime::canonicalize( $target[ $section ] ?? array() ), false );
++			$plan = self::restore_snapshot_plan( $snapshot_id );
++			if ( is_wp_error( $plan ) ) {
++				return $plan;
++			}
++			if ( ! hash_equals( (string) $plan['plan_hash'], (string) $expected_hash ) ) {
++				return new WP_Error( 'spf_snapshot_restore_plan_changed', __( 'The snapshot restore plan changed; review the new dry run first.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
++			}
++			$snapshots = get_option( self::SNAPSHOT_OPTION, array() );
++			if ( ! is_array( $snapshots ) || empty( $snapshots[ $snapshot_id ]['data'] ) ) {
++				return new WP_Error( 'spf_snapshot_missing', __( 'The requested governance snapshot was not found.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
++			}
++			$snapshot = (array) $snapshots[ $snapshot_id ];
++			$target = (array) $snapshot['data'];
++			if ( empty( $snapshot['data_hash'] ) || ! hash_equals( (string) $snapshot['data_hash'], SPF_Runtime::hash( $target ) ) ) {
++				return new WP_Error( 'spf_snapshot_integrity_failed', __( 'The governance snapshot failed its stored integrity hash.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+ 			}
+-			$audit = SPF_Audit::record_required( 'time_travel_restore', 'foundation_snapshot', $snapshot_id, 'success', array( 'plan_hash'=>$plan['plan_hash'], 'sections'=>array_keys( $mapping ) ) );
+-			if ( is_wp_error( $audit ) ) {
+-				throw new RuntimeException( $audit->get_error_message() );
++			$mapping = self::restorable_snapshot_mapping();
++			$current = array();
++			foreach ( $mapping as $section => $option ) {
++				$current[ $option ] = get_option( $option, array() );
+ 			}
+-		} catch ( Throwable $error ) {
+-			foreach ( $current as $option => $value ) {
+-				update_option( $option, $value, false );
++			$pre = SPF_Audit::record_required( 'time_travel_restore_precommit', 'foundation_snapshot', $snapshot_id, 'authorized', array( 'plan_hash'=>$plan['plan_hash'] ) );
++			if ( is_wp_error( $pre ) ) {
++				return $pre;
++			}
++			try {
++				foreach ( $mapping as $section => $option ) {
++					$desired = SPF_Runtime::canonicalize( $target[ $section ] ?? array() );
++					update_option( $option, $desired, false );
++					if ( SPF_Runtime::hash( get_option( $option, array() ) ) !== SPF_Runtime::hash( $desired ) ) {
++						throw new RuntimeException( 'snapshot_restore_write_failed:' . $option );
++					}
++				}
++				$audit = SPF_Audit::record_required( 'time_travel_restore', 'foundation_snapshot', $snapshot_id, 'success', array( 'plan_hash'=>$plan['plan_hash'], 'sections'=>array_keys( $mapping ) ) );
++				if ( is_wp_error( $audit ) ) {
++					throw new RuntimeException( $audit->get_error_message() );
++				}
++			} catch ( Throwable $error ) {
++				foreach ( $current as $option => $value ) {
++					update_option( $option, $value, false );
++				}
++				return new WP_Error( 'spf_snapshot_restore_failed', $error->getMessage(), array( 'status'=>409 ) );
+ 			}
+-			return new WP_Error( 'spf_snapshot_restore_failed', $error->getMessage(), array( 'status'=>409 ) );
++			return array( 'restored'=>true, 'snapshot_id'=>$snapshot_id, 'sections'=>array_keys( $mapping ), 'companion_data_modified'=>false, 'excluded_sections'=>$plan['excluded_sections'] );
++		} finally {
++			SPF_Runtime::release_lock( $lock_name, $lock );
+ 		}
+-		return array( 'restored'=>true, 'snapshot_id'=>$snapshot_id, 'sections'=>array_keys( $mapping ), 'companion_data_modified'=>false, 'excluded_sections'=>$plan['excluded_sections'] );
+ 	}
+ 
+ 	public static function periodic_tick() {
+@@ -378,6 +503,31 @@
+ 		do_action( 'spf_future_foundation_health_tick', $plan );
+ 	}
+ 
++	private static function sanitize_chaos_context( $value, $depth = 0 ) {
++		if ( $depth > 4 ) {
++			return array( '_truncated'=>true );
++		}
++		if ( is_array( $value ) ) {
++			$out = array();
++			foreach ( array_slice( $value, 0, 100, true ) as $key => $item ) {
++				$safe_key = is_int( $key ) ? $key : sanitize_key( $key );
++				if ( ! is_int( $safe_key ) && '' === $safe_key ) {
++					continue;
++				}
++				if ( ! is_int( $safe_key ) && preg_match( '/(patient|name|address|message|content|token|secret|password|credential|email|phone|document)/i', $safe_key ) ) {
++					$out[ $safe_key ] = array( 'redacted'=>true, 'value_hash'=>SPF_Runtime::hash( $item ) );
++				} else {
++					$out[ $safe_key ] = self::sanitize_chaos_context( $item, $depth + 1 );
++				}
++			}
++			return $out;
++		}
++		if ( is_string( $value ) ) {
++			return substr( sanitize_text_field( $value ), 0, 240 );
++		}
++		return is_scalar( $value ) || null === $value ? $value : null;
++	}
++
+ 	private static function dependency_keys( array $dependencies ) {
+ 		$out = array();
+ 		foreach ( $dependencies as $dependency ) {

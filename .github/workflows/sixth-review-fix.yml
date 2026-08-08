@@ -1,0 +1,79 @@
+name: File 01 Sixth Review Fix
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/sixth-review-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-sixth-review:
+    if: ${{ !contains(github.event.head_commit.message, '[sixth-fix-applied]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out corrective branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Apply sixth-cycle source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, gzip, pathlib
+          payload = 'H4sICDNVd2oCA3NpeHRoLXNvdXJjZS5wYXRjaADVPGtXG0eWn51fUc5hpqVFEgIDtuUBQmyScNYxXkM2M8syfVrqktTjVrfSDzBJ/N/3Pqqqq19Cwpnd2fgEtbpuvW7d972lfr8vvJ0gmoS5L9OdSeilaT9dTvtBlGZeGMpksJwvv9re3hbjh8G++Ub0n+8d9A7FNn7s7otvvvlKPHnyJJsn8Z3YkkkSJ6/wzWf8ky99L5NuvMyCOOqIVIbT0ejy3en7yx8urtyL91fnF+96YiuNvGU6j7OemHphKkX31VfbT55sLWWSBmkmfVcDiCMxk9lD40V5GKoxgqnoiKciSF0vSbz7jmgatCt+/11cvv/O/ZBHWbCQo9HcS+dtsE+PjhqBLZCu+A0nfzKNE+lN5sJqvXbSuefHd27mjUOZOjfCS6GV3pl+T7bulv64f/xLLhNY89dvPly8F1en3749E+ffibO/nl9eXYrfVK/PX8Nexc6OgPOZpKNgFsGs4uc48d8nMk0Hb74dwMPSS6R/+R9vB+dRJpNlHMK5+O/iTDcJIJOZjGSC7wWPPKDFfKa/vgzlQyepcK5oIZJ3QuHo7NNEqo7O1VwKb5IFtx6+EAZrkzgPfRHB01iKW5kE0wAW4k1htUKfQzSRA0fNQvSVyCxPogK7SHnQwGR6uNfb2wc6fT7sHQw1nX42tNl4OLw/PJaTE8Ek06UT4gZxdAzQGeDInNVWKmGPkQyBNnHLaea/RubpdIkNNAXKxTJD8qPO1478BPvBaZhYELDKLGrKnulz64W5dG7KTAILgFPOYjzCMnNY/fUKdRdak7VwoOhilBZeMO0rOKC0TosPYJFTLwhzGOP6BpapsTkQzogfXTW8i3DSd9RCP/OZCYkbVmiqUKIeq2VvuNaHsLLJOtXsK5drSGwriUOpjgUfgfw9fxFEcPbAZ3FCtCz0mglYU0MjdVJndwJf6wQKb4k6gXMLkqJvJzx0/9jzfezcYeCuGOmGRC7iW2m32cjsjOM47GpYOOvSIIhgDaHnbsQlgiMi4dMbB2GQ3a+JRZY1eZRO5tLPQ+n+Ix4Te23baFLy3QGd5fpBuvSyydyN82wcf3J69HaZgNCZ4KwZHn0cqfeJnMTRBFbgyk/LAEjcnYbeLFWt0xxEDCwxziOfRJabBZOPcHKE9XkcfzRbJmzdLd1IfspcvVq/Y6AK8V7GDDUjaswOrc2WcPPZSL5m1aI6NZAHzYH0gRwLjLpYGiph6iu/7yvJMsmTBMUuLLMRsyw7aPAThpgGQElApnkGywASU0dSR365qw/bvEd4Zx7nCT5a8k2vwl0gkat9KSprXpb5D7ZcX1bP7tuwsqIrL6sE30YuBK8WX+rQRkEr19awe0FS2sbFtcIfnbbj2EzrOFqsm+6tnFmnP2uaPPoYxXeRHvwJbB7EZi5LzEpKKA/RPgP6N8PIW8AoCJAgyroWhfXsZfV4/p6m1p7Ikpy0W99sBsw3GJZsS9ZEOBVZbawKtQLj179ZaNikJ7y00YWCDfqi7NYbKrOyWBeXFSEnbCHXbzPP03sweBZ9GGXycbWFXoNE6weM85diG030F8r02QKpJJPIC91JgpaM8JbL8B6IL4TXqWLTEgycX+AjLhy2qXtGyOIuU+fomL//b8lcRDsrzC1aHko0MK34C8yPFjXZL53C4C/vuiv+/GfehPtR3rtshXUcbW46vQZwJEcgk3LLddHnxqwJD4DJgFUWvQBs0fqSPALrGjCp196rLvwExbDeGPCznrBvpkLxqMH7eVS8R13u3C372BumcH5+33+Nhxykwgx/F2QgnbLCttbjC02qidAHPsBBkGAdxYj/SnoWTmIpJ+SVaX1XVgqPVwmbKYQN1cFjlUHV0mnaf0nFm/aK8Bfkrmi7hGV1i63C0redpI10cwZKfLMNWAyPFrZ+PjHwvjNyFkGaBtEMSexUJPKXHLEmvgMUiuGuKNYHZh4SsAIvk+R2XTUWHU/a5faI5b4awOyCJIm2YouBgPsbkVnRrGo08ntYItlrMfslY6g050mBSL/vgNqwt4QcDTw86xfvCCb1oiALfpUowUC3gisBg3crml6jaIMDtFcG32g3mx2RiBMB7oHIwMWnpYtiTeXjY9OeXSTFv7aT5iTyLgnQzSJj1tgGRJdtCjORM/Sr7lcryxIUKspnL55jGGsbP/dMmEBHFtCj//m9e8YGBDFoEAFqAh/sryiYgm53kWykh3LXdQHmR/UeFj2ZwyYmyPACTCjQsvNgKUg8iEWeUqRDdSb0gKBOgv4y9DJg9kW/kBGOUXzaLdKhrQnAoIVFCOoifellXTsTL4qjYAIaC8VYFlTdAvx3LHb3XqDKXDUQnUVrZ21wtWPMYMrGiJvFsRt6yUyuRpwv4fASQkMKKmsigeyQwMaIHXjWByok6MMwXsq1UKndqK06kowuadR8bhoGE/lYjPfEsKeQhhKboO41BouZHnmclSFJ3IOQQN4vyQwrGmrAyfjgb9cOQDnKp+AwgQZjtcAOI44M04gGFLIpDACvxOfCM9YuierIVvoGfMaL0NRyBnbMvTBzC7VEi1y04ALtKGgoCxrWsC6dqADoym0WEZ8HzkvRlkvSNdU0lUfBL7nsNKGyMHmZC7+AOhvZuEKRBLMmQTaLhfIoVgTUojrdbryoDaiA+paJQLcJHtcmAS1mQULkJE/8DSQtqof94R46UvvDF73dZ1o7qB0tQfbAwsDIhKXs/B08KdnvnIyG18P+y5vfd/ljDz4Ob7pbO2j6Zyjvsi/ZuUuKpCYyaztPNfUD8RdkT53FIkbtvQEiiP5BtCqkgjzJx4DRTkWu8LliEF1BKiHCR6Zo7XBf81VJKBSjP0Y0KNSYeTdCD8sG03kDuUASltng+qbwQehgHcK1y7h2OPRGp9/jwIaFJeVbfCFSVeCoPm6B255a2jJPlnEqHePW1KbO0C0ALzH0ixXoXkYzsOx4uYtzC45ZCcM3u4eYJNzfOwT2UQGIQnQwbiJvIUkmrp6+pZs1/avK8GmYz3hgM2CQkRtQg6n1xdHBc5xI8APlNPhUWiBxfCKBLlDKOjvXfz/t/5fX/xU43f1v+O8GudyB/wuzfOXIFZYocUTLtsFWq0OozTS2NU37oMlW4zCMC9jq17AWixScpCdwGcKLfGHmFDwny+FELrwApoujPqXDVHavEE8R8BpM++tGfFjVu2k8ze48MDBvMWtI/HL0IGU1dKpRBkY+E2+SbTRwQ6c6uWLejEbjFNor5qBne8RB+weGg4g+WNEHmMZNwUamsCY7aCgw0p7OWoERgd8tZdN+3L5cyggjP/eutxgHs9w66VOlL/CcVHp2HGdzEJzGMcQj15OKYqx1NUzhzgSRsRF4UtxCr7ZDjhAjubd1KKHAdNjAVUFv2UJLgYyCWhVajPWh8MOdBEbfMhxlIzqux9lMugwNyB7Q0wIm9PERqwP4JcXZ8SGJOWzkwOCeS14vZmHYKiPiLFtlyusraFFD3ZB7t3dwuI6lYpA2icMQSJKiWpZ3ly5BFmbTTkVyFNAYQ4AOgjqMxJ/Sh1DWK3bTVdzyche55WD43CpKWUPAGf6EhzRfFKbVa9UgdAMuEs/Xq5PAut5E2YHfAkpJ5ISjgB7mTjDIbpet6KIBvchrp9yllGQvDZehowA6KIsx62KHiVaNZdllVnqkMu4G9plBrjVEDb9WmyiSkIBsNcqmfloNq7MF1lXAlH/rL/q++GEUjJDAavuqlZVY5lwhx9E3JqsKBU2lTct4aldfeoo8X/SeA3nu7cGHok6S+zlHirf4WQ2IAbaFRw2lOgtDeKBwSmShOtxoS8zRRKtGN1/Z+KwePcKsRWsnXFs1asOpRXEPEK0KiTcspHKAtKGuLuxpjf7N4ltMZmCQlCaOQ6SWSK6OBq7shef2cr+3uye28ePASBWrQEFz6hZRZCX5qKXrMgavnH354yMQqkMrFdvORNTr3gVEeGE8c6eAeM07V1b8q9iC4B5C9UAWwk6vQE9n6OnECckyAMKzAzmm4McStY7wfB9juEBi2Vwmg4dFsMkEMRkfHe8PXxbcaDLDevccLdEmnvQtcfgkT+PExhRSEkw0gQ1ErCGg0QOeHdf0ESeXoXkMHkoSxAmaLuSiIJr/AgRlILwGCLUKk/HQ4X4TqVERFWtpYLHTGaoQu9XDAPGojdWP7y/enr/+W1H7qLtbZV3kVpraw8aax8ooVnzcEOXKgsYVVVxmP6xa2uPt3O+BcLsFRHIQ1DMatc97e4eKn9h+1/V1an9vL17/u/v+w9l353/FtAj6E2w1Z/FHGQmVmedyRTfPA39fFQRtZRlW4i28Tx3xDE5qEQDO3pz+zT1/516evb549+YS0DVOA+JMBO4amt2agPHFGCcZpgz1pXcfxp5f9u8dWoijPGz6omSrGoRkGQ+jZJ3doKdSTZw6TEtNYpvWpyDgydHeOr8WJsigVmF2xS5Zt5CcynHw/YYyOLU7dludKHbqDgNvzwpyclInays4tLM1RR2GttN1Z0quB2CgZsXLa4Okm571knF9w13g5GE0PPOSWdMI21EnIPq6CKU+EVm6hl7qpKGSzqqjyvKiebX2nvTpsgatLqRoHYlhYf39H2Gsts+/HIlCX+3siLdy5oHSCOPJRywu4JJdJVcwMRMkGBIQV1dvB+KnlMKPoHRkgvW+t6CEItnHrLgeLvWmMrsXd0GEBdDAzqB7YBgPrK8wjO9II+EIGTpiiZOKdA6qAmBgAvAZQE9IsMODbKCC9LVTaj/3bfHDxU8fLMGgDMB/tRM4hgPAOhSm5OM6gGZXQOclqH4pMu+jRLMATQBwGLHAuw9OY5+LV4VHByXQRxx7cERYra18VXEa6aFA88aRHxiv3q667Qo4JqlqtvWoaMTIhANCcFBIIXoswKeyK8RdnHyEDxVE41xeSqvm/PlYZndSYvLG48ACDz9oV0RengFN6KjRSnVUB6VaqRfoOsJfXSrlgNpy2aZ28+Us8XxwY6EBhSmQBxWIZJIIOxNvz74/BVX87cXF27PTd+63H87ffH/mnr5GzXxplIZwbgN5R0YVlWu5lIjnWgYYeZmPwXKoWT3q8oVrBwE66rgfWVxMpfEvMKfxYmgCS1rSs/IltwsVKyAuWCCl4ycQdw587AZY2uFNlPrQkRmMuYz/AYZDjy1/+SmzEv19W3SolHeq44EeKOmZCv6DvenPUEqE9wJsTooVpjJKAxQeahikjB3sCTKB7F4T304H4lIDW29BlNx592ANe0EoJmGcSn9gNNNTO4akt6WuN5y9uzy/Ov9Pc5rVQNLj9oTr79M3P/BmUZzCkacDNZ7KaOVZLYVZpLDw/kSc7DC+d1RYvk8OgaCjEndz4CAu1xiiEACHCsvdB02BtvKeV1Jzaf9kpYa8/eZiQkyIDYeuVfBNqzPVhDbxNJAW769k04IQRUzDqtXE9UyaallRKKLqu1ZLChsIWWb3+RAdePzQUmIWxmOQjHRXRxmnWGkn2Kw+1/emRiN6DTjRhWXzOPTTEns+LVvi1EFXJwo1bNcUZqudWpVM2Ps0B2E9GmE9WuJXZnN1lYRrFV9ZNWgKFt8iuKmS0UU7WBppBJnOAx0dl+dAQJfZy4rKqMUi4VgWJN0AorItvumEQuzWwxpd/r7ka0kd8fXl2duz11diV3z34eJH8Rsj47P4+YezD2eYl0EacbP7pTz6UypO370x7wJfv+HJjnbF2/Mfz2Gor3vVHJs9Drq2qxNSxQx2EsqE+CrBO94QEFbGdcgP+VWA3tkDXlUBgqR50Nt7JrYPevuKMFt0CQY2tO5oId1SdQEavXQBzdUVznZrKVbdRO+Ur0rV7QN8LoTGajZRwMoNZiYQR+swiC4LjO+ww9CKZuphihsYCOQm3l0DCWqSe33x07urzr91y5T3h922I/s2ZG+chh5YoaOV5PP77xyG4zJEvRGrvL98bBR4cSgYNXIKb1rBKmyZ0LN13aoMoQxpPZ+J8lipcCaieiqcUpfkuVKeUL1Vd+BUySo+69Q4zmG/L7ymTY8KfareP/W4rMXik9lcNAsiWdlEEw0TnCXkR+iIl9LpfbzHhSpjNResqXRsH3QtbH4NJLPu2AOAZsmsZa46gw1YZi28G4Qwl/NXd2P9u90UK6sIF3toK9vCrzeTINZQn+t4+qeKlQ2lSrG7QmS2S5USYl3ekr4wZE6qkDBlAWMAFFGaqe0rb3aPxoUou6a8FLWG+hLasjzmBrRORpQII4rv3MV9+kvY0WkWGd0GSRwtwLYmcK1sDfU4qhLdAiQjwyE2bGnskBRYJrGfTzhlpkKOfGVc1RLhs44CqlvLesUW7aM3rsN+qVk3H5GLpnKo2YEuj+KjijiWsczt5Xd6MDQ8wZ8Fv8edg29DoOxNVJvMAsjjd3/JvcSjW7iutTfu2gJhRrjzkoiq6vHixNUcnRyZLLwIkAieFd9oTdnpUnXrfcKFlTDZUdFpioSoYhSsaqDMHbJ7MTu8RdU1EK8xnBKhPcWdwOVSrsjSm6GfBmzLVQAYtcDkJXvclJ1+WRRD6fJ3tMpM1JtNtKYMMLZcV4/kZq2SBjIWXRzALfqTQU+5pDeSHUs0xwkU/cUxBm8AV2M58cAzw+gQC5MdpBDMzAKaY6y/bbq1/5jc0cHwmfI1aGtHxyu2bJX9YM6ihD5XZzoQryV7HBtccDjBa0KpDt+s7At1W6tUxkIn0HU0KzCJWTnGIE2uWgfieyVUiFjAT06AAIHOprCfOYFuji8kepNta/ck9GBsZEgMOz7gWLT1QBo+fIY0DH9L5UjVG5aqJIirc0ptpkKohubWMU6sb6NihErVUK0iil9M4jBfRB07zOAURUIFWgtAPX4VcC0+SyfedIp+8Kpiqu8BQEb9pZfNhe6AMW5TO4QVqpKDougGqQIT8KGo5qqx4upxqdphhZOsVVPZWJuvxyhbSKDzTjn8VxwvunzFeIXjV56jnEIpwZ9UHfSi9do+GvuSQmsPXSK0+/wlhj13X+zZUljRkBa0RX762iFTysW8OO+s9HMdVYwg0tDRvOU8Qbngiq/T03e36UaGBrUvPetKzqIXcNTT+u1VC6JXXj+9L9REn905YjNlNanL3ewWmmG05da+3iKHYRa+vXrh1R5P19papdfq/W2v3l/TwoB4rlWZ0Q3ez7Oauq9qxR6qspkjgfvPn1mlPGh+g/WWgm3gBrYFxIVQc/nJxdzPFsNdOxpQEXBP7B4y2WMBDVCdTBqBbffQQd7j0lyTGW7IimtLFenSgBKwZV2oiQwQZypXR8GaOlnRMF4oZcRBki3R4rAu4NaP2kD19NDsqapLmQYXCgqzpRhT1Fdrv2AKimkTYbRPYtcgERG8eE7XQl4OrQv22vcgfVrncU4oXTslMOfm5MQh1YUCRtcGk+QBq0SBWlkkDu45vaJPz8Hsa8yPJleCxaBo2QVo3VDDBFQXP+RUAWNbRw24qgm/nt4BpymfWsF4vbM2gSnatSZTj8q1qSyKrh+0bvlEWV9NrmAEM7+54BMGgA5QPjoR8yVKkS+tbYEL6qpZjuwbUHq3RvzY959eVa9m2sPQlcnhcA1jooQW7l2/MEl4EQovaoqGG5IwY5+F7tpXJNeyGAxu1r+Q1qkh7+RE9VayYzg0SaZChXJV4DSIAnNDqG8UVLsyLXUyR2i9BAiK+B/VjQcNcu2Qu45cyrpIx42s+/jWCa9cM0enNTCuqKzeVLSiZVdFx6b7U9xCP2Fi4J6WGp6WrS1rZWtU9NbpsZFJS8TIt0CYQ70Qs55Ya2hVT6MRKynfyfDWoh5xb+8BmtXlwY87cJOBbJCU2gbmmmILrxUpac9h+vy/lZDFL0fx4WFhTJFURhzq/hqPrLNmWGLvRPliTA/m8rxDwPDJaV94MMXgTtdOPKsJ02v+vLGUI53c0bGavUDy0bHR8Z2WYzg5oXRqsTk29g6ekc9wcLCLdcCo5yluoytAqjk2Y502eIOBue9rOSeBNEmpktKoABzTHbFHuaAYCq6rDtsPtTylkBIV9mUt/NUY+EB9UjDu4X7f6mRu4JPC+WN0C/5QTdkD3UolFX6uoWxK2NNqpdktLQvyEtZbnNhqaVgJpPjhvUYv7yEvVrkcW1jFs8gXrdfLSuMwrHW/DAcbDuCfoz3fg4MDun3w3Kr4eUK/k7S18D7RVCSrKNqtTlO7Lqlc3JI3oiG7HNsp91Wzu6raDBt5XT0DBmRxXMRSHrie00TJFZn3vfm1UhUkKZ1e0+3n4rYOqR6+9wv7wxDvRG9BJBi2+yIqVr/sVRAL1wsiAV/zzx9oqW9+TM3+nYR2+Ie0dIG1fAmsgF5g/QpbWwgqkSh3U2H6lhGKpWhYkhdPRRqEHGXHG1zekn76BQTE4g9Q0fwTRfbGj4rSERIL17bAt5gIxD5FQGoMAQ2GFh1Fi6VGTdcqqvg/NwUW0jFZAAA='
+          pathlib.Path('/tmp/sixth-source.patch').write_bytes(gzip.decompress(base64.b64decode(payload)))
+          PY
+          git apply --check /tmp/sixth-source.patch
+          git apply /tmp/sixth-source.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('qa/run-tests.sh')
+          s = p.read_text()
+          old = "php tests/fifth-ten-round-review-tests.php\nphp tests/source-quality-tests.php"
+          new = "php tests/fifth-ten-round-review-tests.php\nphp tests/sixth-ten-round-review-tests.php\nphp tests/source-quality-tests.php"
+          if old not in s:
+              raise SystemExit('qa/run-tests.sh insertion point not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tools/build-package.sh')
+          s = p.read_text()
+          old = "    FIFTH-TEN-ROUND-REVIEW-2026-08-08.md\n"
+          new = "    FIFTH-TEN-ROUND-REVIEW-2026-08-08.md SIXTH-TEN-ROUND-REVIEW-2026-08-08.md\n"
+          if old not in s:
+              raise SystemExit('tools/build-package.sh insertion point not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Validate, bind checksums, and run complete source QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l tests/sixth-ten-round-review-tests.php
+          for file in includes/class-spf-installer.php includes/class-spf-system-check.php includes/class-spf-registry.php includes/class-spf-governance-control-plane.php includes/class-spf-runtime.php includes/class-spf-authorization.php includes/class-spf-privacy.php includes/class-spf-purge.php includes/class-spf-platform-engineering.php; do
+            php -l "$file"
+          done
+          rm .github/workflows/sixth-review-fix.yml
+          find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' -not -name 'SOURCE-CHECKSUMS.sha256' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          bash tools/build-package.sh
+      - name: Commit exact corrected source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add -A
+          git diff --cached --check
+          git commit -m '[sixth-fix-applied] File 01 sixth ten-round corrective hardening'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

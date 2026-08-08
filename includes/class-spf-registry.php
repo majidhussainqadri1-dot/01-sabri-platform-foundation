@@ -452,7 +452,23 @@ final class SPF_Registry {
 			if ( count( $manifest[ $field ] ) > 256 ) {
 				return new WP_Error( 'spf_manifest_collection_too_large', sprintf( __( 'Manifest collection is too large: %s', 'sabri-platform-foundation' ), $field ) );
 			}
-			$manifest[ $field ] = array_values( array_unique( array_filter( array_map( static function ( $v ) { return substr( sanitize_text_field( (string) $v ), 0, 191 ); }, $manifest[ $field ] ) ) ) );
+			$normalized_values = array();
+			$seen_values = array();
+			foreach ( $manifest[ $field ] as $value ) {
+				if ( ! is_scalar( $value ) ) {
+					return new WP_Error( 'spf_manifest_collection_invalid', sprintf( __( 'Manifest collection contains a non-scalar value: %s', 'sabri-platform-foundation' ), $field ) );
+				}
+				$normalized_value = substr( sanitize_text_field( (string) $value ), 0, 191 );
+				if ( '' === $normalized_value ) {
+					return new WP_Error( 'spf_manifest_collection_invalid', sprintf( __( 'Manifest collection contains an empty or invalid value: %s', 'sabri-platform-foundation' ), $field ) );
+				}
+				if ( isset( $seen_values[ $normalized_value ] ) ) {
+					return new WP_Error( 'spf_manifest_collection_duplicate', sprintf( __( 'Manifest collection contains a duplicate canonical value: %s', 'sabri-platform-foundation' ), $field ) );
+				}
+				$seen_values[ $normalized_value ] = true;
+				$normalized_values[] = $normalized_value;
+			}
+			$manifest[ $field ] = $normalized_values;
 		}
 		$manifest['health'] = SPF_Runtime::canonicalize( $manifest['health'] );
 		return $manifest;
@@ -497,9 +513,28 @@ final class SPF_Registry {
 		if ( ! $key || ! self::valid_semver( $version ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) || ! in_array( $status, self::CONTRACT_STATES, true ) || ! is_array( $contract['schema'] ) || ! is_array( $contract['consumers'] ) ) {
 			return new WP_Error( 'spf_invalid_contract', __( 'Invalid contract.', 'sabri-platform-foundation' ) );
 		}
-		$consumers = array_values( array_unique( array_filter( array_map( 'sanitize_key', $contract['consumers'] ) ) ) );
+		if ( count( $contract['consumers'] ) > 64 ) {
+			return new WP_Error( 'spf_contract_too_large', __( 'Contract schema or consumer list exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
+		}
+		$consumers = array();
+		$seen_consumers = array();
+		foreach ( $contract['consumers'] as $raw_consumer ) {
+			if ( ! is_scalar( $raw_consumer ) ) {
+				return new WP_Error( 'spf_invalid_contract_consumer', __( 'Contract consumers must be canonical module keys.', 'sabri-platform-foundation' ) );
+			}
+			$raw_consumer = trim( (string) $raw_consumer );
+			$consumer = sanitize_key( $raw_consumer );
+			if ( '' === $consumer || $raw_consumer !== $consumer || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $consumer ) ) {
+				return new WP_Error( 'spf_invalid_contract_consumer', __( 'Contract consumer is not a canonical module key.', 'sabri-platform-foundation' ) );
+			}
+			if ( isset( $seen_consumers[ $consumer ] ) ) {
+				return new WP_Error( 'spf_duplicate_contract_consumer', __( 'A contract consumer may be declared only once.', 'sabri-platform-foundation' ) );
+			}
+			$seen_consumers[ $consumer ] = true;
+			$consumers[] = $consumer;
+		}
 		$schema_json = SPF_Runtime::canonical_json( $contract['schema'] );
-		if ( count( $consumers ) > 64 || count( $contract['schema'] ) > 256 || false === $schema_json || strlen( $schema_json ) > 262144 ) {
+		if ( count( $contract['schema'] ) > 256 || false === $schema_json || strlen( $schema_json ) > 262144 ) {
 			return new WP_Error( 'spf_contract_too_large', __( 'Contract schema or consumer list exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
 		}
 		foreach ( $consumers as $consumer ) {
@@ -549,11 +584,21 @@ final class SPF_Registry {
 			return new WP_Error( 'spf_route_redirects_too_large', __( 'A route redirect declaration exceeds the bounded limit.', 'sabri-platform-foundation' ) );
 		}
 		$redirects = array();
+		$seen_redirects = array();
 		foreach ( $raw_redirects as $redirect ) {
-			$redirect = '/' . trim( sanitize_text_field( $redirect ), '/' ) . '/';
-			if ( preg_match( '#^/[A-Za-z0-9/_-]+/$#', $redirect ) && $redirect !== $path ) {
-				$redirects[] = $redirect;
+			if ( ! is_scalar( $redirect ) ) {
+				return new WP_Error( 'spf_invalid_route_redirect', __( 'Every route redirect must be a canonical relative path.', 'sabri-platform-foundation' ) );
 			}
+			$redirect = '/' . trim( sanitize_text_field( (string) $redirect ), '/' ) . '/';
+			$redirect = preg_replace( '#/+#', '/', $redirect );
+			if ( ! preg_match( '#^/[A-Za-z0-9/_-]+/$#', $redirect ) || $redirect === $path ) {
+				return new WP_Error( 'spf_invalid_route_redirect', __( 'Every route redirect must be a distinct canonical relative path.', 'sabri-platform-foundation' ) );
+			}
+			if ( isset( $seen_redirects[ $redirect ] ) ) {
+				return new WP_Error( 'spf_duplicate_route_redirect', __( 'A route redirect may be declared only once.', 'sabri-platform-foundation' ) );
+			}
+			$seen_redirects[ $redirect ] = true;
+			$redirects[] = $redirect;
 		}
 		return array(
 			'route_key' => $key,

@@ -145,7 +145,14 @@ final class SPF_Platform_Engineering {
 			$registry = get_option( self::EVENT_SCHEMA_OPTION, array() );
 			$registry = is_array( $registry ) ? $registry : array();
 			$key = $normalized['event_name'] . '@' . $normalized['version'];
-			if ( ! isset( $registry[ $key ] ) && count( $registry ) >= 500 ) {
+			if ( isset( $registry[ $key ] ) ) {
+				$existing = is_array( $registry[ $key ] ) ? SPF_Runtime::canonicalize( $registry[ $key ] ) : array();
+				if ( $existing && hash_equals( SPF_Runtime::hash( $existing ), SPF_Runtime::hash( $normalized ) ) ) {
+					return $normalized;
+				}
+				return new WP_Error( 'spf_event_schema_version_conflict', __( 'A published event-schema version is immutable; change the semantic version before changing its contract.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
+			if ( count( $registry ) >= 500 ) {
 				return new WP_Error( 'spf_event_schema_registry_full', __( 'The bounded event-schema registry is full; retire or migrate an existing schema before adding another.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
 			}
 			$registry[ $key ] = $normalized;
@@ -296,11 +303,21 @@ final class SPF_Platform_Engineering {
 	}
 
 	public static function create_rollout( $release_id, array $rings, array $slo = array() ) {
-		$allowed = SPF_Authorization::require_action( 'transition_release', array( 'object_id'=>sanitize_text_field( $release_id ) ), array( 'purpose'=>'progressive_delivery' ) );
+		$release_id = trim( sanitize_text_field( (string) $release_id ) );
+		$allowed = SPF_Authorization::require_action( 'transition_release', array( 'object_id'=>$release_id ), array( 'purpose'=>'progressive_delivery' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
-		$release_id = substr( sanitize_text_field( $release_id ), 0, 191 );
+		if ( ! wp_is_uuid( $release_id ) ) {
+			return new WP_Error( 'spf_rollout_release_invalid', __( 'Progressive delivery must bind a canonical File 01 release UUID.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$release = SPF_Governance::get_release( $release_id );
+		if ( ! is_array( $release ) || empty( $release['release_id'] ) ) {
+			return new WP_Error( 'spf_rollout_release_missing', __( 'Progressive delivery cannot be created for an unregistered release.', 'sabri-platform-foundation' ), array( 'status'=>404 ) );
+		}
+		if ( in_array( sanitize_key( $release['status'] ?? '' ), array( 'deployed','rolled_back','superseded' ), true ) ) {
+			return new WP_Error( 'spf_rollout_release_terminal', __( 'A terminal release cannot start a new progressive rollout.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+		}
 		if ( count( $rings ) > 20 ) { return new WP_Error( 'spf_rollout_invalid', __( 'Rollout rings exceed the bounded rollout envelope.', 'sabri-platform-foundation' ), array( 'status'=>400 ) ); }
 		$normalized_rings = array();
 		$seen_rings = array();
@@ -331,6 +348,9 @@ final class SPF_Platform_Engineering {
 			$rollouts = get_option( self::ROLLOUT_OPTION, array() );
 			$rollouts = is_array( $rollouts ) ? $rollouts : array();
 			$requested_hash = SPF_Runtime::hash( array( 'rings'=>$rings, 'slo'=>$slo ) );
+			if ( empty( $rollouts[ $release_id ] ) && count( $rollouts ) >= 100 ) {
+				return new WP_Error( 'spf_rollout_capacity_full', __( 'Progressive rollout capacity is full; explicitly retire completed rollout evidence before creating another rollout.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
 			if ( ! empty( $rollouts[ $release_id ] ) ) {
 				$existing = (array) $rollouts[ $release_id ];
 				$existing_hash = SPF_Runtime::hash( array( 'rings'=>(array)($existing['rings'] ?? array()), 'slo'=>(array)($existing['slo'] ?? array()) ) );
@@ -350,7 +370,7 @@ final class SPF_Platform_Engineering {
 				'created_at'   => SPF_Runtime::now_mysql(),
 				'updated_at'   => SPF_Runtime::now_mysql(),
 			);
-			$expected = array_slice( $rollouts, -100, null, true );
+			$expected = $rollouts;
 			update_option( self::ROLLOUT_OPTION, $expected, false );
 			$persisted = get_option( self::ROLLOUT_OPTION, array() );
 			if ( empty( $persisted[ $release_id ] ) || SPF_Runtime::hash( $persisted[ $release_id ] ) !== SPF_Runtime::hash( $expected[ $release_id ] ) ) {

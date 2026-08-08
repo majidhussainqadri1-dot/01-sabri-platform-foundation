@@ -73,21 +73,32 @@ final class SPF_Idempotency {
 			if ( 'completed' === $existing['status'] || 'failed' === $existing['status'] ) {
 				return self::replay( $existing );
 			}
+			if ( 'reconciliation_required' === $existing['status'] ) {
+				return self::reconciliation_required_error( $existing );
+			}
 			$locked_at = strtotime( (string) $existing['locked_at'] );
 			$expires_at = strtotime( (string) $existing['expires_at'] );
 			$stale = ! $locked_at || $locked_at < time() - 300 || ! $expires_at || $expires_at <= time();
 			if ( ! $stale ) {
 				return new WP_Error( 'spf_idempotency_in_progress', __( 'An identical request is still processing.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
 			}
-			$claimed = $wpdb->update(
+
+			// A stale processing reservation is ambiguous: the protected callback may
+			// already have committed its side effect while replay-record finalization
+			// failed. Re-running it automatically can duplicate releases, amendments or
+			// other owner mutations. Freeze the reservation for explicit reconciliation
+			// instead of stealing the lease and executing the callback again.
+			$marked = $wpdb->update(
 				$table,
-				array( 'status'=>'processing','owner_token'=>$token,'locked_at'=>$now,'expires_at'=>$expires,'attempts'=>(int)$existing['attempts']+1,'updated_at'=>$now ),
+				array( 'status'=>'reconciliation_required','updated_at'=>$now ),
 				array( 'id'=>(int)$existing['id'],'actor_id'=>$actor,'request_hash'=>$request_hash,'owner_token'=>$existing['owner_token'],'status'=>$existing['status'] ),
-				array( '%s','%s','%s','%s','%d','%s' ), array( '%d','%d','%s','%s','%s' )
+				array( '%s','%s' ), array( '%d','%d','%s','%s','%s' )
 			);
-			if ( 1 !== $claimed ) {
-				return new WP_Error( 'spf_idempotency_in_progress', __( 'Another worker claimed the identical request.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
+			if ( 1 !== $marked ) {
+				return new WP_Error( 'spf_idempotency_in_progress', __( 'Another worker changed the identical request reservation.', 'sabri-platform-foundation' ), array( 'status' => 409, 'retry_after' => 2 ) );
 			}
+			$existing['status'] = 'reconciliation_required';
+			return self::reconciliation_required_error( $existing );
 		}
 
 		if ( ! self::rate_limit( $actor, $action ) ) {
@@ -118,6 +129,16 @@ final class SPF_Idempotency {
 			return new WP_Error( 'spf_idempotency_finalize_failed', __( 'The mutation completed but its replay record could not be finalized; reconciliation is required.', 'sabri-platform-foundation' ), array( 'status' => 503, 'recovery_receipt' => $receipt ) );
 		}
 		return rest_ensure_response( $response );
+	}
+
+	private static function reconciliation_required_error( array $row ) {
+		$receipt = hash( 'sha256', (string)($row['scope_hash'] ?? '') . '|' . (string)($row['request_hash'] ?? '') . '|reconcile' );
+		SPF_Audit::record( 'idempotency_reconciliation_required', 'foundation_mutation', $receipt, 'failed', array( 'purpose'=>'idempotency_reconciliation','action'=>sanitize_key( $row['action_name'] ?? '' ) ) );
+		return new WP_Error(
+			'spf_idempotency_reconciliation_required',
+			__( 'The prior mutation has an ambiguous completion state; automatic replay is blocked until reconciliation.', 'sabri-platform-foundation' ),
+			array( 'status'=>503, 'recovery_receipt'=>$receipt )
+		);
 	}
 
 	private static function finalize_error( $scope_hash, $token, WP_Error $error ) {

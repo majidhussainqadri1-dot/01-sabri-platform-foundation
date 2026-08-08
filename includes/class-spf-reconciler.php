@@ -176,10 +176,28 @@ final class SPF_Reconciler {
 			return $precommit;
 		}
 		$receipts = is_array( $snapshot['owner_receipts'] ?? null ) ? $snapshot['owner_receipts'] : array();
-		$owner_result = self::rollback_owner_receipts( $receipts, $snapshot['plan_hash'] );
-		if ( is_wp_error( $owner_result ) ) {
+		$current_state = get_option( 'spf_reconciliation_state', array() );
+		$current_status = is_array( $current_state ) ? sanitize_key( $current_state['status'] ?? '' ) : '';
+		if ( 'rolled_back' === $current_status && hash_equals( (string)($current_state['plan_hash'] ?? ''), (string)$snapshot['plan_hash'] ) ) {
 			SPF_Runtime::release_lock( 'reconciliation', $lock );
-			return $owner_result;
+			return array( 'status'=>'rolled_back','owner_receipts'=>count($receipts),'idempotent_replay'=>true );
+		}
+		if ( ! in_array( $current_status, array( 'applied','owner_rollback_completed' ), true ) || ! hash_equals( (string)($current_state['plan_hash'] ?? ''), (string)$snapshot['plan_hash'] ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return new WP_Error( 'spf_reconciliation_rollback_state_invalid', __( 'Reconciliation rollback is not valid from the current lifecycle state.', 'sabri-platform-foundation' ), array( 'status'=>409, 'state'=>$current_status ) );
+		}
+		if ( 'applied' === $current_status ) {
+			$owner_result = self::rollback_owner_receipts( $receipts, $snapshot['plan_hash'] );
+			if ( is_wp_error( $owner_result ) ) {
+				SPF_Runtime::release_lock( 'reconciliation', $lock );
+				return $owner_result;
+			}
+			$intermediate = array( 'status'=>'owner_rollback_completed','plan_hash'=>$snapshot['plan_hash'],'owner_rollback_completed_at'=>SPF_Runtime::now_mysql(),'receipt_count'=>count($receipts) );
+			update_option( 'spf_reconciliation_state', $intermediate, false );
+			if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_state', array() ) ) !== SPF_Runtime::hash( $intermediate ) ) {
+				SPF_Runtime::release_lock( 'reconciliation', $lock );
+				return new WP_Error( 'spf_reconciliation_rollback_checkpoint_failed', __( 'Owner rollback completed but its durable checkpoint could not be verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
+			}
 		}
 		$local_result = self::restore_snapshot( $snapshot );
 		if ( is_wp_error( $local_result ) ) {

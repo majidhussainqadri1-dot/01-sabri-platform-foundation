@@ -377,8 +377,10 @@ final class SPF_Resilience_Lab {
 			);
 			$snapshots = get_option( self::SNAPSHOT_OPTION, array() );
 			$snapshots = is_array( $snapshots ) ? $snapshots : array();
+			if ( count( $snapshots ) >= 50 ) {
+				return new WP_Error( 'spf_snapshot_capacity_full', __( 'Governance snapshot capacity is full; explicitly archive or retire an older snapshot before capturing another.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+			}
 			$snapshots[ $id ] = $snapshot;
-			$snapshots = array_slice( $snapshots, -50, null, true );
 			update_option( self::SNAPSHOT_OPTION, $snapshots, false );
 			$persisted = get_option( self::SNAPSHOT_OPTION, array() );
 			if ( empty( $persisted[ $id ] ) || SPF_Runtime::hash( $persisted[ $id ] ) !== SPF_Runtime::hash( $snapshot ) ) {
@@ -513,8 +515,15 @@ final class SPF_Resilience_Lab {
 					throw new RuntimeException( $audit->get_error_message() );
 				}
 			} catch ( Throwable $error ) {
+				$compensation_failures = array();
 				foreach ( $current as $option => $value ) {
 					update_option( $option, $value, false );
+					if ( SPF_Runtime::hash( get_option( $option, array() ) ) !== SPF_Runtime::hash( $value ) ) {
+						$compensation_failures[] = $option;
+					}
+				}
+				if ( $compensation_failures ) {
+					return new WP_Error( 'spf_snapshot_restore_compensation_incomplete', __( 'Governance snapshot restore failed and one or more compensation writes could not be verified.', 'sabri-platform-foundation' ), array( 'status'=>500, 'options'=>$compensation_failures ) );
 				}
 				return new WP_Error( 'spf_snapshot_restore_failed', $error->getMessage(), array( 'status'=>409 ) );
 			}

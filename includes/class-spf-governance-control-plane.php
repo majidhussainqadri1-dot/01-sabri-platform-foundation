@@ -287,10 +287,13 @@ final class SPF_Governance_Control_Plane {
 		$rows = array();
 		$missing = array();
 		$duplicate_ids = array();
+		$invalid_requirement_entries = array();
 		$seen = array();
-		foreach ( $requirements as $requirement ) {
-			$id = sanitize_text_field( is_array( $requirement ) ? ( $requirement['id'] ?? '' ) : $requirement );
-			if ( '' === $id ) {
+		foreach ( $requirements as $index => $requirement ) {
+			$raw_id = is_array( $requirement ) ? (string) ( $requirement['id'] ?? '' ) : (string) $requirement;
+			$id = trim( sanitize_text_field( $raw_id ) );
+			if ( '' === $id || $id !== trim( $raw_id ) || strlen( $id ) > 128 || ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9._:-]*$/', $id ) ) {
+				$invalid_requirement_entries[] = array( 'index'=>(int)$index, 'id'=>substr( $id, 0, 128 ) );
 				continue;
 			}
 			if ( isset( $seen[ $id ] ) ) {
@@ -321,12 +324,18 @@ final class SPF_Governance_Control_Plane {
 				$missing[] = $id;
 			}
 		}
+		$unexpected_evidence_ids = array_values( array_diff( array_map( 'strval', array_keys( $evidence ) ), array_keys( $seen ) ) );
+		sort( $unexpected_evidence_ids, SORT_STRING );
 		$total = count( $rows );
 		$coded = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['coded_complete'] ); } ) );
 		$release_ready = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['release_ready'] ); } ) );
 		$live = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['live_deployed'] ); } ) );
 		$production = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['production_complete'] ); } ) );
+		$report_valid = empty( $duplicate_ids ) && empty( $invalid_requirement_entries ) && empty( $unexpected_evidence_ids );
+		$claimable_coded_complete = $report_valid && $total > 0 && $coded === $total;
 		return array(
+			'report_valid'            => $report_valid,
+			'coded_completion_claim_allowed' => $claimable_coded_complete,
 			'total'                   => $total,
 			'coded_complete'          => $coded,
 			'release_ready'           => $release_ready,
@@ -338,6 +347,8 @@ final class SPF_Governance_Control_Plane {
 			'production_percentage'   => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
 			'missing_coded_evidence'  => $missing,
 			'duplicate_requirement_ids'=> array_values( array_unique( $duplicate_ids ) ),
+			'invalid_requirement_entries'=> $invalid_requirement_entries,
+			'unexpected_evidence_ids' => $unexpected_evidence_ids,
 			'rows'                    => $rows,
 		);
 	}

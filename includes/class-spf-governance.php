@@ -143,6 +143,10 @@ final class SPF_Governance {
 			if ( in_array( $next_status, array( 'approved','deployed' ), true ) && ! self::prior_evidence_complete( $release_id, $next_status ) ) {
 				throw new RuntimeException( 'Required prior release gates are incomplete.' );
 			}
+			$binding = self::validate_transition_evidence_binding( $release, $next_status, $evidence );
+			if ( is_wp_error( $binding ) ) {
+				throw new RuntimeException( $binding->get_error_message() );
+			}
 			$sequence = (int) $last['sequence_no'] + 1;
 			$evidence_hash = SPF_Runtime::hash( $evidence );
 			$now = SPF_Runtime::now_mysql();
@@ -263,19 +267,22 @@ final class SPF_Governance {
 			$expires_at = gmdate( 'Y-m-d H:i:s', $expires_ts );
 		}
 		$owner = sanitize_key( $flag['owner_module'] );
+		$key = sanitize_key( $flag['flag_key'] );
+		$env = sanitize_key( $flag['environment'] );
+		if ( '' === $owner || '' === $key || ! in_array( $env, array( 'all','local','development','staging','production' ), true ) ) {
+			return new WP_Error( 'spf_invalid_flag', __( 'Flag owner, environment or key is invalid.', 'sabri-platform-foundation' ) );
+		}
+		if ( $owner !== (string) $flag['owner_module'] || $key !== (string) $flag['flag_key'] || $env !== (string) $flag['environment'] ) {
+			return new WP_Error( 'spf_noncanonical_flag_identity', __( 'Feature-flag owner, key and environment must already be canonical before authorization.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
 		if ( ! SPF_Registry::get_module( $owner ) ) {
 			return new WP_Error( 'spf_flag_owner_missing', __( 'Flag owner missing.', 'sabri-platform-foundation' ) );
 		}
-		$allowed = SPF_Authorization::require_action( 'set_flag', array( 'owner_module'=>$owner,'flag_key'=>$flag['flag_key'] ), array( 'purpose'=>$context['purpose']??'feature_flag' ) );
+		$allowed = SPF_Authorization::require_action( 'set_flag', array( 'owner_module'=>$owner,'flag_key'=>$key,'environment'=>$env ), array( 'purpose'=>$context['purpose']??'feature_flag' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
 		}
 		$table = SPF_Installer::table( 'flags' );
-		$key = sanitize_key( $flag['flag_key'] );
-		$env = sanitize_key( $flag['environment'] );
-		if ( ! in_array( $env, array( 'all','local','development','staging','production' ), true ) || ! $key ) {
-			return new WP_Error( 'spf_invalid_flag', __( 'Flag environment or key is invalid.', 'sabri-platform-foundation' ) );
-		}
 		$old = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE owner_module=%s AND flag_key=%s AND environment=%s", $owner, $key, $env ), ARRAY_A );
 		if ( $old && ! isset( $context['expected_version'] ) ) {
 			return new WP_Error( 'spf_expected_version_required', __( 'Updating a flag requires its expected record version.', 'sabri-platform-foundation' ), array( 'status' => 428 ) );
@@ -289,9 +296,17 @@ final class SPF_Governance {
 			if ( empty( $readiness['ready'] ) ) {
 				return new WP_Error( 'spf_feature_dependency_not_ready', __( 'Feature activation is blocked because the owner dependency graph is not ready.', 'sabri-platform-foundation' ), array( 'status'=>412, 'readiness_code'=>$readiness['code'] ?? 'not_ready' ) );
 			}
-			$activation = SPF_Runtime::verify_evidence( 'spf_verify_feature_activation_evidence', array( 'owner_module'=>$owner, 'flag_key'=>$key, 'environment'=>$env, 'readiness_hash'=>SPF_Runtime::hash($readiness) ), array( 'migration_status','health_status','rollback_evidence','gate_evidence','verifier','expires_at' ) );
+			$readiness_hash = SPF_Runtime::hash( $readiness );
+			$activation = SPF_Runtime::verify_evidence( 'spf_verify_feature_activation_evidence', array( 'owner_module'=>$owner, 'flag_key'=>$key, 'environment'=>$env, 'readiness_hash'=>$readiness_hash ), array( 'owner_module','flag_key','environment','readiness_hash','migration_status','health_status','rollback_evidence','gate_evidence','verifier','expires_at' ) );
 			if ( is_wp_error( $activation ) ) {
 				return $activation;
+			}
+			$activation_owner = sanitize_key( $activation['owner_module'] ?? '' );
+			$activation_key = sanitize_key( $activation['flag_key'] ?? '' );
+			$activation_environment = sanitize_key( $activation['environment'] ?? '' );
+			$activation_readiness_hash = strtolower( trim( (string) ( $activation['readiness_hash'] ?? '' ) ) );
+			if ( $activation_owner !== $owner || $activation_key !== $key || $activation_environment !== $env || ! preg_match( '/^[a-f0-9]{64}$/', $activation_readiness_hash ) || ! hash_equals( $readiness_hash, $activation_readiness_hash ) ) {
+				return new WP_Error( 'spf_feature_activation_evidence_binding_invalid', __( 'Feature activation evidence must bind the exact owner, flag, environment and current dependency-readiness hash.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
 			}
 			if ( ! in_array( sanitize_key( $activation['migration_status'] ), array( 'ready','not_required' ), true ) || 'pass' !== sanitize_key( $activation['health_status'] ) ) {
 				return new WP_Error( 'spf_feature_activation_evidence_failed', __( 'Feature activation evidence does not prove migration and health readiness.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
@@ -470,6 +485,31 @@ final class SPF_Governance {
 		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
 			if ( array_key_exists( $boolean_field, $evidence ) && true !== $evidence[ $boolean_field ] ) {
 				return new WP_Error( 'spf_release_evidence_failed', sprintf( __( 'Release evidence field %s must be true.', 'sabri-platform-foundation' ), $boolean_field ), array( 'status' => 422 ) );
+			}
+		}
+		return true;
+	}
+
+	private static function validate_transition_evidence_binding( array $release, $next_status, array $evidence ) {
+		global $wpdb;
+		if ( 'approved' === $next_status ) {
+			$staged_hash = (string) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT evidence_hash FROM '.SPF_Installer::table('release_states').' WHERE release_id=%s AND status=%s ORDER BY sequence_no DESC LIMIT 1',
+					$release['release_id'],
+					'staged'
+				)
+			);
+			$claimed = strtolower( trim( (string) ( $evidence['staging_evidence_hash'] ?? '' ) ) );
+			if ( ! preg_match( '/^[a-f0-9]{64}$/', $claimed ) || ! preg_match( '/^[a-f0-9]{64}$/', strtolower( $staged_hash ) ) || ! hash_equals( strtolower( $staged_hash ), $claimed ) ) {
+				return new WP_Error( 'spf_release_staging_evidence_binding_invalid', __( 'Founder approval must bind the exact staged evidence hash for this release.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+		}
+		if ( 'deployed' === $next_status ) {
+			$claimed = strtolower( trim( (string) ( $evidence['deployed_package_checksum'] ?? '' ) ) );
+			$expected = strtolower( trim( (string) ( $release['checksum_sha256'] ?? '' ) ) );
+			if ( ! preg_match( '/^[a-f0-9]{64}$/', $claimed ) || ! preg_match( '/^[a-f0-9]{64}$/', $expected ) || ! hash_equals( $expected, $claimed ) ) {
+				return new WP_Error( 'spf_release_deployed_checksum_binding_invalid', __( 'Deployment evidence must bind the exact approved package checksum.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
 			}
 		}
 		return true;

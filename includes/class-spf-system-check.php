@@ -36,15 +36,17 @@ final class SPF_System_Check {
 			$reported_hooks = is_array( $external_cron ) && is_array( $external_cron['hooks'] ?? null ) ? array_values( array_unique( array_map( 'sanitize_key', $external_cron['hooks'] ) ) ) : array();
 			$verified_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['verified_at'] ?? '' ) ) : false;
 			$expires_at = is_array( $external_cron ) ? strtotime( (string) ( $external_cron['expires_at'] ?? '' ) ) : false;
+			$max_interval = is_array( $external_cron ) && isset( $external_cron['max_interval_seconds'] ) && is_numeric( $external_cron['max_interval_seconds'] ) ? (int) $external_cron['max_interval_seconds'] : 0;
 			$cron_ok = is_array( $external_cron )
 				&& true === ( $external_cron['verified'] ?? false )
 				&& '' !== trim( (string) ( $external_cron['scheduler_id'] ?? '' ) )
 				&& '' !== trim( (string) ( $external_cron['verifier'] ?? '' ) )
 				&& $verified_at && $verified_at <= time() + 60 && $verified_at >= time() - 900
 				&& $expires_at && $expires_at > time()
+				&& $max_interval >= 1 && $max_interval <= 300
 				&& empty( array_diff( $required_hooks, $reported_hooks ) );
 		}
-		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without fresh, complete, expiring external scheduler evidence.', 'fail' );
+		$checks[] = self::check( 'cron_runner', $cron_ok, $cron_disabled ? ( $cron_ok ? 'external-verified' : 'disabled-unverified' ) : 'wp-cron', 'WP-Cron is disabled without fresh, complete, expiring external scheduler evidence proving a runner interval of five minutes or less.', 'fail' );
 		foreach ( $expected_schedules as $hook => $expected_recurrence ) {
 			$scheduled = wp_next_scheduled( $hook );
 			$recurrence = $scheduled ? wp_get_schedule( $hook ) : false;

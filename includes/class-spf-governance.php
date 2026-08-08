@@ -12,6 +12,10 @@ final class SPF_Governance {
 			}
 		}
 		$status = sanitize_key( $release['status'] ?? 'planned' );
+		$package_name = substr( sanitize_file_name( (string) $release['package_name'] ), 0, 191 );
+		$raw_evidence_json = wp_json_encode( $release['evidence'] );
+		if ( '' === $package_name ) { return new WP_Error( 'spf_release_package_name_invalid', __( 'Release evidence must bind a non-empty canonical package filename.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
+		if ( false === $raw_evidence_json || strlen( $raw_evidence_json ) > 262144 ) { return new WP_Error( 'spf_release_evidence_too_large', __( 'Release evidence exceeds the bounded immutable evidence envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		if ( 'planned' !== $status ) {
 			return new WP_Error( 'spf_release_initial_state_invalid', __( 'A release must be created as planned.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
@@ -45,7 +49,7 @@ final class SPF_Governance {
 					'release_id' => $release_id,
 					'software_version' => sanitize_text_field( $release['software_version'] ),
 					'commit_sha' => strtolower( $release['commit_sha'] ),
-					'package_name' => substr( sanitize_file_name( $release['package_name'] ), 0, 191 ),
+					'package_name' => $package_name,
 					'checksum_sha256' => strtolower( $release['checksum_sha256'] ),
 					'schema_version' => sanitize_text_field( $release['schema_version'] ),
 					'evidence_json' => wp_json_encode( $evidence ),
@@ -93,6 +97,8 @@ final class SPF_Governance {
 		if ( ! wp_is_uuid( $release_id ) || ! in_array( $next_status, self::RELEASE_STATES, true ) ) {
 			return new WP_Error( 'spf_invalid_release_transition', __( 'Invalid release transition.', 'sabri-platform-foundation' ) );
 		}
+		$raw_evidence_json = wp_json_encode( $evidence );
+		if ( false === $raw_evidence_json || strlen( $raw_evidence_json ) > 262144 ) { return new WP_Error( 'spf_release_evidence_too_large', __( 'Release transition evidence exceeds the bounded immutable evidence envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		$evidence = self::sanitize_evidence( $evidence );
 		$evidence_error = self::validate_evidence_for_state( $next_status, $evidence );
 		if ( is_wp_error( $evidence_error ) ) {
@@ -191,6 +197,8 @@ final class SPF_Governance {
 		if ( ! is_array( $amendment['decision'] ) ) {
 			return new WP_Error( 'spf_invalid_amendment', __( 'Decision must be structured.', 'sabri-platform-foundation' ) );
 		}
+		$decision_json = wp_json_encode( $amendment['decision'] );
+		if ( false === $decision_json || strlen( $decision_json ) > 262144 ) { return new WP_Error( 'spf_amendment_decision_too_large', __( 'Amendment decision evidence exceeds the bounded governance envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		$id = substr( sanitize_text_field( $amendment['amendment_id'] ), 0, 64 );
 		if ( '' === $id ) {
 			return new WP_Error( 'spf_invalid_amendment_id', __( 'Amendment identifier is invalid after normalization.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );

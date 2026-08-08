@@ -15,8 +15,6 @@ Rule: every defect was corrected and the complete source suite rerun before the 
 | 7 | Telemetry persistence/concurrency | Defect found and corrected: metric buffer used unlocked read-modify-write and could lose concurrent metrics; bounded locking and persistence verification added. |
 | 8 | Latest central-plan catalog/version/source reconciliation | Defects found and corrected: dependency manifest still said runtime/contract 1.2.0 while plugin is 2.0.0; runtime catalog retained stale File 01/10/14/15/25/26 naming/boundaries. |
 | 9 | Dependency semantics + contract compatibility | Defects found and corrected: dependency fail-mode metadata was discarded; a contract version could regress while an unchanged schema was reported compatible. |
-| 10 | Full post-correction source regression | No new source-level defect found in the complete local automated suite after Rounds 1–9 corrections. Exact-head WordPress/MySQL CI remains the independent confirmation gate. |
+| 10 | Exact-head WordPress/MySQL adversarial regression | Defect found and corrected: after canonical 00–26 enforcement, the runtime Golden-Path smoke still requested obsolete `file-27`, so exact-head CI correctly failed. The smoke was realigned to canonical `file-26`; no production rule was weakened. A fresh exact-head source/runtime/package CI is mandatory before closure. |
 
-This record does not claim Staging-Accepted, Live-Deployed or Operational status.
-
-Exact-head corrective QA retrigger requested after the second ten-round correction set.
+All ten rounds therefore produced at least one corrective finding when the independent exact-head runtime gate is counted as Round 10. This record does not claim Staging-Accepted, Live-Deployed or Operational status.

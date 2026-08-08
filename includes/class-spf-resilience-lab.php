@@ -137,6 +137,9 @@ final class SPF_Resilience_Lab {
 					$before[ SPF_Platform_Engineering::METRIC_OPTION ] = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
 				}
 			}
+			$existing_recoveries = get_option( self::SELF_HEAL_RECOVERY_OPTION, array() );
+			$existing_recoveries = is_array( $existing_recoveries ) ? $existing_recoveries : array();
+			if ( count( $existing_recoveries ) >= 20 ) { return new WP_Error( 'spf_self_heal_recovery_capacity_full', __( 'Self-heal recovery capacity is full; explicitly reconcile or retire an older recovery before another repair.', 'sabri-platform-foundation' ), array( 'status'=>409 ) ); }
 			$pre = SPF_Audit::record_required( 'self_heal_precommit', 'foundation_repair', $recovery_id, 'authorized', array( 'plan_hash'=>$plan['plan_hash'], 'option_count'=>count( $before ) ) );
 			if ( is_wp_error( $pre ) ) {
 				return $pre;
@@ -149,7 +152,7 @@ final class SPF_Resilience_Lab {
 							$option = $action['option'];
 							if ( in_array( $option, self::OWNED_OPTIONS, true ) ) {
 								$old = get_option( $option, null );
-								update_option( $option . '_quarantine_' . time(), array( 'hash'=>SPF_Runtime::hash( $old ), 'quarantined_at'=>SPF_Runtime::now_mysql() ), false );
+								// The canonical recovery snapshot below is the quarantine evidence; avoid creating orphan dynamic options.
 								update_option( $option, array(), false );
 								if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( array() ) ) {
 									throw new RuntimeException( 'self_heal_option_write_failed:' . $option );
@@ -186,10 +189,9 @@ final class SPF_Resilience_Lab {
 					'post_hashes' => $post_hashes,
 					'rolled_back' => false,
 				);
-				$recoveries = get_option( self::SELF_HEAL_RECOVERY_OPTION, array() );
-				$recoveries = is_array( $recoveries ) ? $recoveries : array();
+				$recoveries = $existing_recoveries;
 				$recoveries[ $recovery_id ] = $recovery;
-				$expected_recoveries = array_slice( $recoveries, -20, null, true );
+				$expected_recoveries = $recoveries;
 				update_option( self::SELF_HEAL_RECOVERY_OPTION, $expected_recoveries, false );
 				$persisted = get_option( self::SELF_HEAL_RECOVERY_OPTION, array() );
 				if ( empty( $persisted[ $recovery_id ] ) || SPF_Runtime::hash( $persisted[ $recovery_id ] ) !== SPF_Runtime::hash( $recovery ) ) {
@@ -200,9 +202,12 @@ final class SPF_Resilience_Lab {
 					throw new RuntimeException( $audit->get_error_message() );
 				}
 			} catch ( Throwable $error ) {
+				$compensation_failures = array();
 				foreach ( $before as $option => $value ) {
 					update_option( $option, $value, false );
+					if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( $value ) ) { $compensation_failures[] = $option; }
 				}
+				if ( $compensation_failures ) { return new WP_Error( 'spf_self_heal_compensation_incomplete', __( 'Self-heal failed and one or more File 01-owned values could not be restored.', 'sabri-platform-foundation' ), array( 'status'=>500, 'options'=>$compensation_failures ) ); }
 				return new WP_Error( 'spf_self_heal_failed', $error->getMessage(), array( 'status'=>409 ) );
 			}
 			return array( 'applied'=>$applied, 'owner_scope'=>'file-01-only', 'companion_data_modified'=>false, 'recovery_id'=>$recovery_id );
@@ -274,10 +279,14 @@ final class SPF_Resilience_Lab {
 					throw new RuntimeException( $audit->get_error_message() );
 				}
 			} catch ( Throwable $error ) {
+				$compensation_failures = array();
 				foreach ( $current_values as $option => $value ) {
 					update_option( $option, $value, false );
+					if ( SPF_Runtime::hash( get_option( $option, null ) ) !== SPF_Runtime::hash( $value ) ) { $compensation_failures[] = $option; }
 				}
 				update_option( self::SELF_HEAL_RECOVERY_OPTION, $recoveries_before, false );
+				if ( SPF_Runtime::hash( get_option( self::SELF_HEAL_RECOVERY_OPTION, array() ) ) !== SPF_Runtime::hash( $recoveries_before ) ) { $compensation_failures[] = self::SELF_HEAL_RECOVERY_OPTION; }
+				if ( $compensation_failures ) { return new WP_Error( 'spf_self_heal_rollback_compensation_incomplete', __( 'Self-heal rollback failed and its compensation could not be fully verified.', 'sabri-platform-foundation' ), array( 'status'=>500, 'options'=>$compensation_failures ) ); }
 				return new WP_Error( 'spf_self_heal_rollback_failed', $error->getMessage(), array( 'status'=>409 ) );
 			}
 			return array( 'rolled_back'=>true, 'recovery_id'=>$recovery_id, 'restored_options'=>$restored, 'companion_data_modified'=>false );

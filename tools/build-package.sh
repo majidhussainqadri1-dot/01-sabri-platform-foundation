@@ -5,7 +5,7 @@ VERSION="$(php -r '$s=file_get_contents($argv[1]); preg_match("/define\\( \\x27S
 [[ -n "$VERSION" ]] || { echo 'Unable to determine SPF_VERSION' >&2; exit 1; }
 NAME="01-sabri-platform-foundation-${VERSION}-CORRECTIVE-CANDIDATE"
 TOP="sabri-platform-foundation-01"
-EPOCH="202608060100"
+EPOCH="202608080100"
 DIST="$ROOT/dist"
 BUILD="$ROOT/build"
 rm -rf "$BUILD" "$DIST"
@@ -17,8 +17,10 @@ copy_package() {
     sabri-platform-foundation.php uninstall.php readme.txt README.md CHANGELOG.md
     TRACEABILITY.md MIGRATION.md ROLLBACK.md STAGING-ACCEPTANCE.md SECURITY.md
     PRIVACY.md REVIEW-ROUND-1.md ADVERSARIAL-REVIEW-ROUND-2.md REVIEW-ROUND-3.md
-    ADVERSARIAL-REVIEW-ROUND-4.md QA-REPORT.md KNOWN-LIMITATIONS.md
-    RELEASE-CHECKLIST.md SBOM.cdx.json DEPENDENCY-MANIFEST.json RELEASE-EVIDENCE-TEMPLATE.json
+    ADVERSARIAL-REVIEW-ROUND-4.md FINAL-REVIEW-ROUND-1-2026-08-08.md
+    FINAL-ADVERSARIAL-REVIEW-ROUND-2-2026-08-08.md QA-REPORT.md RUNTIME-QA-NOTES.md
+    KNOWN-LIMITATIONS.md RELEASE-CHECKLIST.md SBOM.cdx.json DEPENDENCY-MANIFEST.json
+    RELEASE-EVIDENCE-TEMPLATE.json
   )
   for file in "${files[@]}"; do cp "$ROOT/$file" "$target/"; done
   mkdir -p "$target/includes"
@@ -61,7 +63,6 @@ unzip -q "$DIST/${NAME}.zip" -d "$BUILD/verify"
   cd "$BUILD/verify/$TOP"
   sha256sum --check SOURCE-MANIFEST.sha256
 )
-# Package/source parity for runtime files.
 for file in sabri-platform-foundation.php uninstall.php readme.txt; do cmp "$ROOT/$file" "$BUILD/verify/$TOP/$file"; done
 for file in "$ROOT"/includes/*.php; do cmp "$file" "$BUILD/verify/$TOP/includes/$(basename "$file")"; done
 

@@ -18,3 +18,5 @@ This is a sixth independent adversarial review of the exact File 01 v2.0 Future 
 **Defect-free rounds before correction in this sixth cycle:** none.
 
 Final acceptance remains evidence-bounded. Repository/source, runtime and deterministic-package QA must be green at the exact final head before this cycle is called automated-QA complete. Hostinger staging, real companion coexistence, browser/device/accessibility/RTL/weak-network validation, load/cache/cron exercises, independent backup/restore/rollback proof, Founder acceptance, production cutover and sustained monitoring remain separate mandatory gates.
+
+Post-cycle CI housekeeping: the final automated run also exposed a non-product GitHub Actions Node.js 20 deprecation warning from the previously pinned actions/checkout and actions/upload-artifact revisions. Current upstream v7.0.1 releases were verified and pinned by immutable commit SHA: checkout 3d3c42e5aac5ba805825da76410c181273ba90b1; upload-artifact 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a. This is housekeeping after the ten review rounds, not an eleventh review round. Full source/runtime/package QA is rerun after this CI-only correction.

@@ -7,7 +7,9 @@ final class SPF_Event_Bus {
 		$event_name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_name );
 		$aggregate_type = sanitize_key( $aggregate_type );
 		$aggregate_id = substr( sanitize_text_field( (string) $aggregate_id ), 0, 191 );
-		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 ) {
+		$version_raw = $version;
+		$version = is_int( $version_raw ) ? $version_raw : ( is_string( $version_raw ) && ctype_digit( $version_raw ) ? (int) $version_raw : 0 );
+		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 || $version > 65535 ) {
 			return new WP_Error( 'spf_invalid_event', __( 'Invalid event contract.', 'sabri-platform-foundation' ) );
 		}
 		$privacy_class = sanitize_key( $privacy_class );
@@ -22,9 +24,14 @@ final class SPF_Event_Bus {
 		if ( false === $payload_json || strlen( $payload_json ) > 262144 ) {
 			return new WP_Error( 'spf_event_payload_invalid', __( 'Event payload is invalid or too large.', 'sabri-platform-foundation' ) );
 		}
-		$dedupe_key = $dedupe_key ? sanitize_text_field( $dedupe_key ) : hash( 'sha256', $event_name . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $payload_json );
-		if ( strlen( $dedupe_key ) > 191 ) {
-			$dedupe_key = hash( 'sha256', $dedupe_key );
+		if ( $dedupe_key ) {
+			$raw_dedupe_key = (string) $dedupe_key;
+			$canonical_dedupe_key = sanitize_text_field( $raw_dedupe_key );
+			$dedupe_key = ( $raw_dedupe_key === $canonical_dedupe_key && strlen( $canonical_dedupe_key ) <= 191 )
+				? $canonical_dedupe_key
+				: hash( 'sha256', $raw_dedupe_key );
+		} else {
+			$dedupe_key = hash( 'sha256', $event_name . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $payload_json );
 		}
 		$now = SPF_Runtime::now_mysql();
 		$previous_suppress = $wpdb->suppress_errors( true );
@@ -55,12 +62,11 @@ final class SPF_Event_Bus {
 		try {
 			$table = SPF_Installer::table( 'outbox' );
 			$now = SPF_Runtime::now_mysql();
-			$stale_before = gmdate( 'Y-m-d H:i:s', time() - 600 );
 			$recovered = $wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$table} SET status='retry',available_at=%s,last_error='stale_processing_recovered' WHERE status='processing' AND available_at<%s",
+					"UPDATE {$table} SET status='retry',available_at=%s,last_error='expired_processing_lease_recovered' WHERE status='processing' AND available_at<%s",
 					$now,
-					$stale_before
+					$now
 				)
 			);
 			if ( false === $recovered ) {

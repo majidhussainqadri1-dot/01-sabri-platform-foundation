@@ -114,7 +114,16 @@ final class SPF_System_Check {
 			return null;
 		}
 		$row = $wpdb->get_row( "SELECT * FROM {$table} ORDER BY id DESC LIMIT 1", ARRAY_A ); // phpcs:ignore
-		return $row ? json_decode( $row['results_json'], true ) : null;
+		if ( ! empty( $wpdb->last_error ) ) {
+			return new WP_Error( 'spf_health_latest_query_failed', __( 'The latest File 01 health record could not be read safely.', 'sabri-platform-foundation' ) );
+		}
+		if ( ! $row ) {
+			return null;
+		}
+		$decoded = json_decode( (string) $row['results_json'], true );
+		return is_array( $decoded ) && JSON_ERROR_NONE === json_last_error()
+			? $decoded
+			: new WP_Error( 'spf_health_latest_corrupt', __( 'The latest File 01 health record is corrupt and cannot be treated as valid evidence.', 'sabri-platform-foundation' ) );
 	}
 
 	private static function integration_checks() {

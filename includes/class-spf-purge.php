@@ -153,7 +153,11 @@ final class SPF_Purge {
 			return $precommit;
 		}
 		$receipt['audit_chain_head'] = self::audit_chain_head();
-		update_option( 'spf_external_purge_receipt', $receipt, false );
+		$persisted = self::persist_receipt( $receipt );
+		if ( is_wp_error( $persisted ) ) {
+			SPF_Runtime::release_lock( 'destructive_purge', $lock );
+			return $persisted;
+		}
 		do_action( 'spf_purge_external_receipt', $receipt, 'precommit' );
 
 		$renamed = array();
@@ -183,7 +187,10 @@ final class SPF_Purge {
 			}
 			$receipt['status'] = 'quarantined';
 			$receipt['quarantine_tables'] = $renamed;
-			update_option( 'spf_external_purge_receipt', $receipt, false );
+			$persisted = self::persist_receipt( $receipt );
+			if ( is_wp_error( $persisted ) ) {
+				throw new RuntimeException( 'The quarantine receipt could not be durably verified.' );
+			}
 
 			foreach ( $renamed as $name => $quarantine ) {
 				if ( false === $wpdb->query( "DROP TABLE {$quarantine}" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated allowlisted quarantine identifier.
@@ -198,14 +205,20 @@ final class SPF_Purge {
 					delete_option( $option );
 				}
 			}
-			self::delete_owned_transients();
+			$transient_cleanup = self::delete_owned_transients();
+			if ( is_wp_error( $transient_cleanup ) ) {
+				throw new RuntimeException( $transient_cleanup->get_error_message() );
+			}
 			$receipt['completed_at'] = SPF_Runtime::now_mysql();
 			$receipt['status'] = 'completed';
 			$receipt['verification'] = array( 'tables_remaining' => self::owned_tables_remaining(), 'stale_quarantines' => self::stale_quarantine_tables(), 'options_checked' => true );
 			if ( ! empty( $receipt['verification']['tables_remaining'] ) || ! empty( $receipt['verification']['stale_quarantines'] ) ) {
 				throw new RuntimeException( 'One or more File 01 tables or purge quarantines remain after purge.' );
 			}
-			update_option( 'spf_external_purge_receipt', $receipt, false );
+			$persisted = self::persist_receipt( $receipt );
+			if ( is_wp_error( $persisted ) ) {
+				throw new RuntimeException( 'The completed purge receipt could not be durably verified.' );
+			}
 			do_action( 'spf_purge_external_receipt', $receipt, 'completed' );
 			SPF_Runtime::release_lock( 'destructive_purge', $lock );
 			return $receipt;
@@ -224,14 +237,27 @@ final class SPF_Purge {
 				$restore_parts[] = "{$quarantine} TO {$table}";
 			}
 			if ( $can_restore && $restore_parts ) {
-				$wpdb->query( 'RENAME TABLE ' . implode( ', ', $restore_parts ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- generated allowlisted identifiers.
+				$restored = $wpdb->query( 'RENAME TABLE ' . implode( ', ', $restore_parts ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- generated allowlisted identifiers.
+				if ( false === $restored ) {
+					$can_restore = false;
+				} else {
+					foreach ( $renamed as $name => $quarantine ) {
+						if ( ! SPF_Runtime::table_exists( SPF_Installer::table( $name ) ) || SPF_Runtime::table_exists( $quarantine ) ) {
+							$can_restore = false;
+							break;
+						}
+					}
+				}
 			}
 			$receipt['failed_at'] = SPF_Runtime::now_mysql();
 			$receipt['status'] = empty( self::owned_tables_remaining() ) ? 'failed_after_drop' : ( $can_restore ? 'failed_compensated' : 'failed_partial' );
 			$receipt['error_code'] = 'purge_incomplete';
 			$receipt['tables_remaining'] = self::owned_tables_remaining();
 			$receipt['stale_quarantine_tables'] = self::stale_quarantine_tables();
-			update_option( 'spf_external_purge_receipt', $receipt, false );
+			$failed_receipt_persist = self::persist_receipt( $receipt );
+			if ( is_wp_error( $failed_receipt_persist ) ) {
+				$receipt['receipt_persistence_failed'] = true;
+			}
 			do_action( 'spf_purge_external_receipt', $receipt, 'failed' );
 			SPF_Runtime::release_lock( 'destructive_purge', $lock );
 			return new WP_Error( 'spf_purge_incomplete', sanitize_text_field( $error->getMessage() ), array( 'status'=>500,'receipt'=>$receipt ) );
@@ -271,8 +297,21 @@ final class SPF_Purge {
 		$patterns = array( '_transient_spf_rl_%', '_transient_timeout_spf_rl_%' );
 		foreach ( $patterns as $pattern ) {
 			$like = $wpdb->esc_like( str_replace( '%', '', $pattern ) ) . '%';
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
+			if ( false === $deleted ) {
+				return new WP_Error( 'spf_purge_transient_cleanup_failed', __( 'File 01 rate-limit transients could not be removed safely.', 'sabri-platform-foundation' ) );
+			}
 		}
+		return true;
+	}
+
+	private static function persist_receipt( array $receipt ) {
+		update_option( 'spf_external_purge_receipt', $receipt, false );
+		$stored = get_option( 'spf_external_purge_receipt', array() );
+		if ( ! is_array( $stored ) || SPF_Runtime::hash( $stored ) !== SPF_Runtime::hash( $receipt ) ) {
+			return new WP_Error( 'spf_purge_receipt_persistence_failed', __( 'The destructive-purge receipt could not be durably verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
+		}
+		return true;
 	}
 
 	private static function owned_tables_remaining() {

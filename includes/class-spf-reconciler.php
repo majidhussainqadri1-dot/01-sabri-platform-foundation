@@ -92,6 +92,10 @@ final class SPF_Reconciler {
 		}
 		$snapshot = self::capture_snapshot( $hash, $plan );
 		update_option( 'spf_reconciliation_snapshot', $snapshot, false );
+		if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_snapshot', array() ) ) !== SPF_Runtime::hash( $snapshot ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return new WP_Error( 'spf_reconciliation_snapshot_persistence_failed', __( 'The reconciliation recovery snapshot could not be durably verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
+		}
 		$changed = array();
 		$receipts = array();
 		try {
@@ -132,7 +136,14 @@ final class SPF_Reconciler {
 			}
 			$snapshot['owner_receipts'] = $receipts;
 			update_option( 'spf_reconciliation_snapshot', $snapshot, false );
-			update_option( 'spf_reconciliation_state', array( 'status'=>'applied','plan_hash'=>$hash,'applied_at'=>SPF_Runtime::now_mysql(),'receipt_count'=>count($receipts) ), false );
+			if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_snapshot', array() ) ) !== SPF_Runtime::hash( $snapshot ) ) {
+				throw new RuntimeException( 'The reconciliation snapshot with owner receipts could not be durably verified.' );
+			}
+			$applied_state = array( 'status'=>'applied','plan_hash'=>$hash,'applied_at'=>SPF_Runtime::now_mysql(),'receipt_count'=>count($receipts) );
+			update_option( 'spf_reconciliation_state', $applied_state, false );
+			if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_state', array() ) ) !== SPF_Runtime::hash( $applied_state ) ) {
+				throw new RuntimeException( 'The applied reconciliation state could not be durably verified.' );
+			}
 			$trace = SPF_Audit::record_required( 'run_reconciliation', 'foundation_reconciliation', $hash, 'success', array( 'purpose'=>'legacy_cutover','changed_count'=>count($changed),'receipt_count'=>count($receipts) ) );
 			if ( is_wp_error( $trace ) ) {
 				throw new RuntimeException( $trace->get_error_message() );
@@ -204,7 +215,12 @@ final class SPF_Reconciler {
 			SPF_Runtime::release_lock( 'reconciliation', $lock );
 			return $local_result;
 		}
-		update_option( 'spf_reconciliation_state', array( 'status'=>'rolled_back','plan_hash'=>$snapshot['plan_hash'],'rolled_back_at'=>SPF_Runtime::now_mysql() ), false );
+		$rolled_back_state = array( 'status'=>'rolled_back','plan_hash'=>$snapshot['plan_hash'],'rolled_back_at'=>SPF_Runtime::now_mysql() );
+		update_option( 'spf_reconciliation_state', $rolled_back_state, false );
+		if ( SPF_Runtime::hash( get_option( 'spf_reconciliation_state', array() ) ) !== SPF_Runtime::hash( $rolled_back_state ) ) {
+			SPF_Runtime::release_lock( 'reconciliation', $lock );
+			return new WP_Error( 'spf_reconciliation_rollback_state_persistence_failed', __( 'The rolled-back reconciliation state could not be durably verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
+		}
 		$trace = SPF_Audit::record_required( 'rollback_reconciliation', 'foundation_reconciliation', $snapshot['plan_hash'], 'success', array( 'purpose'=>'legacy_cutover_rollback','receipt_count'=>count($receipts) ) );
 		if ( is_wp_error( $trace ) ) { SPF_Runtime::release_lock( 'reconciliation', $lock ); return $trace; }
 		$event = SPF_Event_Bus::publish( 'FoundationLegacyReconciliationRolledBack.v1', 'foundation_reconciliation', $snapshot['plan_hash'], array( 'receipt_count'=>count($receipts) ), 1, 'reconcile-rollback-'.$snapshot['plan_hash'] );

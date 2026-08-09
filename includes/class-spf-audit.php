@@ -37,6 +37,9 @@ final class SPF_Audit {
 				return new WP_Error( 'spf_audit_table_missing', __( 'The mandatory audit table is unavailable.', 'sabri-platform-foundation' ) );
 			}
 			$context = self::sanitize_context( $context );
+			if ( is_wp_error( $context ) ) {
+				return $context;
+			}
 			$context_hash = SPF_Runtime::hash( $context );
 			$previous_raw = $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
 			if ( ! empty( $wpdb->last_error ) ) {
@@ -133,10 +136,13 @@ final class SPF_Audit {
 
 	private static function sanitize_context( array $context, $depth = 0 ) {
 		if ( $depth > 5 ) {
-			return array( '_truncated' => true );
+			return new WP_Error( 'spf_audit_context_too_deep', __( 'Audit context nesting exceeds the bounded evidence envelope.', 'sabri-platform-foundation' ) );
+		}
+		if ( count( $context ) > 100 ) {
+			return new WP_Error( 'spf_audit_context_too_large', __( 'Audit context exceeds the bounded evidence envelope.', 'sabri-platform-foundation' ) );
 		}
 		$result = array();
-		foreach ( array_slice( $context, 0, 100, true ) as $key => $value ) {
+		foreach ( $context as $key => $value ) {
 			$key = substr( sanitize_key( (string) $key ), 0, 128 );
 			if ( '' === $key ) {
 				continue;
@@ -144,7 +150,11 @@ final class SPF_Audit {
 			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message|payment|identity|document|private|credential|key/i', $key ) ) {
 				$result[ $key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize_context( $value, $depth + 1 );
+				$nested = self::sanitize_context( $value, $depth + 1 );
+				if ( is_wp_error( $nested ) ) {
+					return $nested;
+				}
+				$result[ $key ] = $nested;
 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
 				$result[ $key ] = $value;
 			} elseif ( is_scalar( $value ) ) {
@@ -153,9 +163,7 @@ final class SPF_Audit {
 				$result[ $key ] = '[unsupported]';
 			}
 		}
-		if ( count( $context ) > 100 ) {
-			$result['_truncated'] = true;
-		}
 		return SPF_Runtime::canonicalize( $result );
 	}
+
 }

@@ -33,7 +33,7 @@ $assert( str_contains( $files['includes/class-spf-idempotency.php']??'', '$wpdb-
 $assert( str_contains( $files['includes/class-spf-authorization.php']??'', "'object_hash', 'purpose', 'institutional_role'" ), 'Mandatory authorization object/purpose/institutional-role binding missing.' );
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_chain_head_invalid' ), 'Malformed audit-head fail-closed guard missing.' );
 $assert( str_contains( $files['includes/class-spf-audit.php']??'', 'spf_audit_verification_incomplete' ), 'Partial audit-chain verification blocker missing.' );
-$assert( str_contains( $files['includes/class-spf-event-bus.php']??'', "'stale_processing_recovered'" ), 'Outbox stale-lease recovery missing.' );
+$assert( str_contains( $files['includes/class-spf-event-bus.php']??'', "'expired_processing_lease_recovered'" ), 'Outbox stale-lease recovery missing.' );
 $assert( str_contains( $files['includes/class-spf-event-bus.php']??'', '$wpdb->suppress_errors( true )' ), 'Expected outbox dedupe insert noise is not suppressed.' );
 $assert( str_contains( $files['includes/class-spf-event-bus.php']??'', '$privacy_class' ) && str_contains( $files['includes/class-spf-installer.php']??'', 'privacy_class varchar(32)' ), 'Durable event privacy classification missing.' );
 $assert( str_contains( $files['includes/class-spf-registry.php']??'', 'spf_dependency_ambiguity' ), 'Required/optional dependency ambiguity rejection missing.' );

@@ -27,6 +27,7 @@ copy_package() {
     THIRD-TEN-ROUND-REVIEW-2026-08-08.md FOURTH-TEN-ROUND-REVIEW-2026-08-08.md
     FIFTH-TEN-ROUND-REVIEW-2026-08-08.md SIXTH-TEN-ROUND-REVIEW-2026-08-08.md
     SEVENTH-TEN-ROUND-REVIEW-2026-08-08.md EIGHTH-TEN-ROUND-REVIEW-2026-08-09.md
+    NINTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-09.md
   )
   for file in "${files[@]}"; do cp "$ROOT/$file" "$target/"; done
   mkdir -p "$target/includes"

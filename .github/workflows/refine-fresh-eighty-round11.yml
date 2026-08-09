@@ -1,0 +1,76 @@
+name: Refine File 01 Fresh Eighty Round 11
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - '.github/workflows/refine-fresh-eighty-round11.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - name: Refine truthful staged evidence semantics and retest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('includes/class-spf-governance.php')
+          s = p.read_text()
+          old = "'fresh_install','upgrade_test','cross_file_contracts','backup_restore_test','rollback_rehearsal','browser_accessibility_rtl','founder_acceptance_pending','smoke_test','rollback_ready'"
+          new = "'fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready'"
+          if old not in s:
+              raise SystemExit('Expected over-hardening boolean list not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tests/fresh-eighty-round-review-tests.php')
+          s = p.read_text()
+          old = "$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, \"'cross_file_contracts'\") && str_contains($governance, \"'browser_accessibility_rtl'\"), 'Round 11: release evidence validation is not fail-closed for state/boolean gates.' );"
+          new = "$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, \"'fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready'\"), 'Round 11: release evidence validation is not fail-closed for unknown states and true boolean gates.' );"
+          if old not in s:
+              raise SystemExit('Expected Round 11 assertion not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('NINTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-09.md')
+          s = p.read_text()
+          old = '| 11 | DEFECT FOUND → FIXED | release evidence validation is not fail-closed for state/boolean gates. | Unknown release states are rejected and critical staged evidence booleans require literal true. |'
+          new = '| 11 | DEFECT FOUND → FIXED | release evidence validation accepted unknown lifecycle states and true boolean gates needed strict typing. | Unknown release states are rejected; actual boolean gates require literal true, while descriptive staged evidence remains descriptive rather than being falsified into booleans. |'
+          if old not in s:
+              raise SystemExit('Expected Round 11 review row not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+          mapfile -t tracked < <(awk '{print $2}' SOURCE-CHECKSUMS.sha256)
+          : > SOURCE-CHECKSUMS.sha256.new
+          for path in "${tracked[@]}"; do
+            [[ -f "$path" ]] || { echo "Checksum path missing: $path" >&2; exit 1; }
+            sha256sum "$path" >> SOURCE-CHECKSUMS.sha256.new
+          done
+          mv SOURCE-CHECKSUMS.sha256.new SOURCE-CHECKSUMS.sha256
+
+          php tests/fresh-eighty-round-review-tests.php
+          bash qa/run-tests.sh
+          bash tools/build-package.sh
+
+      - name: Commit refinement and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/refine-fresh-eighty-round11.yml
+          git config user.name 'File 01 Corrective QA'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'File 01: refine fresh 80-round release evidence semantics'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

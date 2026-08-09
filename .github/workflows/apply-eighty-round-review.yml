@@ -21,41 +21,56 @@ jobs:
         with:
           ref: codex/file-01-complete-foundation-1.0.0
           fetch-depth: 0
-      - name: Recover one missing Base64 character and verify payload
+      - name: Recover unique CRC-valid staged payload
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import base64, bz2, pathlib, subprocess
+          import base64, bz2, itertools, pathlib, subprocess
           root = pathlib.Path('tools/eighty-round-bzparts')
           names = ['part00.b64','part01.b64','part02-pre.b64','part02.b64','part04.b64']
-          parts = [''.join((root / n).read_text().split()) for n in names]
-          print('chunk lengths:', dict(zip(names, map(len, parts))))
+          data = {n: ''.join((root / n).read_text().split()) for n in names}
+          print('chunk lengths:', {n: len(data[n]) for n in names})
           alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          first = 'part00.b64'
+          rest = [n for n in names if n != first]
           valid = []
-          for ch in alphabet:
-              candidate = parts[0] + ch + ''.join(parts[1:])
-              try:
-                  raw = base64.b64decode(candidate, validate=True)
-                  patch = bz2.decompress(raw)
-              except Exception:
-                  continue
-              p = pathlib.Path('/tmp/eighty-review.patch')
-              p.write_bytes(patch)
-              check = subprocess.run(['git','apply','--check',str(p)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-              if check.returncode == 0:
-                  valid.append((ch, raw, patch))
+          attempts = 0
+          for order_tail in itertools.permutations(rest):
+              order = (first,) + order_tail
+              chunks = [data[n] for n in order]
+              for boundary in range(len(chunks) + 1):
+                  left = ''.join(chunks[:boundary])
+                  right = ''.join(chunks[boundary:])
+                  for ch in alphabet:
+                      attempts += 1
+                      candidate = left + ch + right
+                      try:
+                          raw = base64.b64decode(candidate, validate=True)
+                          patch = bz2.decompress(raw)
+                      except Exception:
+                          continue
+                      if b'EIGHTY-ROUND-REVIEW-2026-08-09.md' not in patch or b'eighty-round-review-tests.php' not in patch:
+                          continue
+                      p = pathlib.Path('/tmp/eighty-review.patch')
+                      p.write_bytes(patch)
+                      check = subprocess.run(['git','apply','--check',str(p)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                      if check.returncode == 0:
+                          valid.append((order, boundary, ch, raw, patch))
+                          print('candidate:', order, 'boundary', boundary, 'char', ch)
+          print('attempts:', attempts, 'valid:', len(valid))
           if len(valid) != 1:
-              raise SystemExit(f'Expected exactly one CRC+git-valid recovery after part00, found {len(valid)}')
-          ch, raw, patch = valid[0]
-          pathlib.Path('/tmp/eighty-review.recovered-char').write_text(ch)
+              raise SystemExit(f'Expected exactly one Base64+BZip2+git-valid reconstruction, found {len(valid)}')
+          order, boundary, ch, raw, patch = valid[0]
           pathlib.Path('/tmp/eighty-review.patch.bz2').write_bytes(raw)
           pathlib.Path('/tmp/eighty-review.patch').write_bytes(patch)
-          print('Recovered character:', ch)
+          pathlib.Path('/tmp/eighty-review-recovery.txt').write_text(f'order={order}\nboundary={boundary}\nchar={ch}\n')
+          print('Selected:', order, 'boundary', boundary, 'recovered char', ch)
           print('Compressed bytes:', len(raw), 'patch bytes:', len(patch))
           PY
           bzip2 -t /tmp/eighty-review.patch.bz2
           git apply --check /tmp/eighty-review.patch
+          cat /tmp/eighty-review-recovery.txt
           echo '80-round payload Base64 + BZip2 CRC + git dry-run PASS'
       - name: Apply corrective payload
         shell: bash

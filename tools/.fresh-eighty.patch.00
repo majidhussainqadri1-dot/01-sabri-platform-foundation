@@ -1,0 +1,214 @@
+--- a/includes/class-spf-event-bus.php
++++ b/includes/class-spf-event-bus.php
+@@ -7,7 +7,9 @@
+ 		$event_name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_name );
+ 		$aggregate_type = sanitize_key( $aggregate_type );
+ 		$aggregate_id = substr( sanitize_text_field( (string) $aggregate_id ), 0, 191 );
+-		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 ) {
++		$version_raw = $version;
++		$version = is_int( $version_raw ) ? $version_raw : ( is_string( $version_raw ) && ctype_digit( $version_raw ) ? (int) $version_raw : 0 );
++		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 || $version > 65535 ) {
+ 			return new WP_Error( 'spf_invalid_event', __( 'Invalid event contract.', 'sabri-platform-foundation' ) );
+ 		}
+ 		$privacy_class = sanitize_key( $privacy_class );
+@@ -22,9 +24,14 @@
+ 		if ( false === $payload_json || strlen( $payload_json ) > 262144 ) {
+ 			return new WP_Error( 'spf_event_payload_invalid', __( 'Event payload is invalid or too large.', 'sabri-platform-foundation' ) );
+ 		}
+-		$dedupe_key = $dedupe_key ? sanitize_text_field( $dedupe_key ) : hash( 'sha256', $event_name . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $payload_json );
+-		if ( strlen( $dedupe_key ) > 191 ) {
+-			$dedupe_key = hash( 'sha256', $dedupe_key );
++		if ( $dedupe_key ) {
++			$raw_dedupe_key = (string) $dedupe_key;
++			$canonical_dedupe_key = sanitize_text_field( $raw_dedupe_key );
++			$dedupe_key = ( $raw_dedupe_key === $canonical_dedupe_key && strlen( $canonical_dedupe_key ) <= 191 )
++				? $canonical_dedupe_key
++				: hash( 'sha256', $raw_dedupe_key );
++		} else {
++			$dedupe_key = hash( 'sha256', $event_name . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $payload_json );
+ 		}
+ 		$now = SPF_Runtime::now_mysql();
+ 		$previous_suppress = $wpdb->suppress_errors( true );
+@@ -55,12 +62,11 @@
+ 		try {
+ 			$table = SPF_Installer::table( 'outbox' );
+ 			$now = SPF_Runtime::now_mysql();
+-			$stale_before = gmdate( 'Y-m-d H:i:s', time() - 600 );
+ 			$recovered = $wpdb->query(
+ 				$wpdb->prepare(
+-					"UPDATE {$table} SET status='retry',available_at=%s,last_error='stale_processing_recovered' WHERE status='processing' AND available_at<%s",
++					"UPDATE {$table} SET status='retry',available_at=%s,last_error='expired_processing_lease_recovered' WHERE status='processing' AND available_at<%s",
+ 					$now,
+-					$stale_before
++					$now
+ 				)
+ 			);
+ 			if ( false === $recovered ) {
+--- a/includes/class-spf-runtime.php
++++ b/includes/class-spf-runtime.php
+@@ -169,6 +169,9 @@
+ 			if ( ! array_key_exists( $field, $claim ) || '' === (string) $claim[ $field ] ) {
+ 				return new WP_Error( 'spf_evidence_incomplete', sprintf( /* translators: %s evidence field */ __( 'Verified evidence is missing field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+ 			}
++			if ( str_ends_with( (string) $field, '_at' ) && false === strtotime( (string) $claim[ $field ] ) ) {
++				return new WP_Error( 'spf_evidence_timestamp_invalid', sprintf( /* translators: %s evidence field */ __( 'Verified evidence contains an invalid timestamp field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
++			}
+ 		}
+ 		if ( ! empty( $claim['expires_at'] ) && strtotime( (string) $claim['expires_at'] ) <= time() ) {
+ 			return new WP_Error( 'spf_evidence_expired', __( 'The external evidence verification has expired.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
+--- a/includes/class-spf-audit.php
++++ b/includes/class-spf-audit.php
+@@ -37,6 +37,9 @@
+ 				return new WP_Error( 'spf_audit_table_missing', __( 'The mandatory audit table is unavailable.', 'sabri-platform-foundation' ) );
+ 			}
+ 			$context = self::sanitize_context( $context );
++			if ( is_wp_error( $context ) ) {
++				return $context;
++			}
+ 			$context_hash = SPF_Runtime::hash( $context );
+ 			$previous_raw = $wpdb->get_var( "SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table.
+ 			if ( ! empty( $wpdb->last_error ) ) {
+@@ -133,10 +136,13 @@
+ 
+ 	private static function sanitize_context( array $context, $depth = 0 ) {
+ 		if ( $depth > 5 ) {
+-			return array( '_truncated' => true );
++			return new WP_Error( 'spf_audit_context_too_deep', __( 'Audit context nesting exceeds the bounded evidence envelope.', 'sabri-platform-foundation' ) );
++		}
++		if ( count( $context ) > 100 ) {
++			return new WP_Error( 'spf_audit_context_too_large', __( 'Audit context exceeds the bounded evidence envelope.', 'sabri-platform-foundation' ) );
+ 		}
+ 		$result = array();
+-		foreach ( array_slice( $context, 0, 100, true ) as $key => $value ) {
++		foreach ( $context as $key => $value ) {
+ 			$key = substr( sanitize_key( (string) $key ), 0, 128 );
+ 			if ( '' === $key ) {
+ 				continue;
+@@ -144,7 +150,11 @@
+ 			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message|payment|identity|document|private|credential|key/i', $key ) ) {
+ 				$result[ $key ] = '[redacted]';
+ 			} elseif ( is_array( $value ) ) {
+-				$result[ $key ] = self::sanitize_context( $value, $depth + 1 );
++				$nested = self::sanitize_context( $value, $depth + 1 );
++				if ( is_wp_error( $nested ) ) {
++					return $nested;
++				}
++				$result[ $key ] = $nested;
+ 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
+ 				$result[ $key ] = $value;
+ 			} elseif ( is_scalar( $value ) ) {
+@@ -153,9 +163,7 @@
+ 				$result[ $key ] = '[unsupported]';
+ 			}
+ 		}
+-		if ( count( $context ) > 100 ) {
+-			$result['_truncated'] = true;
+-		}
+ 		return SPF_Runtime::canonicalize( $result );
+ 	}
++
+ }
+--- a/includes/class-spf-purge.php
++++ b/includes/class-spf-purge.php
+@@ -153,7 +153,11 @@
+ 			return $precommit;
+ 		}
+ 		$receipt['audit_chain_head'] = self::audit_chain_head();
+-		update_option( 'spf_external_purge_receipt', $receipt, false );
++		$persisted = self::persist_receipt( $receipt );
++		if ( is_wp_error( $persisted ) ) {
++			SPF_Runtime::release_lock( 'destructive_purge', $lock );
++			return $persisted;
++		}
+ 		do_action( 'spf_purge_external_receipt', $receipt, 'precommit' );
+ 
+ 		$renamed = array();
+@@ -183,7 +187,10 @@
+ 			}
+ 			$receipt['status'] = 'quarantined';
+ 			$receipt['quarantine_tables'] = $renamed;
+-			update_option( 'spf_external_purge_receipt', $receipt, false );
++			$persisted = self::persist_receipt( $receipt );
++			if ( is_wp_error( $persisted ) ) {
++				throw new RuntimeException( 'The quarantine receipt could not be durably verified.' );
++			}
+ 
+ 			foreach ( $renamed as $name => $quarantine ) {
+ 				if ( false === $wpdb->query( "DROP TABLE {$quarantine}" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- generated allowlisted quarantine identifier.
+@@ -198,14 +205,20 @@
+ 					delete_option( $option );
+ 				}
+ 			}
+-			self::delete_owned_transients();
++			$transient_cleanup = self::delete_owned_transients();
++			if ( is_wp_error( $transient_cleanup ) ) {
++				throw new RuntimeException( $transient_cleanup->get_error_message() );
++			}
+ 			$receipt['completed_at'] = SPF_Runtime::now_mysql();
+ 			$receipt['status'] = 'completed';
+ 			$receipt['verification'] = array( 'tables_remaining' => self::owned_tables_remaining(), 'stale_quarantines' => self::stale_quarantine_tables(), 'options_checked' => true );
+ 			if ( ! empty( $receipt['verification']['tables_remaining'] ) || ! empty( $receipt['verification']['stale_quarantines'] ) ) {
+ 				throw new RuntimeException( 'One or more File 01 tables or purge quarantines remain after purge.' );
+ 			}
+-			update_option( 'spf_external_purge_receipt', $receipt, false );
++			$persisted = self::persist_receipt( $receipt );
++			if ( is_wp_error( $persisted ) ) {
++				throw new RuntimeException( 'The completed purge receipt could not be durably verified.' );
++			}
+ 			do_action( 'spf_purge_external_receipt', $receipt, 'completed' );
+ 			SPF_Runtime::release_lock( 'destructive_purge', $lock );
+ 			return $receipt;
+@@ -224,14 +237,27 @@
+ 				$restore_parts[] = "{$quarantine} TO {$table}";
+ 			}
+ 			if ( $can_restore && $restore_parts ) {
+-				$wpdb->query( 'RENAME TABLE ' . implode( ', ', $restore_parts ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- generated allowlisted identifiers.
++				$restored = $wpdb->query( 'RENAME TABLE ' . implode( ', ', $restore_parts ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- generated allowlisted identifiers.
++				if ( false === $restored ) {
++					$can_restore = false;
++				} else {
++					foreach ( $renamed as $name => $quarantine ) {
++						if ( ! SPF_Runtime::table_exists( SPF_Installer::table( $name ) ) || SPF_Runtime::table_exists( $quarantine ) ) {
++							$can_restore = false;
++							break;
++						}
++					}
++				}
+ 			}
+ 			$receipt['failed_at'] = SPF_Runtime::now_mysql();
+ 			$receipt['status'] = empty( self::owned_tables_remaining() ) ? 'failed_after_drop' : ( $can_restore ? 'failed_compensated' : 'failed_partial' );
+ 			$receipt['error_code'] = 'purge_incomplete';
+ 			$receipt['tables_remaining'] = self::owned_tables_remaining();
+ 			$receipt['stale_quarantine_tables'] = self::stale_quarantine_tables();
+-			update_option( 'spf_external_purge_receipt', $receipt, false );
++			$failed_receipt_persist = self::persist_receipt( $receipt );
++			if ( is_wp_error( $failed_receipt_persist ) ) {
++				$receipt['receipt_persistence_failed'] = true;
++			}
+ 			do_action( 'spf_purge_external_receipt', $receipt, 'failed' );
+ 			SPF_Runtime::release_lock( 'destructive_purge', $lock );
+ 			return new WP_Error( 'spf_purge_incomplete', sanitize_text_field( $error->getMessage() ), array( 'status'=>500,'receipt'=>$receipt ) );
+@@ -271,8 +297,21 @@
+ 		$patterns = array( '_transient_spf_rl_%', '_transient_timeout_spf_rl_%' );
+ 		foreach ( $patterns as $pattern ) {
+ 			$like = $wpdb->esc_like( str_replace( '%', '', $pattern ) ) . '%';
+-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
++			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $like ) );
++			if ( false === $deleted ) {
++				return new WP_Error( 'spf_purge_transient_cleanup_failed', __( 'File 01 rate-limit transients could not be removed safely.', 'sabri-platform-foundation' ) );
++			}
++		}
++		return true;
++	}
++
++	private static function persist_receipt( array $receipt ) {
++		update_option( 'spf_external_purge_receipt', $receipt, false );
++		$stored = get_option( 'spf_external_purge_receipt', array() );
++		if ( ! is_array( $stored ) || SPF_Runtime::hash( $stored ) !== SPF_Runtime::hash( $receipt ) ) {
++			return new WP_Error( 'spf_purge_receipt_persistence_failed', __( 'The destructive-purge receipt could not be durably verified.', 'sabri-platform-foundation' ), array( 'status'=>500 ) );
+ 		}
++		return true;
+ 	}
+ 
+ 	private static function owned_tables_remaining() {
+--- a/includes/class-spf-r

@@ -43,7 +43,7 @@ $assert( substr_count($purge, 'self::persist_receipt( $receipt )') >= 3, 'Round 
 $assert( str_contains($purge, '$restored = $wpdb->query') && str_contains($purge, '! SPF_Runtime::table_exists( SPF_Installer::table( $name ) )'), 'Round 8: purge compensation restore is not query/read-back verified.' );
 $assert( str_contains($purge, 'spf_purge_transient_cleanup_failed') && str_contains($purge, '$transient_cleanup = self::delete_owned_transients()'), 'Round 9: purge transient cleanup errors can still be ignored.' );
 $assert( str_contains($reconciler, 'spf_reconciliation_snapshot_persistence_failed') && str_contains($reconciler, 'The applied reconciliation state could not be durably verified.'), 'Round 10: reconciliation recovery/apply state persistence is not verified.' );
-$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, "'cross_file_contracts'") && str_contains($governance, "'browser_accessibility_rtl'"), 'Round 11: release evidence validation is not fail-closed for state/boolean gates.' );
+$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, "'fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready'"), 'Round 11: release evidence validation is not fail-closed for unknown states and true boolean gates.' );
 $assert( str_contains($system, 'spf_health_latest_query_failed') && str_contains($system, 'spf_health_latest_corrupt'), 'Round 12: latest health evidence can still fail/corrupt as a silent null.' );
 
 // 13-80: independent closure lenses on corrected source.

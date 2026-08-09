@@ -25,7 +25,7 @@ This review is a fresh 80-round source-level corrective cycle for File 01 v2.0. 
 | 8 | DEFECT FOUND → FIXED | purge compensation restore is not query/read-back verified. | Purge compensation RENAME and post-restore table state are explicitly verified. |
 | 9 | DEFECT FOUND → FIXED | purge transient cleanup errors can still be ignored. | Transient cleanup database failure now blocks truthful purge completion. |
 | 10 | DEFECT FOUND → FIXED | reconciliation recovery/apply state persistence is not verified. | Reconciliation recovery snapshots and applied/rolled-back state writes are read-back verified. |
-| 11 | DEFECT FOUND → FIXED | release evidence validation is not fail-closed for state/boolean gates. | Unknown release states are rejected and critical staged evidence booleans require literal true. |
+| 11 | DEFECT FOUND → FIXED | release evidence validation accepted unknown lifecycle states and true boolean gates needed strict typing. | Unknown release states are rejected; actual boolean gates require literal true, while descriptive staged evidence remains descriptive rather than being falsified into booleans. |
 | 12 | DEFECT FOUND → FIXED | latest health evidence can still fail/corrupt as a silent null. | Latest health evidence DB failure/corrupt JSON now returns explicit WP_Error rather than silent null. |
 | 13 | CLEAN | legacy File 00 boolean bridge is not read-only. | No new defect found on the corrected source; prior protections retained. |
 | 14 | CLEAN | Founder-only governance actions are not role-bound. | No new defect found on the corrected source; prior protections retained. |

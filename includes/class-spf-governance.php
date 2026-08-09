@@ -485,7 +485,7 @@ final class SPF_Governance {
 				return new WP_Error( 'spf_release_evidence_incomplete', sprintf( __( 'Release state %1$s requires evidence field %2$s.', 'sabri-platform-foundation' ), $state, $field ), array( 'status' => 422 ) );
 			}
 		}
-		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','upgrade_test','cross_file_contracts','backup_restore_test','rollback_rehearsal','browser_accessibility_rtl','founder_acceptance_pending','smoke_test','rollback_ready' ) as $boolean_field ) {
+		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
 			if ( array_key_exists( $boolean_field, $evidence ) && true !== $evidence[ $boolean_field ] ) {
 				return new WP_Error( 'spf_release_evidence_failed', sprintf( __( 'Release evidence field %s must be true.', 'sabri-platform-foundation' ), $boolean_field ), array( 'status' => 422 ) );
 			}

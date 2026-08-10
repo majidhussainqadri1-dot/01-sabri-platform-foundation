@@ -39,3 +39,5 @@ jobs:
           git add -A
           git commit -m 'Rounds 5-6: fail closed on audit evidence normalization and finalize tenth 80-round manifest'
           git push origin HEAD:codex/file-01-complete-foundation-1.0.0
+
+# retrigger after test-literal correction

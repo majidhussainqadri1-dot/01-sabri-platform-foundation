@@ -15,6 +15,7 @@ php tests/sixth-ten-round-review-tests.php
 php tests/seventh-ten-round-review-tests.php
 php tests/eighth-ten-round-review-tests.php
 php tests/fresh-eighty-round-review-tests.php
+if [[ -f tests/tenth-fresh-eighty-round-review-tests.php ]]; then php tests/tenth-fresh-eighty-round-review-tests.php; fi
 php tests/source-quality-tests.php
 php tests/schema-tests.php
 php tests/security-tests.php
@@ -22,6 +23,17 @@ php tests/contract-tests.php
 
 printf 'Source checksum manifest\n'
 sha256sum --check SOURCE-CHECKSUMS.sha256
+printf 'Closed-world source inventory\n'
+actual_inventory="$(mktemp)"
+manifest_inventory="$(mktemp)"
+trap 'rm -f "$actual_inventory" "$manifest_inventory"' EXIT
+find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print | LC_ALL=C sort >"$actual_inventory"
+awk '{print $2}' SOURCE-CHECKSUMS.sha256 | LC_ALL=C sort >"$manifest_inventory"
+diff -u "$manifest_inventory" "$actual_inventory"
+if find . -maxdepth 4 -type f \( -name '.fresh-*' -o -name '*.b64' \) -print -quit | grep -q .; then
+  echo 'Temporary review/apply artifact found' >&2
+  exit 1
+fi
 
 printf 'JSON documents\n'
 for file in SBOM.cdx.json DEPENDENCY-MANIFEST.json RELEASE-EVIDENCE-TEMPLATE.json; do

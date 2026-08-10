@@ -143,24 +143,29 @@ final class SPF_Audit {
 		}
 		$result = array();
 		foreach ( $context as $key => $value ) {
-			$key = substr( sanitize_key( (string) $key ), 0, 128 );
-			if ( '' === $key ) {
-				continue;
+			$raw_key = (string) $key;
+			$safe_key = sanitize_key( $raw_key );
+			if ( '' === $safe_key || $raw_key !== $safe_key || strlen( $safe_key ) > 128 || array_key_exists( $safe_key, $result ) ) {
+				return new WP_Error( 'spf_audit_context_key_invalid', __( 'Audit context keys must already be unique canonical keys within the bounded envelope.', 'sabri-platform-foundation' ) );
 			}
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message|payment|identity|document|private|credential|key/i', $key ) ) {
-				$result[ $key ] = '[redacted]';
+			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|sql|path|patient|message|payment|identity|document|private|credential|key/i', $safe_key ) ) {
+				$result[ $safe_key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
 				$nested = self::sanitize_context( $value, $depth + 1 );
 				if ( is_wp_error( $nested ) ) {
 					return $nested;
 				}
-				$result[ $key ] = $nested;
+				$result[ $safe_key ] = $nested;
 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
-				$result[ $key ] = $value;
+				$result[ $safe_key ] = $value;
 			} elseif ( is_scalar( $value ) ) {
-				$result[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 500 );
+				$scalar = sanitize_text_field( (string) $value );
+				if ( strlen( $scalar ) > 500 ) {
+					return new WP_Error( 'spf_audit_context_value_too_large', __( 'Audit context scalar evidence exceeds the bounded envelope.', 'sabri-platform-foundation' ) );
+				}
+				$result[ $safe_key ] = $scalar;
 			} else {
-				$result[ $key ] = '[unsupported]';
+				return new WP_Error( 'spf_audit_context_value_invalid', __( 'Audit context contains an unsupported value type.', 'sabri-platform-foundation' ) );
 			}
 		}
 		return SPF_Runtime::canonicalize( $result );

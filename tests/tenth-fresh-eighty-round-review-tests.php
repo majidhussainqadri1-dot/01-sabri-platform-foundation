@@ -18,13 +18,13 @@ $assert( $has('qa/run-tests.sh', 'Closed-world source inventory') && $has('qa/ru
 $assert( $has('.github/workflows/corrective-qa.yml', 'plugins/sabri-platform-foundation-01') && $has('.github/workflows/corrective-qa.yml', 'plugin activate sabri-platform-foundation-01'), 'Round 4: runtime QA does not use the canonical package folder.' );
 $assert( $has('includes/class-spf-audit.php', 'spf_audit_context_key_invalid'), 'Round 5: audit evidence keys can still normalize/collide.' );
 $assert( $has('includes/class-spf-audit.php', 'spf_audit_context_value_too_large') && $has('includes/class-spf-audit.php', 'spf_audit_context_value_invalid'), 'Round 6: audit evidence can still be truncated/normalized silently.' );
-$assert( $has('includes/class-spf-event-bus.php', "'|' . $version . '|'") && $has('includes/class-spf-event-bus.php', "'|' . $privacy_class . '|'"), 'Round 7: default event dedupe is not version/privacy bound.' );
+$assert( $has('includes/class-spf-event-bus.php', "'|' . \$version . '|'") && $has('includes/class-spf-event-bus.php', "'|' . \$privacy_class . '|'"), 'Round 7: default event dedupe is not version/privacy bound.' );
 $assert( $has('includes/class-spf-event-bus.php', 'handler_started') && $has('includes/class-spf-event-bus.php', 'reconciliation_required') && $has('includes/class-spf-event-bus.php', 'spf_outbox_reconciliation_required'), 'Round 8: ambiguous handler completion can still auto-retry.' );
 
 // Rounds 9-80: fresh closure lenses on the corrected source.
 $checks = array(
     9  => array('includes/class-spf-authorization.php', 'LEGACY_BOOLEAN_BRIDGE_ACTIONS', 'legacy authority bridge is not read-only'),
-    10 => array('includes/class-spf-authorization.php', "'founder' !== $institutional_role", 'Founder-only action role binding is missing'),
+    10 => array('includes/class-spf-authorization.php', "'founder' !== \$institutional_role", 'Founder-only action role binding is missing'),
     11 => array('includes/class-spf-authorization.php', 'object_hash', 'authorization object binding is missing'),
     12 => array('includes/class-spf-authorization.php', 'expected_purpose', 'authorization purpose binding is missing'),
     13 => array('includes/class-spf-registry.php', 'spf_manifest_self_dependency', 'self-dependency is not rejected'),
@@ -57,7 +57,7 @@ $checks = array(
     40 => array('includes/class-spf-system-check.php', 'max_interval_seconds', 'external scheduler cadence is not evidenced'),
     41 => array('includes/class-spf-system-check.php', 'SPF_Audit::verify_chain', 'system check omits audit-chain verification'),
     42 => array('includes/class-spf-system-check.php', 'schema_version_current', 'system check omits schema drift'),
-    43 => array('includes/class-spf-plugin.php', "'operational'=>$operational", 'operational status truth is collapsed'),
+    43 => array('includes/class-spf-plugin.php', "'operational'=>\$operational", 'operational status truth is collapsed'),
     44 => array('includes/class-spf-future-foundation.php', 'spf_future_foundation_tick', 'future-foundation health tick is missing'),
     45 => array('includes/class-spf-future-foundation.php', 'spf_five_minutes', 'future-foundation cadence is not five minutes'),
     46 => array('includes/class-spf-rest.php', 'permission_callback', 'restricted REST permission callbacks are missing'),

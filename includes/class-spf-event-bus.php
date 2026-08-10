@@ -31,7 +31,7 @@ final class SPF_Event_Bus {
 				? $canonical_dedupe_key
 				: hash( 'sha256', $raw_dedupe_key );
 		} else {
-			$dedupe_key = hash( 'sha256', $event_name . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $payload_json );
+			$dedupe_key = hash( 'sha256', $event_name . '|' . $version . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $privacy_class . '|' . $payload_json );
 		}
 		$now = SPF_Runtime::now_mysql();
 		$previous_suppress = $wpdb->suppress_errors( true );
@@ -58,13 +58,24 @@ final class SPF_Event_Bus {
 		if ( is_wp_error( $token ) ) {
 			return $token;
 		}
-		$processed = array( 'sent'=>0,'retry'=>0,'dead'=>0,'recovered'=>0,'conflict'=>0 );
+		$processed = array( 'sent'=>0,'retry'=>0,'dead'=>0,'recovered'=>0,'reconciliation_required'=>0,'conflict'=>0 );
 		try {
 			$table = SPF_Installer::table( 'outbox' );
 			$now = SPF_Runtime::now_mysql();
+			$frozen = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status='reconciliation_required',available_at=%s,last_error='handler_completion_ambiguous' WHERE status='processing' AND last_error='handler_started' AND available_at<%s",
+					$now,
+					$now
+				)
+			);
+			if ( false === $frozen ) {
+				return new WP_Error( 'spf_outbox_ambiguous_recovery_failed', __( 'The outbox ambiguous-completion recovery query failed.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+			}
+			$processed['reconciliation_required'] = (int) $frozen;
 			$recovered = $wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$table} SET status='retry',available_at=%s,last_error='expired_processing_lease_recovered' WHERE status='processing' AND available_at<%s",
+					"UPDATE {$table} SET status='retry',available_at=%s,last_error='expired_processing_lease_recovered' WHERE status='processing' AND (last_error IS NULL OR last_error<>'handler_started') AND available_at<%s",
 					$now,
 					$now
 				)
@@ -82,40 +93,67 @@ final class SPF_Event_Bus {
 				$lease_until = gmdate( 'Y-m-d H:i:s', time() + 600 );
 				$claimed = $wpdb->update(
 					$table,
-					array( 'status'=>'processing','available_at'=>$lease_until ),
+					array( 'status'=>'processing','available_at'=>$lease_until,'last_error'=>'claimed_not_started' ),
 					array( 'id'=>(int)$row['id'],'status'=>$row['status'],'available_at'=>$row['available_at'] ),
-					array( '%s','%s' ), array( '%d','%s','%s' )
+					array( '%s','%s','%s' ), array( '%d','%s','%s' )
 				);
 				if ( 1 !== $claimed ) {
 					$processed['conflict']++;
 					continue;
 				}
 				$hook = 'spf_event_' . sanitize_key( str_replace( '.', '_', strtolower( $row['event_name'] ) ) );
+				$handler_started = false;
 				try {
 					$payload = json_decode( $row['payload_json'], true );
 					if ( ! is_array( $payload ) || json_last_error() !== JSON_ERROR_NONE ) {
 						throw new RuntimeException( 'Invalid stored event payload.' );
 					}
+					$marked = $wpdb->update(
+						$table,
+						array( 'last_error'=>'handler_started' ),
+						array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until ),
+						array( '%s' ), array( '%d','%s','%s' )
+					);
+					if ( 1 !== $marked ) {
+						throw new RuntimeException( 'The event lease could not be durably marked before handler execution.' );
+					}
+					$handler_started = true;
 					do_action( $hook, $payload, $row );
 					$updated = $wpdb->update(
 						$table,
 						array( 'status'=>'sent','sent_at'=>SPF_Runtime::now_mysql(),'last_error'=>'','available_at'=>SPF_Runtime::now_mysql() ),
-						array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until ),
-						array( '%s','%s','%s','%s' ), array( '%d','%s','%s' )
+						array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until,'last_error'=>'handler_started' ),
+						array( '%s','%s','%s','%s' ), array( '%d','%s','%s','%s' )
 					);
 					if ( 1 !== $updated ) {
 						throw new RuntimeException( 'The event lease changed before successful finalization.' );
 					}
 					$processed['sent']++;
 				} catch ( Throwable $error ) {
+					if ( $handler_started ) {
+						$freeze = $wpdb->update(
+							$table,
+							array( 'status'=>'reconciliation_required','available_at'=>SPF_Runtime::now_mysql(),'last_error'=>'handler_completion_ambiguous' ),
+							array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until,'last_error'=>'handler_started' ),
+							array( '%s','%s','%s' ), array( '%d','%s','%s','%s' )
+						);
+						if ( 1 === $freeze ) {
+							$processed['reconciliation_required']++;
+						} else {
+							$processed['conflict']++;
+						}
+						SPF_Audit::record( 'outbox_handler_completion_ambiguous', 'foundation_event', $row['event_id'], 'reconciliation_required', array( 'purpose'=>'outbox_dispatch','event_name'=>$row['event_name'] ) );
+						do_action( 'spf_outbox_reconciliation_required', $row['event_id'], $row['event_name'] );
+						continue;
+					}
 					$attempts = (int) $row['attempts'] + 1;
 					$status = $attempts >= 7 ? 'dead' : 'retry';
 					$delay = min( 21600, 60 * ( 2 ** min( 8, $attempts ) ) );
 					$updated = $wpdb->update(
 						$table,
 						array( 'status'=>$status,'attempts'=>$attempts,'available_at'=>gmdate('Y-m-d H:i:s',time()+$delay),'last_error'=>substr(sanitize_text_field($error->getMessage()),0,191) ),
-						array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until ),
-						array( '%s','%d','%s','%s' ), array( '%d','%s','%s' )
+						array( 'id'=>(int)$row['id'],'status'=>'processing','available_at'=>$lease_until,'last_error'=>'claimed_not_started' ),
+						array( '%s','%d','%s','%s' ), array( '%d','%s','%s','%s' )
 					);
 					if ( 1 !== $updated ) {
 						$processed['conflict']++;

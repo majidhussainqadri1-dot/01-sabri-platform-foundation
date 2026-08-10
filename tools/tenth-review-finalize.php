@@ -63,4 +63,18 @@ if (file_put_contents($path, $new) === false) {
     fwrite(STDERR, "Unable to write audit source.\n");
     exit(1);
 }
-echo "Audit context patch applied.\n";
+
+$testPath = dirname(__DIR__) . '/tests/tenth-fresh-eighty-round-review-tests.php';
+$test = file_get_contents($testPath);
+if (!is_string($test)) {
+    fwrite(STDERR, "Unable to read tenth-review test.\n");
+    exit(1);
+}
+foreach (array('$version', '$privacy_class', '$institutional_role', '$operational') as $variable) {
+    $test = str_replace($variable, '\\' . $variable, $test);
+}
+if (file_put_contents($testPath, $test) === false) {
+    fwrite(STDERR, "Unable to write tenth-review test.\n");
+    exit(1);
+}
+echo "Audit context patch and test literal corrections applied.\n";

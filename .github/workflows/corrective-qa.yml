@@ -74,29 +74,29 @@ jobs:
           wp core install --path=/tmp/wp --url=http://example.test --title='File 01 CI' --admin_user=admin --admin_password="$ADMIN_PASS" --admin_email=admin@example.test --skip-email
       - name: Install and activate exact plugin source
         run: |
-          mkdir -p /tmp/wp/wp-content/plugins/sabri-platform-foundation
-          rsync -a --delete --exclude=.git --exclude=build --exclude=dist ./ /tmp/wp/wp-content/plugins/sabri-platform-foundation/
-          wp plugin activate sabri-platform-foundation --user=admin --path=/tmp/wp
+          mkdir -p /tmp/wp/wp-content/plugins/sabri-platform-foundation-01
+          rsync -a --delete --exclude=.git --exclude=build --exclude=dist ./ /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/
+          wp plugin activate sabri-platform-foundation-01 --user=admin --path=/tmp/wp
       - name: Run WordPress/MySQL integration tests
-        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-runtime-smoke.php --user=admin --path=/tmp/wp
+        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-runtime-smoke.php --user=admin --path=/tmp/wp
       - name: Run Future Foundation 18-enhancement runtime smoke
-        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-future-foundation-smoke.php --user=admin --path=/tmp/wp
+        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-future-foundation-smoke.php --user=admin --path=/tmp/wp
       - name: Run concurrent idempotency test
         run: |
           wp option delete spf_concurrency_counter --path=/tmp/wp || true
           wp db query "DELETE FROM wp_spf_idempotency WHERE action_name='concurrency_probe'" --path=/tmp/wp
-          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker1.log 2>&1 &
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker1.log 2>&1 &
           P1=$!
-          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker2.log 2>&1 &
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker2.log 2>&1 &
           P2=$!
           wait "$P1" || true
           wait "$P2" || true
           cat /tmp/worker1.log /tmp/worker2.log
           test "$(wp option get spf_concurrency_counter --path=/tmp/wp)" = "1"
-          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp
           test "$(wp option get spf_concurrency_counter --path=/tmp/wp)" = "1"
       - name: Run disposable destructive-purge smoke
-        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/wp-purge-smoke.php --user=admin --path=/tmp/wp
+        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-purge-smoke.php --user=admin --path=/tmp/wp
 
   deterministic-package:
     name: Deterministic package

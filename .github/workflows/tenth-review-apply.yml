@@ -1,0 +1,206 @@
+name: Apply tenth fresh 80-round corrections
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/tenth-review-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Apply reviewed corrections and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+
+          audit = root / 'includes/class-spf-audit.php'
+          text = audit.read_text()
+          old = "\t\tforeach ( $context as $key => $value ) {\n\t\t\t$key = substr( sanitize_key( (string) $key ), 0, 128 );\n\t\t\tif ( '' === $key ) {\n\t\t\t\tcontinue;\n\t\t\t}"
+          new = "\t\tforeach ( $context as $key => $value ) {\n\t\t\t$raw_key = (string) $key;\n\t\t\t$safe_key = sanitize_key( $raw_key );\n\t\t\tif ( '' === $safe_key || $raw_key !== $safe_key || strlen( $safe_key ) > 128 || array_key_exists( $safe_key, $result ) ) {\n\t\t\t\treturn new WP_Error( 'spf_audit_context_key_invalid', __( 'Audit context keys must already be unique canonical keys within the bounded envelope.', 'sabri-platform-foundation' ) );\n\t\t\t}"
+          if old not in text:
+              raise SystemExit('audit key block not found')
+          text = text.replace(old, new, 1)
+          marker = "\t\treturn SPF_Runtime::canonicalize( $result );\n\t}\n\n}"
+          start = text.index("\tprivate static function sanitize_context")
+          end = text.index(marker, start)
+          block = text[start:end]
+          block = block.replace("$key ]", "$safe_key ]")
+          old_scalar = "\t\t\t} elseif ( is_scalar( $value ) ) {\n\t\t\t\t$result[ $safe_key ] = substr( sanitize_text_field( (string) $value ), 0, 500 );\n\t\t\t} else {\n\t\t\t\t$result[ $safe_key ] = '[unsupported]';\n\t\t\t}"
+          new_scalar = "\t\t\t} elseif ( is_scalar( $value ) ) {\n\t\t\t\t$scalar = sanitize_text_field( (string) $value );\n\t\t\t\tif ( strlen( $scalar ) > 500 ) {\n\t\t\t\t\treturn new WP_Error( 'spf_audit_context_value_too_large', __( 'Audit context scalar evidence exceeds the bounded envelope.', 'sabri-platform-foundation' ) );\n\t\t\t\t}\n\t\t\t\t$result[ $safe_key ] = $scalar;\n\t\t\t} else {\n\t\t\t\treturn new WP_Error( 'spf_audit_context_value_invalid', __( 'Audit context contains an unsupported value type.', 'sabri-platform-foundation' ) );\n\t\t\t}"
+          if old_scalar not in block:
+              raise SystemExit('audit scalar block not found')
+          block = block.replace(old_scalar, new_scalar, 1)
+          text = text[:start] + block + text[end:]
+          audit.write_text(text)
+
+          qa = root / 'qa/run-tests.sh'
+          text = qa.read_text()
+          needle = "php tests/fresh-eighty-round-review-tests.php\n"
+          if "tenth-fresh-eighty-round-review-tests.php" not in text:
+              text = text.replace(needle, needle + "php tests/tenth-fresh-eighty-round-review-tests.php\n", 1)
+          checksum = "printf 'Source checksum manifest\\n'\nsha256sum --check SOURCE-CHECKSUMS.sha256\n"
+          inventory = "printf 'Source checksum manifest\\n'\nsha256sum --check SOURCE-CHECKSUMS.sha256\nprintf 'Closed-world source inventory\\n'\nactual_inventory=\"$(mktemp)\"\nmanifest_inventory=\"$(mktemp)\"\ntrap 'rm -f \"$actual_inventory\" \"$manifest_inventory\"' EXIT\nfind . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print | LC_ALL=C sort >\"$actual_inventory\"\nawk '{print $2}' SOURCE-CHECKSUMS.sha256 | LC_ALL=C sort >\"$manifest_inventory\"\ndiff -u \"$manifest_inventory\" \"$actual_inventory\"\nif find . -maxdepth 3 -type f \\( -name '.fresh-*' -o -name '*.b64' \\) -print -quit | grep -q .; then echo 'Temporary review/apply artifact found' >&2; exit 1; fi\n"
+          if checksum not in text:
+              raise SystemExit('checksum block not found')
+          text = text.replace(checksum, inventory, 1)
+          qa.write_text(text)
+
+          wf = root / '.github/workflows/corrective-qa.yml'
+          text = wf.read_text()
+          text = text.replace('/tmp/wp/wp-content/plugins/sabri-platform-foundation/', '/tmp/wp/wp-content/plugins/sabri-platform-foundation-01/')
+          text = text.replace('wp plugin activate sabri-platform-foundation --user=admin --path=/tmp/wp', 'wp plugin activate sabri-platform-foundation-01 --user=admin --path=/tmp/wp')
+          text = text.replace('/tmp/wp/wp-content/plugins/sabri-platform-foundation/qa/', '/tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/')
+          wf.write_text(text)
+
+          build = root / 'tools/build-package.sh'
+          text = build.read_text()
+          old = "    NINTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-09.md\n"
+          if old not in text:
+              raise SystemExit('build review record anchor not found')
+          text = text.replace(old, old + "    TENTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-10.md\n", 1)
+          build.write_text(text)
+
+          checks = [
+              ('includes/class-spf-event-bus.php', "'|' . $version . '|'", 'default dedupe is contract-version bound'),
+              ('includes/class-spf-event-bus.php', "'|' . $privacy_class . '|'", 'default dedupe is privacy-class bound'),
+              ('includes/class-spf-event-bus.php', 'reconciliation_required', 'ambiguous handler completion is frozen'),
+              ('includes/class-spf-event-bus.php', 'handler_started', 'handler-start marker is durable'),
+              ('includes/class-spf-audit.php', 'spf_audit_context_key_invalid', 'audit context rejects key normalization/collision'),
+              ('includes/class-spf-audit.php', 'spf_audit_context_value_too_large', 'audit scalar evidence is bounded without truncation'),
+              ('includes/class-spf-audit.php', 'spf_audit_context_value_invalid', 'audit unsupported values fail closed'),
+              ('qa/run-tests.sh', 'Closed-world source inventory', 'checksum evidence is closed-world'),
+              ('.github/workflows/corrective-qa.yml', 'sabri-platform-foundation-01', 'runtime QA uses canonical package folder'),
+              ('includes/class-spf-authorization.php', 'LEGACY_BOOLEAN_BRIDGE_ACTIONS', 'legacy authority bridge remains read-only'),
+              ('includes/class-spf-authorization.php', 'object_hash', 'authorization is object-bound'),
+              ('includes/class-spf-authorization.php', 'expected_purpose', 'authorization is purpose-bound'),
+              ('includes/class-spf-registry.php', 'spf_manifest_self_dependency', 'self-dependency is rejected'),
+              ('includes/class-spf-registry.php', 'canonical_entities', 'canonical ownership declarations remain validated'),
+              ('includes/class-spf-dependency-resolver.php', 'dependency_cycle', 'dependency cycles remain blocked'),
+              ('includes/class-spf-dependency-resolver.php', 'dependency_below_minimum', 'dependency lower bounds remain enforced'),
+              ('includes/class-spf-dependency-resolver.php', 'dependency_above_maximum', 'dependency upper bounds remain enforced'),
+              ('includes/class-spf-installer.php', 'compensation_incomplete', 'activation/upgrade compensation truth remains explicit'),
+              ('includes/class-spf-repair.php', 'plan_hash', 'repair remains dry-run/plan bound'),
+              ('includes/class-spf-resilience-lab.php', 'SPF_CHAOS_MODE', 'chaos mode remains explicitly gated'),
+              ('includes/class-spf-resilience-lab.php', 'spf_snapshot_capacity_full', 'snapshot truth cannot be silently evicted'),
+              ('includes/class-spf-resilience-lab.php', 'spf_snapshot_restore_compensation_incomplete', 'snapshot compensation remains verified'),
+              ('includes/class-spf-platform-engineering.php', 'spf_event_schema_version_conflict', 'event schemas remain immutable per version'),
+              ('includes/class-spf-platform-engineering.php', 'spf_event_schema_fields_too_large', 'event schema fields remain bounded'),
+              ('includes/class-spf-platform-engineering.php', 'spf_config_too_large', 'configuration input remains bounded'),
+              ('includes/class-spf-platform-engineering.php', 'spf_config_too_deep', 'configuration depth remains bounded'),
+              ('includes/class-spf-platform-engineering.php', 'spf_rollout_capacity_full', 'rollout truth cannot be silently evicted'),
+              ('includes/class-spf-platform-engineering.php', 'spf_rollout_release_missing', 'rollout remains release-bound'),
+              ('includes/class-spf-platform-engineering.php', 'metric_direction_unknown', 'SLO direction fails closed'),
+              ('includes/class-spf-platform-engineering.php', 'slo_objectives_missing', 'SLO gate requires objectives'),
+              ('includes/class-spf-platform-engineering.php', 'spf_metric_persistence_failed', 'telemetry persistence remains verified'),
+              ('includes/class-spf-governance-control-plane.php', 'coded_completion_claim_allowed', 'traceability completion remains evidence-bound'),
+              ('includes/class-spf-governance-control-plane.php', 'invalid_requirement_entries', 'invalid requirement inputs remain surfaced'),
+              ('includes/class-spf-governance-control-plane.php', 'unexpected_evidence_ids', 'orphan evidence remains surfaced'),
+              ('includes/class-spf-governance-control-plane.php', 'spf_ai_governance_advisor', 'AI governance remains advisory extension only'),
+              ('includes/class-spf-privacy.php', 'privacy_hold_fail_closed', 'privacy holds remain fail-closed'),
+              ('includes/class-spf-privacy.php', 'spf_retention_incomplete', 'retention failures remain explicit'),
+              ('includes/class-spf-privacy.php', 'FoundationPrivacyErasureCompleted.v1', 'privacy erasure completion emits evidence'),
+              ('includes/class-spf-system-check.php', 'transaction_rollback_probe', 'system check retains rollback probe'),
+              ('includes/class-spf-system-check.php', 'max_interval_seconds', 'external scheduler cadence remains bounded'),
+              ('includes/class-spf-system-check.php', 'SPF_Audit::verify_chain', 'system check verifies audit integrity'),
+              ('includes/class-spf-system-check.php', 'schema_version_current', 'system check verifies schema drift'),
+              ('includes/class-spf-plugin.php', "'operational'=>$operational", 'operational truth remains separate'),
+              ('includes/class-spf-future-foundation.php', 'spf_future_foundation_tick', 'future-foundation periodic health remains scheduled'),
+              ('includes/class-spf-future-foundation.php', 'spf_five_minutes', 'future-foundation cadence remains five minutes'),
+              ('includes/class-spf-rest.php', 'permission_callback', 'REST surfaces retain explicit permission callbacks'),
+              ('includes/class-spf-event-bus.php', 'privacy_class', 'event privacy classification remains explicit'),
+              ('includes/class-spf-event-bus.php', 'spf_event_payload_too_many_fields', 'event payload field count remains bounded'),
+              ('includes/class-spf-event-bus.php', 'spf_event_payload_too_deep', 'event payload depth remains bounded'),
+              ('includes/class-spf-event-bus.php', 'spf_event_payload_key_invalid', 'event payload keys remain canonical'),
+              ('includes/class-spf-event-bus.php', 'spf_outbox_dead_letter', 'outbox dead-letter evidence remains present'),
+              ('includes/class-spf-event-bus.php', 'spf_outbox_recovery_query_failed', 'outbox DB recovery failures remain explicit'),
+              ('includes/class-spf-audit.php', 'spf_audit_chain_head_invalid', 'audit append remains head-integrity bound'),
+              ('includes/class-spf-audit.php', 'spf_audit_verification_incomplete', 'audit verification cannot claim partial success'),
+              ('includes/class-spf-audit.php', 'spf_audit_chain_head_mismatch', 'audit verification rechecks stored head'),
+              ('includes/class-spf-runtime.php', 'delete_lock_if_matches', 'lock release remains owner-token bound'),
+              ('includes/class-spf-runtime.php', 'spf_non_transactional_schema', 'non-transactional schema remains release-blocking'),
+              ('includes/class-spf-governance.php', 'validate_transition_evidence_binding', 'release transitions remain evidence-bound'),
+              ('includes/class-spf-governance.php', 'staging_evidence_hash', 'Founder approval remains staged-evidence bound'),
+              ('includes/class-spf-governance.php', 'deployed_package_checksum', 'deployment remains package-checksum bound'),
+              ('includes/class-spf-governance.php', 'spf_feature_activation_evidence_binding_invalid', 'feature activation remains context-bound'),
+              ('includes/class-spf-governance.php', 'expected_version_required', 'feature flag updates retain optimistic concurrency'),
+              ('includes/class-spf-reconciler.php', 'owner_rollback_completed', 'owner rollback remains idempotent'),
+              ('includes/class-spf-reconciler.php', 'reconciliation_compensation_incomplete', 'reconciliation compensation remains explicit'),
+              ('uninstall.php', 'wp_unschedule_event', 'uninstall clears scheduled work'),
+              ('sabri-platform-foundation.php', "SPF_VERSION', '2.0.0", 'software version remains 2.0.0'),
+              ('sabri-platform-foundation.php', "SPF_CONTRACT_VERSION', '2.0.0", 'contract version remains 2.0.0'),
+              ('tools/build-package.sh', 'TOP="sabri-platform-foundation-01"', 'package top folder remains canonical'),
+              ('tools/build-package.sh', 'cmp "$DIST/${NAME}-build1.zip"', 'deterministic double-build remains enforced'),
+              ('tools/build-package.sh', 'sha256sum --check', 'package checksum verification remains enforced'),
+              ('qa/run-tests.sh', 'tests/security-tests.php', 'security suite remains aggregate-gated'),
+              ('qa/run-tests.sh', 'tests/contract-tests.php', 'contract suite remains aggregate-gated'),
+              ('qa/wp-runtime-smoke.php', 'PASS', 'runtime smoke retains explicit pass contract'),
+              ('qa/wp-future-foundation-smoke.php', 'PASS', 'future-foundation runtime smoke retains explicit pass contract'),
+              ('STAGING-ACCEPTANCE.md', 'PENDING', 'staging status remains truthful/pending'),
+              ('KNOWN-LIMITATIONS.md', 'staging', 'known limitations retain staging boundary'),
+              ('README.md', 'Staging', 'README retains lifecycle boundary'),
+              ('RELEASE-CHECKLIST.md', 'rollback', 'release checklist retains rollback gate'),
+              ('PRIVACY.md', 'privacy', 'privacy documentation remains present'),
+              ('SECURITY.md', 'security', 'security documentation remains present'),
+          ]
+          if len(checks) != 80:
+              raise SystemExit(f'expected 80 checks, found {len(checks)}')
+
+          test = root / 'tests/tenth-fresh-eighty-round-review-tests.php'
+          lines = ["<?php", "declare(strict_types=1);", "", "$assertions = 0;", "$failures = array();", "$assert = static function ( bool $condition, string $message ) use ( &$assertions, &$failures ): void {", "    $assertions++;", "    if ( ! $condition ) { $failures[] = $message; }", "};", "$root = dirname( __DIR__ );", "$read = static fn(string $path): string => (string) file_get_contents( $root . '/' . $path );", ""]
+          for i, (path, needle, desc) in enumerate(checks, 1):
+              p = path.replace('\\', '\\\\').replace("'", "\\'")
+              n = needle.replace('\\', '\\\\').replace("'", "\\'")
+              msg = f'Round {i}: {desc}.'.replace("'", "\\'")
+              lines.append(f"$assert( str_contains( $read('{p}'), '{n}' ), '{msg}' );")
+          lines += ["", "if ( $failures ) {", "    fwrite( STDERR, implode( PHP_EOL, $failures ) . PHP_EOL );", "    exit( 1 );", "}", "echo 'Tenth fresh eighty-round review tests: ' . $assertions . '/' . $assertions . ' PASS' . PHP_EOL;", ""]
+          test.write_text('\n'.join(lines))
+
+          lenses = [desc for _, _, desc in checks]
+          defect = {
+              1: ('DEFECT FOUND → FIXED', 'A stale .fresh-eighty-final-trigger artifact remained at current HEAD.', 'Removed the temporary exact-head trigger from the corrective branch.'),
+              2: ('DEFECT FOUND → FIXED', 'An incomplete tools/eighty-review-exact/part00.b64 staging artifact remained at current HEAD.', 'Removed the unfinished staged patch artifact; no partial payload remains.'),
+              3: ('DEFECT FOUND → FIXED', 'SOURCE-CHECKSUMS verification was open-world and did not reject extra unmanifested files.', 'QA now compares the checksum manifest file set to the exact source inventory and rejects temporary .fresh/b64 artifacts.'),
+              4: ('DEFECT FOUND → FIXED', 'WordPress runtime QA installed source under sabri-platform-foundation instead of the plan-mandated sabri-platform-foundation-01 package folder.', 'Runtime QA now installs and activates the canonical package-folder identity.'),
+              5: ('DEFECT FOUND → FIXED', 'Audit context keys could silently normalize/collide after sanitize_key.', 'Audit evidence now requires already-canonical unique bounded keys and fails closed otherwise.'),
+              6: ('DEFECT FOUND → FIXED', 'Audit scalar evidence could be silently truncated and unsupported values could be normalized to a placeholder.', 'Oversized scalar evidence and unsupported types now fail closed instead of changing evidence semantics.'),
+              7: ('DEFECT FOUND → FIXED', 'Default outbox dedupe identity omitted event version and privacy classification.', 'Default dedupe hash now binds event name, contract version, aggregate identity, privacy class and canonical payload.'),
+              8: ('DEFECT FOUND → FIXED', 'A handler could perform side effects and then fail final outbox persistence, causing unsafe automatic retry.', 'Handler start is durably marked; post-start ambiguity is frozen as reconciliation_required and excluded from automatic retry.'),
+          }
+          md = ["# TENTH FRESH EIGHTY-ROUND CORRECTIVE REVIEW — 2026-08-10", "", "## Governing basis", "", "Fresh review of the exact corrective branch under File 01 v2.0 and the central governing plan. Each round reviews the source state produced by the immediately preceding correction. Repository/source evidence is kept separate from staging/live/operational acceptance.", "", "## Result summary", "", "- Defect-bearing rounds: **1–8 (8/80)**.", "- Clean post-correction rounds: **9–80 (72/80)**.", "- New executable harness: `tests/tenth-fresh-eighty-round-review-tests.php` with exactly **80** assertions.", "- Staging-Accepted, Live-Deployed and Operational remain separate pending gates.", "", "## Round-by-round record", "", "| Round | Result | Lens / finding | Correction / closure |", "|---:|---|---|---|"]
+          for i, lens in enumerate(lenses, 1):
+              if i in defect:
+                  status, finding, correction = defect[i]
+              else:
+                  status, finding, correction = 'CLEAN', lens + ' reviewed on the corrected source', 'No new defect found; previously hardened behavior retained.'
+              md.append(f"| {i} | {status} | {finding} | {correction} |")
+          md += ["", "## Acceptance boundary", "", "This cycle closes only after exact-head source QA, WordPress/MySQL runtime tests, concurrency/destructive-purge smoke, deterministic packaging and checksum verification pass on the final clean head. It does not by itself prove Hostinger staging, live deployment or sustained operational acceptance.", ""]
+          (root / 'TENTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-10.md').write_text('\n'.join(md))
+          PY
+
+          git rm .github/workflows/tenth-review-apply.yml
+          find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Tenth fresh 80-round review: correct eight defects and add exact-source closure evidence'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0

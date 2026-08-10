@@ -6,8 +6,8 @@ This is a fresh 80-round source-level corrective review of File 01 v2.0 against 
 
 ## Result summary
 
-- Defect-bearing rounds: **1–8 (8/80)**.
-- Clean post-correction rounds: **9–80 (72/80)**.
+- Defect-bearing rounds: **1–8 and 75 (9/80)**.
+- Clean post-correction rounds: **9–74 and 76–80 (71/80)**.
 - Executable closure harness: `tests/tenth-fresh-eighty-round-review-tests.php` with exactly **80** assertions.
 - No Staging-Accepted, Live-Deployed or Operational claim is made by this record.
 
@@ -89,7 +89,7 @@ This is a fresh 80-round source-level corrective review of File 01 v2.0 against 
 | 72 | CLEAN | Aggregate contract test inclusion. | No new defect found after prior corrections. |
 | 73 | CLEAN | WordPress/MySQL runtime-smoke contract. | No new defect found after prior corrections. |
 | 74 | CLEAN | Future Foundation runtime-smoke contract. | No new defect found after prior corrections. |
-| 75 | CLEAN | Truthful Staging-Accepted pending status. | No new defect found after prior corrections. |
+| 75 | QA-CONTRACT DEFECT FOUND → FIXED | Staging status validation expected a literal `PENDING` token although the canonical acceptance file expresses pending state through unchecked checklist items. | Regression harness now validates the unchecked acceptance checklist rather than a brittle literal. |
 | 76 | CLEAN | Known-limitations staging boundary. | No new defect found after prior corrections. |
 | 77 | CLEAN | README lifecycle-status separation. | No new defect found after prior corrections. |
 | 78 | CLEAN | Release-checklist rollback gate. | No new defect found after prior corrections. |

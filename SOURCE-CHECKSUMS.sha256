@@ -31,7 +31,7 @@ e1e43485504201cfb377654789e9cf5aa2610e5c0469319804218b3104e9eedb  ./SECURITY.md
 d8d4bb7d68ff2fbc29c9e5a1a387407eddf5067c59970ff07043deb19f51fa78  ./SIXTH-TEN-ROUND-REVIEW-2026-08-08.md
 2f2f28993c1033b02325bb2e0be41a05c63ab7de89619975bdff808d0734f7ef  ./STAGING-ACCEPTANCE.md
 1d719a22192614da229a0850f60072c8bc6f9aeeb8063e5d707f9af6a5bedde0  ./TEN-ROUND-REVIEW-2026-08-08.md
-4c874ef6f466d164444c7ae8c24aa3fc51f6666096f6d41fc515bf25fce7e727  ./TENTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-10.md
+d4ddaa5203eef9bdc109ea1b60be5d2c94ad2bcc91d243eb1cb6146704b5fa4f  ./TENTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-10.md
 223d556ea0700d77e345c0669153e4ff3e668699bd27f7e7da1fec64c063a42f  ./THIRD-TEN-ROUND-REVIEW-2026-08-08.md
 bd72479ff5df366d8ea01de15b52dcb7a5236c2ce0c7e0c876707924d38da32f  ./TRACEABILITY.md
 952194815f6b1c7325274b8039f26e49af92ca0185d44cf428dc96afd7a83f33  ./includes/class-spf-admin.php
@@ -74,7 +74,7 @@ cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema
 2c5c82b596418ab6410bcc582b3bdfc986f3ba3bbfa0bfabc3701447fcf0850e  ./tests/seventh-ten-round-review-tests.php
 2bcc48d87fcd99e468b12f58ae796e7a48c0d96ce4afd6acec0e675250ec784d  ./tests/sixth-ten-round-review-tests.php
 f2d035b8f3105fbb61a23501dd92331386590a763f5c0fe3fdabdc1eb60c674a  ./tests/source-quality-tests.php
-a5f5d69926754317d6b9db43f42cbe0d27fb10bd55c8a5a67d289d555d289dfb  ./tests/tenth-fresh-eighty-round-review-tests.php
+8ba279eb42c195c11ba8377c0f8c566bf2d8d937f67c00b9a0665f9398ae65f6  ./tests/tenth-fresh-eighty-round-review-tests.php
 63f2c7ed14a09ec8e29364763450e1937ad2f268a79247715e4fda27881e5eea  ./tests/third-ten-round-review-tests.php
 838c9b168db2cafe03a4112173f7b1b944f7bc04ad9f70c07fb19b61877f46e0  ./tests/unit-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh

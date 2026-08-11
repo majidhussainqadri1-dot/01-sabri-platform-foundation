@@ -1,1 +1,5 @@
-exec(gzip.decompress(base64.b64decode((ROOT/'tools/.th13-r10.b64').read_text().strip())).decode(), globals())
+_r10_paths=[ROOT/f'tools/.th13-r10-{i:02d}.b64' for i in range(6)]
+_r10_data=''.join(p.read_text().strip() for p in _r10_paths)
+for _p in _r10_paths+[ROOT/'tools/.th13-r10.b64']:
+    if _p.exists(): _p.unlink()
+exec(gzip.decompress(base64.b64decode(_r10_data)).decode(), globals())

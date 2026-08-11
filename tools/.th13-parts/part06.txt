@@ -8,7 +8,7 @@ _r10_inject=_r10_marker+"s=twelfth.read_text()\ns=s.replace(\"'file-01' !== sani
 if _r10_marker not in _r10_src: raise SystemExit('Twelfth fixture injection marker missing')
 _r10_src=_r10_src.replace(_r10_marker,_r10_inject,1)
 _r10_marker2="(ROOT/'qa/wp-thirteenth-ten-round-smoke.php').write_text("
-_r10_inject2="_t13=ROOT/'tests/thirteenth-ten-round-review-tests.php'\n_t13s=_t13.read_text()\n_t13s=_t13s.replace(\" && ! str_contains( $resilience, 'get_option( \\\'spf_feature_flags\\\'' )\", \"\")\n_t13.write_text(_t13s)\n"+_r10_marker2
+_r10_inject2="_t13=ROOT/'tests/thirteenth-ten-round-review-tests.php'\n_t13_lines=_t13.read_text().splitlines()\n_t13_found=False\nfor _i,_line in enumerate(_t13_lines):\n    if 'Self-heal still reads a stale feature-flag option instead of the canonical table.' in _line:\n        _t13_lines[_i]=\"$assert( str_contains( $resilience, 'expired_flag_rows' ) && str_contains( $resilience, 'SPF_Installer::table( \\\'flags\\\' )' ), 'Self-heal canonical flag-table path is missing.' );\"\n        _t13_found=True\nif not _t13_found: raise SystemExit('Thirteenth self-heal fixture marker missing')\n_t13.write_text('\\n'.join(_t13_lines)+'\\n')\n"+_r10_marker2
 if _r10_marker2 not in _r10_src: raise SystemExit('Thirteenth source fixture injection marker missing')
 _r10_src=_r10_src.replace(_r10_marker2,_r10_inject2,1)
 exec(_r10_src, globals())

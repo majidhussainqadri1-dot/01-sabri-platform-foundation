@@ -1,4 +1,4 @@
-# File 01 Requirements-to-Code Traceability — 1.2.0
+# File 01 Requirements-to-Code Traceability — Software 2.0.0 / Schema 1.2.0 / Contract 2.0.0
 
 | Requirement | Implementation | Automated evidence | External acceptance |
 |---|---|---|---|
@@ -27,3 +27,6 @@
 | F01-CEN-01 00–26 Governed Registry | current catalog, versioned manifests/contracts/routes, schema/index integrity, migration/reconciliation/rollback | source/schema/runtime tests | real owner registry coexistence |
 | F01-CEN-02 Event Backbone | versioned events, idempotent dedupe, bounded payload, privacy class, replay/retry/dead-letter/reconciliation | source/runtime/concurrency tests | real downstream consumer drills |
 | F01-CEN-03 Activation Gate | enable-time dependency readiness + verified migration/health/rollback/gate evidence | runtime negative/positive flag tests | staging activation evidence |
+| F01-FUT-01..18 Future Foundation | `SPF_Future_Foundation`, governance control plane, platform engineering and resilience lab | Future Foundation unit/runtime/review suites | real environment/provider/operational evidence where applicable |
+
+Every current release trace must bind requirement → implementation → test/result → defect/fix where applicable → exact commit → deterministic package/checksum → staging evidence → Founder approval. Historical documents remain historical evidence only.

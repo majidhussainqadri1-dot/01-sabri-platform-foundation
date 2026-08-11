@@ -1,15 +1,15 @@
-# QA Report — File 01 1.2.0 Final Coding Candidate
+# QA Report — File 01 2.0.0 Repository Candidate
 
 ## Automated scope
 
-The exact-head workflow covers PHP 8.1/8.3 lint and source assertions; structured authorization and separation-of-duties tests; manifest/contract/dependency/route bounds; schema plus exact-index tests; actual disposable WordPress/MySQL activation/reactivation/upgrade/runtime tests; release lifecycle and feature activation evidence; privacy/audit/reconciliation; concurrent idempotency; destructive-purge smoke; and deterministic double-build/package integrity.
+The exact-head workflow covers PHP 8.1/8.3 lint and source assertions; structured authorization and separation-of-duties tests; manifest/contract/dependency/route bounds; schema plus exact-index tests; disposable WordPress/MySQL activation/reactivation/upgrade/runtime tests; release lifecycle and feature activation evidence; privacy/audit/reconciliation; concurrent idempotency; destructive-purge smoke; Future Foundation runtime checks; release-handoff/current-metadata consistency; and deterministic double-build/package integrity.
 
-The 1.2.0 test set specifically covers actor/object/purpose claim binding, required/optional dependency ambiguity, event privacy classification, required index integrity, fail-closed ungated feature activation, verified positive feature activation, owner/version reconciliation receipts, audit-chain integrity and atomic purge safeguards.
+The 2.0.0 suite inherits the 1.2.0 security and schema regressions and adds the later Future Foundation and corrective-cycle assertions. Current-facing release documents, WordPress stable tag and CycloneDX component identity are checked against `SPF_VERSION`, `SPF_SCHEMA_VERSION` and `SPF_CONTRACT_VERSION` so stale release metadata fails CI.
 
-## Final review discipline
+## Review discipline
 
-`FINAL-REVIEW-ROUND-1-2026-08-08.md` and `FINAL-ADVERSARIAL-REVIEW-ROUND-2-2026-08-08.md` are the two fresh post-coding review records required by the File 01 Definition of Done. No unresolved blocker/critical product-code defect was identified in those final reviews.
+Every corrective change is followed by regression testing. Historical review records remain evidence of their exact historical commits; they are not silently relabeled as current-head evidence. The current fresh ten-round review has its own permanent record and exact-head CI evidence.
 
 ## Truth boundary
 
-A green GitHub run proves only the automated environment and exact commit/package that it identifies. Hostinger staging, real File 00/20/21/24/25/26 coexistence, browser/device/accessibility/RTL, production-size load/soak, independent backup/restore/rollback, Founder acceptance, live deployment and monitoring remain separate external gates.
+A green GitHub run proves only the automated environment and exact commit/package that it identifies. Hostinger staging, real companion coexistence, browser/device/accessibility/RTL, production-size load/soak, independent backup/restore/rollback, Founder acceptance, live deployment and sustained monitoring remain separate external gates.

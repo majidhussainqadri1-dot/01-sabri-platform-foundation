@@ -1,6 +1,6 @@
-# File 01 — Sabri Platform Foundation 1.2.0
+# File 01 — Sabri Platform Foundation 2.0.0
 
-This repository implements **File 01-B**, the governance/runtime foundation defined by `SSH-F01-PLAN-2026-v1.0`, the Definitive Master Plan v3.0, the recovered directives through 5 August 2026, and the later 6–7 August central-plan harmonization.
+This repository implements **File 01-B**, the governance/runtime foundation defined by `SSH-F01-PLAN-2026-v1.0`, the Definitive Master Plan v3.0, the approved Future Foundation v2.0 enhancement set, and later Founder-approved harmonization.
 
 ## Canonical boundary
 
@@ -8,9 +8,9 @@ File 01 owns the 00–26 governance catalog, module/contract/route registries, d
 
 ## Release truth
 
-Version **1.2.0** is the final repository coding candidate for the reviewed File 01 scope. It uses software/schema/contract version 1.2.0. The historical encoded 1.1.1 recovery stream was not reproducible and is not used as release evidence; the 1.2.0 source was independently hardened and reviewed.
+The current repository candidate is **software 2.0.0**, **schema 1.2.0**, **contract 2.0.0**, and **Future Foundation 2.0.0**. Software, schema and contract versions are intentionally distinct. Historical 1.1.x/1.2.0 review records remain historical evidence and must not be treated as the current package identity.
 
-The current source implements the later central requirements: versioned/machine-readable 00–26 governance and rollback-aware reconciliation; event schema/version/idempotency/replay/dead-letter/reconciliation with durable privacy classification; and fail-closed feature activation requiring dependency readiness plus independently verified migration, health, rollback and gate evidence.
+The current source implements versioned/machine-readable 00–26 governance and rollback-aware reconciliation; event schema/version/idempotency/replay/dead-letter/reconciliation with durable privacy classification; fail-closed feature activation requiring dependency readiness plus independently verified migration, health, rollback and gate evidence; and the approved Future Foundation enhancements.
 
 ## Security and reliability highlights
 
@@ -25,4 +25,4 @@ The current source implements the later central requirements: versioned/machine-
 - Independent backup/restore and File 24 assurance before destructive purge; atomic quarantine and terminal replay.
 - One free tier / donation-only governance metadata with no donor advantage.
 
-`Staging-Accepted`, `Live-Deployed`, and `Operational` remain separate external statuses. See `TRACEABILITY.md`, `QA-REPORT.md`, `STAGING-ACCEPTANCE.md`, `RELEASE-CHECKLIST.md`, and the two final review records.
+`Staging-Accepted`, `Live-Deployed`, and `Operational` remain separate external statuses. A green repository/CI/package result is not evidence of the exact deployed Hostinger state. See `TRACEABILITY.md`, `QA-REPORT.md`, `STAGING-ACCEPTANCE.md`, `RELEASE-CHECKLIST.md`, and the current review record.

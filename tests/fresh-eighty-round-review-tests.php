@@ -114,7 +114,7 @@ $assert( str_contains($governance, 'expected_version_required') && str_contains(
 $assert( str_contains($reconciler, 'owner_rollback_completed') && str_contains($reconciler, 'spf_reconciliation_rollback_checkpoint_failed'), 'Round 77: owner rollback can be repeated after local-restore retry.' );
 $assert( str_contains($reconciler, 'reconciliation_compensation_incomplete'), 'Round 78: reconciliation compensation failure can be hidden.' );
 $assert( str_contains($uninstall, 'wp_unschedule_event') && str_contains($uninstall, 'delete_option'), 'Round 79: uninstall does not clean File 01 schedules/options.' );
-$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: runtime/version contract baseline drifted from File 01 v2.0.' );
+$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.1' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.1 / 1.2.0 / 2.0.0.' );
 
 if ( 80 !== $assertions ) {
     $failures[] = "Review harness itself executed {$assertions} assertions instead of 80.";

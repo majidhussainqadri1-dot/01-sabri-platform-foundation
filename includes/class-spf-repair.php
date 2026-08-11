@@ -3,14 +3,20 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reversible repair of File 01-owned state only.
+ *
+ * Legacy cutover options are deliberately excluded. spf_page_map and
+ * spf_founder_user_id are reconciliation-owned state and may only be removed
+ * by SPF_Reconciler after canonical File 20/21 owner acknowledgement and
+ * reversible receipts have been verified.
  */
 final class SPF_Repair {
 	private const LOCK = 'repair';
+	private const RECONCILIATION_OWNED_OPTIONS = array( 'spf_page_map', 'spf_founder_user_id' );
 
 	public static function plan() {
-		global $wpdb;
 		$actions  = array();
 		$blockers = array();
+		$warnings = array();
 		foreach ( SPF_Installer::table_names() as $name ) {
 			$table = SPF_Installer::table( $name );
 			if ( ! SPF_Runtime::table_exists( $table ) ) {
@@ -25,12 +31,16 @@ final class SPF_Repair {
 					if ( 'missing_table' !== (string) $defect_code ) {
 						$blockers[] = array( 'code'=>'schema_upgrade_required', 'defect'=>sanitize_text_field((string)$defect_key), 'defect_code'=>sanitize_key((string)$defect_code) );
 					}
-				}
 			}
 		}
-		foreach ( array( 'spf_page_map', 'spf_founder_user_id' ) as $option ) {
+		}
+		foreach ( self::RECONCILIATION_OWNED_OPTIONS as $option ) {
 			if ( self::option_exists( $option ) ) {
-				$actions[] = array( 'action' => 'remove_legacy_option', 'target' => $option );
+				$warnings[] = array(
+					'code'   => 'legacy_reconciliation_required',
+					'target' => $option,
+					'owner'  => 'SPF_Reconciler',
+				);
 			}
 		}
 		if ( SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
@@ -38,13 +48,14 @@ final class SPF_Repair {
 				if ( 'file-01' === $route['owner_module'] && $route['page_id'] && ! get_post( $route['page_id'] ) ) {
 					$actions[] = array( 'action' => 'clear_missing_owned_page_reference', 'target' => $route['route_key'], 'record_version' => $route['record_version'] );
 				}
-			}
+		}
 		}
 		return array(
 			'generated_at' => SPF_Runtime::now_mysql(),
 			'actions'      => $actions,
 			'blockers'     => $blockers,
-			'law'          => 'Only File 01-owned schema, legacy options and File 01 route references may be changed. Companion records are never repaired directly.',
+			'warnings'     => $warnings,
+			'law'          => 'Only File 01-owned schema and File 01 route references may be repaired here. File 01 legacy cutover options belong exclusively to owner-acknowledged SPF_Reconciler; companion records are never repaired directly.',
 		);
 	}
 
@@ -54,7 +65,6 @@ final class SPF_Repair {
 	}
 
 	public static function apply( $confirmation, $expected_hash ) {
-		global $wpdb;
 		if ( 'REPAIR FILE 01 OWNED STATE' !== $confirmation ) {
 			return new WP_Error( 'spf_confirmation_required', __( 'The exact repair confirmation was not supplied.', 'sabri-platform-foundation' ) );
 		}
@@ -113,7 +123,7 @@ final class SPF_Repair {
 			if ( is_wp_error( $trace ) ) {
 				throw new RuntimeException( $trace->get_error_message() );
 			}
-			return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'status' => 'applied' );
+			return array( 'trace_id' => $trace, 'plan_hash' => $hash, 'changed' => $changed, 'warnings' => $plan['warnings'] ?? array(), 'status' => 'applied' );
 		} catch ( Throwable $error ) {
 			$restored = self::restore_snapshot( $snapshot );
 			$compensated = ! is_wp_error( $restored );
@@ -126,11 +136,14 @@ final class SPF_Repair {
 
 	private static function apply_action( array $action ) {
 		global $wpdb;
-		if ( 'remove_legacy_option' === $action['action'] ) {
-			delete_option( $action['target'] );
-			return self::option_exists( $action['target'] ) ? new WP_Error( 'spf_repair_option_failed', __( 'A legacy File 01 option could not be removed.', 'sabri-platform-foundation' ) ) : true;
+		if ( 'remove_legacy_option' === ( $action['action'] ?? '' ) ) {
+			$target = sanitize_key( (string) ( $action['target'] ?? '' ) );
+			if ( in_array( $target, self::RECONCILIATION_OWNED_OPTIONS, true ) ) {
+				return new WP_Error( 'spf_repair_reconciliation_owned_option_rejected', __( 'This legacy option is owned by the guarded reconciliation workflow and cannot be removed by Safe Repair.', 'sabri-platform-foundation' ), array( 'status' => 409, 'target' => $target ) );
+			}
+			return new WP_Error( 'spf_repair_legacy_option_action_rejected', __( 'Safe Repair does not remove legacy options.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
 		}
-		if ( 'clear_missing_owned_page_reference' === $action['action'] ) {
+		if ( 'clear_missing_owned_page_reference' === ( $action['action'] ?? '' ) ) {
 			$updated = $wpdb->update(
 				SPF_Installer::table( 'routes' ),
 				array( 'page_id' => null, 'status' => 'degraded', 'record_version' => (int) $action['record_version'] + 1, 'updated_at' => SPF_Runtime::now_mysql() ),
@@ -145,10 +158,7 @@ final class SPF_Repair {
 
 	private static function snapshot( array $plan ) {
 		global $wpdb;
-		$snapshot = array( 'options' => array(), 'routes' => array(), 'created_tables' => array() );
-		foreach ( array( 'spf_page_map', 'spf_founder_user_id' ) as $option ) {
-			$snapshot['options'][ $option ] = array( 'exists' => self::option_exists( $option ), 'value' => get_option( $option ) );
-		}
+		$snapshot = array( 'routes' => array(), 'created_tables' => array() );
 		foreach ( $plan['actions'] as $action ) {
 			if ( 'clear_missing_owned_page_reference' === $action['action'] ) {
 				$snapshot['routes'][ $action['target'] ] = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' WHERE route_key=%s AND owner_module=%s', $action['target'], 'file-01' ), ARRAY_A );
@@ -163,11 +173,6 @@ final class SPF_Repair {
 	private static function restore_snapshot( array $snapshot ) {
 		global $wpdb;
 		$failures = array();
-		foreach ( $snapshot['options'] as $option => $state ) {
-			$state['exists'] ? update_option( $option, $state['value'], false ) : delete_option( $option );
-			$exists = self::option_exists( $option );
-			if ( (bool)$state['exists'] !== $exists || ( $exists && SPF_Runtime::hash(get_option($option)) !== SPF_Runtime::hash($state['value']) ) ) { $failures[] = 'option:'.$option; }
-		}
 		foreach ( $snapshot['routes'] as $route ) {
 			if ( is_array( $route ) && ! empty( $route['id'] ) && SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
 				$result = $wpdb->replace( SPF_Installer::table( 'routes' ), $route );

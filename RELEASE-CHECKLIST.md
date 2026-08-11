@@ -1,4 +1,4 @@
-# Release Checklist — File 01 2.0.0
+# Release Checklist — File 01 2.0.1
 
 ## Repository / coding gates
 
@@ -15,7 +15,7 @@
 
 - [ ] Hostinger staging reality freeze records deployed File 01 version/package/checksum, DB/schema version, migration state, runtime/configuration and active companion versions before change.
 - [ ] Hostinger backup and independent restore test evidenced.
-- [ ] Fresh install and all supported historical→2.0.0 upgrades accepted on Hostinger staging; target schema remains 1.2.0 and contract 2.0.0.
+- [ ] Fresh install and all supported historical→2.0.1 upgrades accepted on Hostinger staging; target schema remains 1.2.0 and contract 2.0.0.
 - [ ] Real File 00/20/21/24/25/26 contracts and failure modes accepted according to current dependency/ownership boundaries.
 - [ ] Browser/device/accessibility/RTL/weak-network matrix accepted.
 - [ ] Rollback rehearsal accepted without silent data loss.

@@ -2,14 +2,14 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "serialNumber": "urn:uuid:2c837296-3f64-4eb1-9c59-5c0ab1f01110",
-  "version": 3,
+  "version": 4,
   "metadata": {
     "timestamp": "2026-08-11T00:00:00Z",
     "component": {
       "type": "application",
       "name": "Sabri Platform Foundation",
-      "version": "2.0.0",
-      "purl": "pkg:wordpress/sabri-platform-foundation@2.0.0"
+      "version": "2.0.1",
+      "purl": "pkg:wordpress/sabri-platform-foundation@2.0.1"
     }
   },
   "components": [
@@ -34,7 +34,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:wordpress/sabri-platform-foundation@2.0.0",
+      "ref": "pkg:wordpress/sabri-platform-foundation@2.0.1",
       "dependsOn": []
     }
   ]

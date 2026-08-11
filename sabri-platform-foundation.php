@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Platform Foundation
  * Plugin URI: https://www.sabrihomeopathy.com/
  * Description: Canonical File 01-B governance, registry, dependency, route, privacy, health, reconciliation, platform-engineering control-plane and release-evidence runtime for the Sabri Social Homeopathy Platform.
- * Version: 2.0.0
+ * Version: 2.0.1
  * Requires at least: 6.0
  * Requires PHP: 8.1
  * Author: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SPF_VERSION', '2.0.0' );
+define( 'SPF_VERSION', '2.0.1' );
 define( 'SPF_SCHEMA_VERSION', '1.2.0' );
 define( 'SPF_CONTRACT_VERSION', '2.0.0' );
 define( 'SPF_FUTURE_FOUNDATION_VERSION', '2.0.0' );

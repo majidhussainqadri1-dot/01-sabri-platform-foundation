@@ -1,4 +1,4 @@
-# File 01 — Sabri Platform Foundation 2.0.0
+# File 01 — Sabri Platform Foundation 2.0.1
 
 This repository implements **File 01-B**, the governance/runtime foundation defined by `SSH-F01-PLAN-2026-v1.0`, the Definitive Master Plan v3.0, the approved Future Foundation v2.0 enhancement set, and later Founder-approved harmonization.
 
@@ -8,7 +8,9 @@ File 01 owns the 00–26 governance catalog, module/contract/route registries, d
 
 ## Release truth
 
-The current repository candidate is **software 2.0.0**, **schema 1.2.0**, **contract 2.0.0**, and **Future Foundation 2.0.0**. Software, schema and contract versions are intentionally distinct. Historical 1.1.x/1.2.0 review records remain historical evidence and must not be treated as the current package identity.
+The current repository candidate is **software 2.0.1**, **schema 1.2.0**, **contract 2.0.0**, and **Future Foundation 2.0.0**. Software, schema and contract versions are intentionally distinct. Historical 1.1.x/1.2.0/2.0.0 review records remain historical evidence and must not be treated as the current package identity.
+
+Version 2.0.1 is a reconciliation-safety patch discovered from live System Check evidence. It closes a Safe Repair bypass so `spf_page_map` and `spf_founder_user_id` can no longer be removed outside the guarded `SPF_Reconciler` workflow. Legacy route cutover remains fail-closed until canonical File 20/File 21 owner plans are accepted and version-matched reversible receipts are returned. Real WordPress/MySQL cross-file QA pins exact File 20/File 21 candidate SHAs and proves guarded plan → apply → quarantine → rollback behavior.
 
 The current source implements versioned/machine-readable 00–26 governance and rollback-aware reconciliation; event schema/version/idempotency/replay/dead-letter/reconciliation with durable privacy classification; fail-closed feature activation requiring dependency readiness plus independently verified migration, health, rollback and gate evidence; and the approved Future Foundation enhancements.
 
@@ -22,6 +24,7 @@ The current source implements versioned/machine-readable 00–26 governance and 
 - Shadow-table activation/upgrade compensation plus exact required-index verification.
 - Bounded immutable contracts/manifests/routes and deterministic dependency rejection.
 - Version-bound File 20/21 reconciliation receipts with exact rollback restoration.
+- Safe Repair cannot delete reconciliation-owned legacy options or bypass canonical owner acknowledgement.
 - Independent backup/restore and File 24 assurance before destructive purge; atomic quarantine and terminal replay.
 - One free tier / donation-only governance metadata with no donor advantage.
 

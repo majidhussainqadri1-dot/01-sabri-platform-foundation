@@ -20,6 +20,7 @@ php tests/eleventh-ten-round-review-tests.php
 php tests/twelfth-ten-round-review-tests.php
 php tests/thirteenth-ten-round-review-tests.php
 php tests/fourteenth-ten-round-review-tests.php
+php tests/live-reconciliation-regression-tests.php
 php tests/release-handoff-contract-tests.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php

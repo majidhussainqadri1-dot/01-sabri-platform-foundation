@@ -132,7 +132,7 @@ final class SPF_Authorization {
 	public static function validate_claim( array $claim, $user_id, $action, $required, $object = null, array $context = array() ) {
 		$required_fields = array(
 			'claim_version', 'allowed', 'user_id', 'action', 'capability', 'issued_at',
-			'expires_at', 'claim_id', 'object_hash', 'purpose', 'institutional_role',
+			'expires_at', 'claim_id', 'object_hash', 'purpose', 'institutional_role', 'plugin', 'contract',
 		);
 		foreach ( $required_fields as $field ) {
 			if ( ! array_key_exists( $field, $claim ) ) {
@@ -156,6 +156,9 @@ final class SPF_Authorization {
 			return false;
 		}
 		if ( sanitize_key( $claim['capability'] ) !== sanitize_key( $required ) ) {
+			return false;
+		}
+		if ( 'file-01' !== sanitize_key( (string) $claim['plugin'] ) || ! hash_equals( (string) SPF_CONTRACT_VERSION, (string) $claim['contract'] ) ) {
 			return false;
 		}
 		$issued  = is_numeric( $claim['issued_at'] ) ? (int) $claim['issued_at'] : strtotime( (string) $claim['issued_at'] );

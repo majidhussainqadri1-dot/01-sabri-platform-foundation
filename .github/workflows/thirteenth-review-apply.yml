@@ -32,10 +32,11 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
-      - name: Reassemble and apply ten sequential corrective reviews
+      - name: Reassemble, verify, squash and publish non-workflow changes
         shell: bash
         run: |
           set -euo pipefail
+          BASE_HEAD="$(git rev-parse HEAD)"
           cat \
             tools/.th13-parts/part00.txt \
             tools/.th13-parts/part01.txt \
@@ -47,21 +48,31 @@ jobs:
             > /tmp/apply-thirteenth-review.py
           python3 -m py_compile /tmp/apply-thirteenth-review.py
           python3 /tmp/apply-thirteenth-review.py
-      - name: Pack exact final source tree
+
+          # Preserve the two current workflow files in the token-authenticated push.
+          # Their exact final state is applied afterward through the GitHub connector,
+          # which is allowed to modify workflow files.
+          git reset --mixed "$BASE_HEAD"
+          git checkout "$BASE_HEAD" -- .github/workflows/corrective-qa.yml .github/workflows/thirteenth-review-apply.yml
+
+          # Regenerate an interim closed-world manifest for this exact publishable tree.
+          tmp_manifest="$(mktemp)"
+          find . -type f \
+            -not -path './.git/*' \
+            -not -path './build/*' \
+            -not -path './dist/*' \
+            ! -name 'SOURCE-CHECKSUMS.sha256' \
+            -print | LC_ALL=C sort | while IFS= read -r file; do sha256sum "$file"; done > "$tmp_manifest"
+          mv "$tmp_manifest" SOURCE-CHECKSUMS.sha256
+
+          bash qa/run-tests.sh
+          git add -A
+          git commit -m 'fix(review): publish thirteenth reviewed source pending workflow parity'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0
+          echo "INTERIM_HEAD=$(git rev-parse HEAD)"
+      - name: Record interim published tree
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude=.git --exclude=build --exclude=dist -czf /tmp/file01-thirteenth-final-source.tgz .
-          sha256sum /tmp/file01-thirteenth-final-source.tgz
-          git rev-parse HEAD > /tmp/file01-thirteenth-final-head.txt
-          git rev-parse HEAD^{tree} > /tmp/file01-thirteenth-final-tree.txt
-      - name: Upload exact final source tree
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: file01-thirteenth-final-source
-          path: |
-            /tmp/file01-thirteenth-final-source.tgz
-            /tmp/file01-thirteenth-final-head.txt
-            /tmp/file01-thirteenth-final-tree.txt
-          if-no-files-found: error
-          retention-days: 30
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}

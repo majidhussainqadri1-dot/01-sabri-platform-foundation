@@ -1,0 +1,170 @@
+name: Temporary File 01 2.0.1 Exact-Tree Finalizer
+
+on:
+  push:
+    branches:
+      - fix/reconciliation-repair-ownership
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message || '', '[exact-tree-finalized]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      FILE20_SHA: abeea0abeee82652e4552ba95998130f4795f3e5
+      FILE21_SHA: 67b3e0d2754bf48c703453055e596c645462fba5
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          extensions: mysqli
+          coverage: none
+      - name: Materialize exact final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main
+          git checkout origin/main -- .github/workflows/corrective-qa.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('qa/wp-runtime-smoke.php')
+          s=p.read_text()
+          old="$assert( defined( 'SPF_VERSION' ) && '2.0.0' === SPF_VERSION, 'Plugin version mismatch.' );"
+          new="$assert( defined( 'SPF_VERSION' ) && '2.0.1' === SPF_VERSION, 'Plugin version mismatch.' );"
+          if old not in s:
+              raise SystemExit('Current runtime version assertion anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          rm .github/workflows/finalize-file01-2.0.1.yml
+          cat > LIVE-RECONCILIATION-CORRECTIVE-EVIDENCE-2026-08-11.md <<EOF
+          # File 01 Live-Discovered Reconciliation Corrective Evidence — 2026-08-11
+
+          Repository candidate: File 01 software 2.0.1 / schema 1.2.0 / contract 2.0.0.
+
+          Live trigger: the production File 01 System Check showed 15 reconciliation actions / 14 quarantines while Owner-Scoped Repair simultaneously proposed direct deletion of spf_page_map and spf_founder_user_id. The corrective source makes those options Reconciler-owned only and refuses the Safe Repair bypass.
+
+          Exact companion candidates exercised by this finalizer:
+          - File 20: ${FILE20_SHA}
+          - File 21: ${FILE21_SHA}
+
+          This finalizer removes itself, restores the permanent QA workflow to the repository-main form, regenerates SOURCE-CHECKSUMS.sha256, and then tests that exact working tree before committing it. Acceptance executed here includes source QA, real WordPress/MySQL runtime QA, actual File 20/File 21 owner-adapter plan/apply/rollback, and deterministic packaging.
+
+          This is repository/CI evidence only. Staging-Accepted, Live-Deployed and Operational remain external statuses. No live reconciliation is authorized by this record alone.
+          EOF
+          find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          git diff --check
+      - name: Install WordPress
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x /tmp/wp-cli.phar
+          sudo mv /tmp/wp-cli.phar /usr/local/bin/wp
+          mkdir -p /tmp/wp
+          wp core download --path=/tmp/wp --force
+          wp config create --path=/tmp/wp --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1:3306 --skip-check
+          wp config set SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE true --raw --path=/tmp/wp
+          wp config set SPF_ALLOW_DESTRUCTIVE_PURGE true --raw --path=/tmp/wp
+          ADMIN_PASS="$(openssl rand -hex 18)"
+          wp core install --path=/tmp/wp --url=http://example.test --title='File 01 Exact Tree CI' --admin_user=admin --admin_password="$ADMIN_PASS" --admin_email=admin@example.test --skip-email
+      - name: Install and activate exact File 01 tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wp/wp-content/plugins/sabri-platform-foundation-01
+          rsync -a --delete --exclude=.git --exclude=build --exclude=dist ./ /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/
+          wp plugin activate sabri-platform-foundation-01 --user=admin --path=/tmp/wp
+      - name: Run File 01 runtime gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-runtime-smoke.php --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-future-foundation-smoke.php --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-thirteenth-ten-round-smoke.php --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-fourteenth-ten-round-smoke.php --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-reconciliation-ownership-smoke.php --user=admin --path=/tmp/wp
+      - name: Fetch exact File 20 and File 21 candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch fix/file01-reconciliation-adapter https://github.com/majidhussainqadri1-dot/20-sabri-unified-application-shell.git /tmp/file20
+          test "$(git -C /tmp/file20 rev-parse HEAD)" = "$FILE20_SHA"
+          git clone --depth=1 --branch fix/file01-home-news-reconciliation-adapter https://github.com/majidhussainqadri1-dot/sabri-complete-home-news-feed.git /tmp/file21
+          test "$(git -C /tmp/file21 rev-parse HEAD)" = "$FILE21_SHA"
+          php /tmp/file20/sabri-unified-application-shell/tests/run-file01-reconciliation-adapter.php
+          php /tmp/file21/tests/run-file01-reconciliation-adapter.php
+      - name: Install exact owner adapters and run guarded cross-file apply/rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wp/wp-content/plugins/sabri-unified-application-shell
+          rsync -a --delete --exclude=.git /tmp/file20/sabri-unified-application-shell/ /tmp/wp/wp-content/plugins/sabri-unified-application-shell/
+          mkdir -p /tmp/wp/wp-content/plugins/sabri-complete-home-news-feed
+          rsync -a --delete --exclude=.git --exclude=.github --exclude=build --exclude=dist /tmp/file21/ /tmp/wp/wp-content/plugins/sabri-complete-home-news-feed/
+          wp plugin activate sabri-unified-application-shell --user=admin --path=/tmp/wp
+          wp plugin activate sabri-complete-home-news-feed --user=admin --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-cross-file-reconciliation-smoke.php --user=admin --path=/tmp/wp
+      - name: Run concurrency and purge regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          wp option delete spf_concurrency_counter --path=/tmp/wp || true
+          wp db query "DELETE FROM wp_spf_idempotency WHERE action_name='concurrency_probe'" --path=/tmp/wp
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker1.log 2>&1 & P1=$!
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp >/tmp/worker2.log 2>&1 & P2=$!
+          wait "$P1" || true; wait "$P2" || true
+          cat /tmp/worker1.log /tmp/worker2.log
+          test "$(wp option get spf_concurrency_counter --path=/tmp/wp)" = "1"
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-idempotency-worker.php --user=admin --path=/tmp/wp
+          test "$(wp option get spf_concurrency_counter --path=/tmp/wp)" = "1"
+          wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-purge-smoke.php --user=admin --path=/tmp/wp
+      - name: Build deterministic File 01 2.0.1 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/build-package.sh
+          cd dist
+          sha256sum --check 01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip.sha256
+          cat 01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip.sha256
+      - name: Upload exact-tree package evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: file-01-2.0.1-exact-tree-package
+          path: |
+            dist/01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip
+            dist/01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit the exact tested tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add -A
+          git commit -m 'release: exact-tree File 01 2.0.1 reconciliation candidate [exact-tree-finalized]'
+          git push origin HEAD:fix/reconciliation-repair-ownership

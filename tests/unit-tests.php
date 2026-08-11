@@ -19,7 +19,7 @@ $assert( ! SPF_Registry::valid_semver( '1.2.0.2' ), 'Four-part non-semver accept
 $valid_claim = [
 	'claim_version'=>'1.2.0','allowed'=>true,'user_id'=>7,'actor_id'=>7,'action'=>'record_release','capability'=>SPF_Authorization::CAP_RELEASE,
 	'issued_at'=>time()-5,'expires_at'=>time()+300,'claim_id'=>'claim-1','object_hash'=>SPF_Runtime::hash(['object_id'=>'1.2.0']),
-	'purpose'=>'release_evidence','institutional_role'=>'release_operator','suspended'=>false,'revoked'=>false,
+	'purpose'=>'release_evidence','institutional_role'=>'release_operator','plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 ];
 $assert( SPF_Authorization::validate_claim( $valid_claim, 7, 'record_release', SPF_Authorization::CAP_RELEASE, [ 'object_id'=>'1.2.0' ], [ 'purpose'=>'release_evidence' ] ), 'Valid structured File 00 claim rejected.' );
 $invalid = $valid_claim; $invalid['institutional_role']='administrator';

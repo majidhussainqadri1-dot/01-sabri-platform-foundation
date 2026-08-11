@@ -1,0 +1,41 @@
+name: Temporary File 01 Reconciliation Manifest Refresh
+
+on:
+  push:
+    branches:
+      - fix/reconciliation-repair-ownership
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: ${{ !contains(github.event.head_commit.message || '', '[manifest-refreshed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Remove bootstrap workflow and regenerate closed-world manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-reconciliation-manifest.yml
+          find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+          bash qa/run-tests.sh
+          git diff --check
+      - name: Commit exact-tree manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'majidhussainqadri1-dot'
+          git config user.email 'majidhussainqadri1@gmail.com'
+          git add -A
+          git commit -m 'chore: refresh File 01 reconciliation exact-tree manifest [manifest-refreshed]'
+          git push origin HEAD:fix/reconciliation-repair-ownership

@@ -5,6 +5,7 @@ $root = dirname( __DIR__ );
 $authorization = file_get_contents( $root . '/includes/class-spf-authorization.php' );
 $plugin = file_get_contents( $root . '/includes/class-spf-plugin.php' );
 $event_bus = file_get_contents( $root . '/includes/class-spf-event-bus.php' );
+$uninstall = file_get_contents( $root . '/uninstall.php' );
 
 $assertions = 0;
 $failures = array();
@@ -26,6 +27,12 @@ $assert( str_contains( $plugin, "'plugin'=>array('type'=>'string','required'=>tr
 // Review 3: event identity and event facts must not be silently normalized or truncated.
 $assert( str_contains( $event_bus, '$raw_event_name !== $event_name' ) && str_contains( $event_bus, '$raw_aggregate_type !== $aggregate_type' ) && str_contains( $event_bus, '$raw_aggregate_id !== $aggregate_id' ), 'Event identity fields can still normalize into a different canonical identity.' );
 $assert( str_contains( $event_bus, 'spf_event_payload_value_too_large' ) && str_contains( $event_bus, 'spf_event_payload_value_noncanonical' ) && ! str_contains( $event_bus, "substr( sanitize_text_field( (string) \$value ), 0, 1000 )" ), 'Event payload values can still be silently truncated or normalized.' );
+
+// Review 5: malformed schema-version storage must block automatic migration, not look current.
+$assert( str_contains( $plugin, 'spf_schema_version_invalid' ) && str_contains( $plugin, "'status'=>'invalid_schema_version'" ), 'Malformed stored schema version does not block the automatic upgrade entry point.' );
+
+// Review 7: every File 01 scheduled task, including Future Foundation health, must be removed on uninstall.
+$assert( str_contains( $uninstall, "'spf_future_foundation_tick'" ), 'Future Foundation cron remains scheduled after non-destructive uninstall.' );
 
 if ( $failures ) {
 	fwrite( STDERR, "Twelfth ten-round review tests failed:\n- " . implode( "\n- ", $failures ) . "\n" );

@@ -7,12 +7,18 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 		'institutional_role'=>'founder','suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
-add_filter( 'spf_verify_backup_restore_evidence', static fn() => [
-	'verified'=>true,'backup_id'=>'disposable-ci-backup','backup_checksum'=>str_repeat('a',64),'restore_tested_at'=>gmdate('c'),'restore_environment'=>'disposable-ci','verifier'=>'CI','expires_at'=>gmdate('c',time()+3600),
-] );
-add_filter( 'spf_verify_file24_purge_assurance', static fn() => [
-	'verified'=>true,'assurance_id'=>'file24-ci-assurance','reviewed_at'=>gmdate('c'),'verifier'=>'CI File24 adapter','expires_at'=>gmdate('c',time()+3600),
-] );
+add_filter( 'spf_verify_backup_restore_evidence', static function ( $claim, array $context ) {
+	return [
+		'verified'=>true,'backup_id'=>'disposable-ci-backup','backup_checksum'=>str_repeat('a',64),'restore_tested_at'=>gmdate('c'),'restore_environment'=>'disposable-ci','verifier'=>'CI','expires_at'=>gmdate('c',time()+3600),
+		'operation'=>(string)($context['operation']??''),'plan_hash'=>(string)($context['plan_hash']??''),
+	];
+}, 10, 2 );
+add_filter( 'spf_verify_file24_purge_assurance', static function ( $claim, array $context ) {
+	return [
+		'verified'=>true,'assurance_id'=>'file24-ci-assurance','reviewed_at'=>gmdate('c'),'verifier'=>'CI File24 adapter','expires_at'=>gmdate('c',time()+3600),
+		'operation'=>(string)($context['operation']??''),'plan_hash'=>(string)($context['plan_hash']??''),'backup_evidence_hash'=>(string)($context['backup_evidence_hash']??''),'audit_chain_head'=>(string)($context['audit_chain_head']??''),
+	];
+}, 10, 2 );
 $plan=SPF_Purge::plan();
 $result=SPF_Purge::apply('PURGE FILE 01 GOVERNANCE DATA',[ 'backup_id'=>'submitted' ],SPF_Purge::plan_hash($plan));
 if(is_wp_error($result)){fwrite(STDERR,$result->get_error_code().': '.$result->get_error_message()."\n");exit(1);}

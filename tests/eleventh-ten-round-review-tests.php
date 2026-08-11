@@ -1,0 +1,17 @@
+<?php
+declare(strict_types=1);
+$assertions=0;$failures=[];
+$assert=static function(bool $c,string $m)use(&$assertions,&$failures):void{$assertions++;if(!$c){$failures[]=$m;}};
+$root=dirname(__DIR__);$read=static fn(string $p):string=>(string)file_get_contents($root.'/'.$p);$has=static fn(string $p,string $n):bool=>str_contains($read($p),$n);
+$plugin=$read('includes/class-spf-plugin.php');
+$assert(str_contains($plugin,"'staging_accepted'=>in_array(\$release_status,array('approved','deployed'),true)")&&!str_contains($plugin,"'staging_accepted'=>in_array(\$release_status,array('staged','approved','deployed'),true)"),'Round 1: staged can still be mislabeled Staging-Accepted.');
+$assert($has('includes/class-spf-plugin.php','validate_operational_claim')&&$has('includes/class-spf-plugin.php',"'monitoring_status' => 'pass'")&&$has('includes/class-spf-plugin.php',"'backup_restore_status' => 'pass'")&&$has('includes/class-spf-plugin.php',"'slo_status' => 'pass'")&&$has('includes/class-spf-plugin.php','deployed_package_checksum'),'Round 2: Operational remains satisfiable by generic verified state.');
+$assert($has('includes/class-spf-event-bus.php','$scope_dedupe_key')&&$has('includes/class-spf-event-bus.php','$legacy_dedupe_key')&&$has('includes/class-spf-event-bus.php',"'|custom|' . \$scope_dedupe_key"),'Round 3: explicit dedupe remains globally collision-prone or legacy replay-unsafe.');
+$assert($has('includes/class-spf-installer.php','spf_migration_backup_evidence_binding_invalid')&&$has('includes/class-spf-installer.php',"array( 'module','from','to','environment' )"),'Round 4: migration evidence lacks exact context binding.');
+$assert($has('includes/class-spf-purge.php','spf_purge_backup_evidence_binding_invalid')&&$has('includes/class-spf-purge.php','spf_purge_assurance_binding_invalid'),'Round 5: purge evidence chain lacks exact binding.');
+$assert($has('includes/class-spf-registry.php','spf_duplicate_manifest_entity')&&$has('includes/class-spf-registry.php','spf_duplicate_manifest_write')&&$has('includes/class-spf-registry.php','$raw_target !== $target')&&$has('includes/class-spf-registry.php','$raw_operation !== $operation'),'Round 6: architecture declarations can still normalize/collapse ambiguously.');
+$assert($has('includes/class-spf-authorization.php','SENSITIVE_ACTIONS')&&$has('includes/class-spf-authorization.php','validate_claim'),'Round 7: authorization boundary regressed.');
+$assert($has('includes/class-spf-event-bus.php','handler_completion_ambiguous')&&$has('includes/class-spf-event-bus.php','reconciliation_required'),'Round 8: ambiguous event completion can auto-replay.');
+$assert($has('tools/build-package.sh','TOP="sabri-platform-foundation-01"')&&$has('includes/class-spf-plugin.php','No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.'),'Round 9: package/ownership boundary drifted.');
+$fresh80=$read('tests/fresh-eighty-round-review-tests.php');$assert($has('STAGING-ACCEPTANCE.md','- [ ]')&&$has('KNOWN-LIMITATIONS.md','staging')&&$has('RELEASE-CHECKLIST.md','rollback')&&str_contains($fresh80,"array('approved','deployed')")&&str_contains($fresh80,'Round 58: Staging-Accepted still collapses the merely-staged state.'),'Round 10: corrected staging/live/operational QA contract is not present.');
+if(10!==$assertions){$failures[]='Expected exactly 10 assertions; got '.$assertions.'.';}if($failures){fwrite(STDERR,implode(PHP_EOL,$failures).PHP_EOL);exit(1);}echo "Eleventh ten-round review tests: 10/10 PASS\n";

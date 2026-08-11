@@ -126,11 +126,19 @@ final class SPF_Installer {
 			return new WP_Error( 'spf_upgrade_authorization_required', __( 'File 01 schema upgrade requires an authorized operator.', 'sabri-platform-foundation' ) );
 		}
 		$environment = self::environment();
+		$evidence_context = array( 'module'=>'file-01', 'from'=>$current, 'to'=>SPF_SCHEMA_VERSION, 'environment'=>$environment );
 		$evidence = SPF_Runtime::verify_evidence(
 			'spf_verify_migration_backup_evidence',
-			array( 'module'=>'file-01', 'from'=>$current, 'to'=>SPF_SCHEMA_VERSION, 'environment'=>$environment ),
-			array( 'backup_id','restore_tested_at','environment','verifier' )
+			$evidence_context,
+			array( 'backup_id','restore_tested_at','environment','verifier','module','from','to' )
 		);
+		if ( ! is_wp_error( $evidence ) ) {
+			foreach ( array( 'module','from','to','environment' ) as $binding_field ) {
+				if ( ! array_key_exists( $binding_field, $evidence ) || ! hash_equals( (string) $evidence_context[ $binding_field ], (string) $evidence[ $binding_field ] ) ) {
+					return new WP_Error( 'spf_migration_backup_evidence_binding_invalid', __( 'Migration backup evidence is not bound to this exact File 01 upgrade context.', 'sabri-platform-foundation' ), array( 'status'=>412, 'field'=>$binding_field ) );
+				}
+			}
+		}
 		$internal_snapshot_allowed = defined( 'SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE' ) && true === SPF_ALLOW_INTERNAL_SNAPSHOT_UPGRADE && in_array( $environment, array( 'local','development','staging' ), true );
 		if ( is_wp_error( $evidence ) && ! $internal_snapshot_allowed ) {
 			update_option( 'spf_upgrade_state', array( 'status'=>'backup_evidence_required', 'from'=>$current, 'to'=>SPF_SCHEMA_VERSION, 'environment'=>$environment, 'checked_at'=>SPF_Runtime::now_mysql() ), false );

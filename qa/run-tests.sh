@@ -16,6 +16,7 @@ php tests/seventh-ten-round-review-tests.php
 php tests/eighth-ten-round-review-tests.php
 php tests/fresh-eighty-round-review-tests.php
 if [[ -f tests/tenth-fresh-eighty-round-review-tests.php ]]; then php tests/tenth-fresh-eighty-round-review-tests.php; fi
+php tests/eleventh-ten-round-review-tests.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php
 php tests/security-tests.php

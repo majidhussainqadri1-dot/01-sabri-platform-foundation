@@ -91,8 +91,8 @@ $assert( str_contains($system, 'max_interval_seconds') && str_contains($system, 
 $assert( str_contains($system, 'audit_chain') && str_contains($system, 'SPF_Audit::verify_chain'), 'Round 54: System Check omits audit-chain integrity.' );
 $assert( str_contains($system, 'privacy_requests_query') && str_contains($system, 'privacy_holds_query'), 'Round 55: privacy health database errors can appear green.' );
 $assert( str_contains($system, 'schema_version_current'), 'Round 56: System Check omits schema-version drift.' );
-$assert( str_contains($plugin, "'operational'=>\$operational") && str_contains($plugin, "'deployed' === \$release_status"), 'Round 57: operational completion can be asserted before deployment.' );
-$assert( str_contains($plugin, "'staging_accepted'=>in_array") && str_contains($plugin, "array('staged','approved','deployed')"), 'Round 58: staging completion status mapping is missing.' );
+$assert( str_contains($plugin, "'operational'=>\$operational") && str_contains($plugin, "'deployed' !== ( \$context['release_status'] ?? '' )") && str_contains($plugin, 'deployed_package_checksum'), 'Round 57: operational completion can be asserted before deployment or without exact deployed-package binding.' );
+$assert( str_contains($plugin, "'staging_accepted'=>in_array") && str_contains($plugin, "array('approved','deployed')") && ! str_contains($plugin, "array('staged','approved','deployed')"), 'Round 58: Staging-Accepted still collapses the merely-staged state.' );
 $assert( str_contains($future, 'spf_future_foundation_tick') && str_contains($future, 'spf_five_minutes'), 'Round 59: Future Foundation periodic health tick is not scheduled at five minutes.' );
 $assert( str_contains($future, 'wp_unschedule_event'), 'Round 60: Future Foundation cron lifecycle lacks deactivation cleanup.' );
 $assert( str_contains($rest, 'permission_callback') || str_contains($plugin, 'permission_callback'), 'Round 61: restricted REST surfaces lack permission callbacks.' );

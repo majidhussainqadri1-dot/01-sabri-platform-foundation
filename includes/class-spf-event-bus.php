@@ -27,9 +27,23 @@ final class SPF_Event_Bus {
 		if ( $dedupe_key ) {
 			$raw_dedupe_key = (string) $dedupe_key;
 			$canonical_dedupe_key = sanitize_text_field( $raw_dedupe_key );
-			$dedupe_key = ( $raw_dedupe_key === $canonical_dedupe_key && strlen( $canonical_dedupe_key ) <= 191 )
+			$legacy_dedupe_key = ( $raw_dedupe_key === $canonical_dedupe_key && strlen( $canonical_dedupe_key ) <= 191 )
 				? $canonical_dedupe_key
 				: hash( 'sha256', $raw_dedupe_key );
+			$scope_dedupe_key = $legacy_dedupe_key;
+			$dedupe_key = hash( 'sha256', $event_name . '|' . $version . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $privacy_class . '|custom|' . $scope_dedupe_key );
+			$legacy_match = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT event_id FROM ' . SPF_Installer::table( 'outbox' ) . ' WHERE dedupe_key=%s AND event_name=%s AND event_version=%d AND aggregate_type=%s AND aggregate_id=%s AND privacy_class=%s LIMIT 1',
+					$legacy_dedupe_key, $event_name, $version, $aggregate_type, $aggregate_id, $privacy_class
+				)
+			);
+			if ( ! empty( $wpdb->last_error ) ) {
+				return new WP_Error( 'spf_event_dedupe_lookup_failed', __( 'Existing event idempotency state could not be verified.', 'sabri-platform-foundation' ) );
+			}
+			if ( is_string( $legacy_match ) && '' !== $legacy_match ) {
+				return true;
+			}
 		} else {
 			$dedupe_key = hash( 'sha256', $event_name . '|' . $version . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $privacy_class . '|' . $payload_json );
 		}

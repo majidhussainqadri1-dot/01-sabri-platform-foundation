@@ -122,11 +122,18 @@ final class SPF_Plugin {
 
 	public function status_dto() {
 		$releases = SPF_Governance::list_releases( 1 );
-		$release_status = $releases ? $releases[0]['status'] : 'not-recorded';
+		$latest_release = $releases ? $releases[0] : array();
+		$release_status = $latest_release ? $latest_release['status'] : 'not-recorded';
 		$schema = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
 		$health = SPF_System_Check::latest();
-		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, array( 'release_status' => $release_status, 'health' => $health ) );
-		$operational = is_array( $operational_claim ) && array_key_exists( 'verified', $operational_claim ) && true === $operational_claim['verified'] && 'deployed' === $release_status && is_array( $health ) && 'pass' === ( $health['overall_status'] ?? '' );
+		$operational_context = array(
+			'release_id' => (string) ( $latest_release['release_id'] ?? '' ),
+			'deployed_package_checksum' => (string) ( $latest_release['checksum_sha256'] ?? '' ),
+			'release_status' => $release_status,
+			'health' => $health,
+		);
+		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, $operational_context );
+		$operational = self::validate_operational_claim( $operational_claim, $operational_context );
 		return array(
 			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
 			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),
@@ -140,12 +147,45 @@ final class SPF_Plugin {
 				'coded'=>true,
 				'packaged'=>in_array($release_status,array('built','verified','staged','approved','deployed'),true),
 				'automated_qa_green'=>in_array($release_status,array('verified','staged','approved','deployed'),true),
-				'staging_accepted'=>in_array($release_status,array('staged','approved','deployed'),true),
+				'staging_accepted'=>in_array($release_status,array('approved','deployed'),true),
 				'live_deployed'=>'deployed'===$release_status,
 				'operational'=>$operational,
 			),
 			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
+	}
+
+
+	private static function validate_operational_claim( $claim, array $context ) {
+		$operational_claim = $claim;
+		if ( ! is_array( $operational_claim ) || ! array_key_exists( 'verified', $operational_claim ) || ! ( true === $operational_claim['verified'] ) || 'deployed' !== ( $context['release_status'] ?? '' ) ) {
+			return false;
+		}
+		$health = $context['health'] ?? null;
+		if ( ! is_array( $health ) || 'pass' !== ( $health['overall_status'] ?? '' ) ) {
+			return false;
+		}
+		$release_id = (string) ( $context['release_id'] ?? '' );
+		$checksum = strtolower( (string) ( $context['deployed_package_checksum'] ?? '' ) );
+		if ( '' === $release_id || ! preg_match( '/^[a-f0-9]{64}$/', $checksum ) ) {
+			return false;
+		}
+		if ( ! hash_equals( $release_id, (string) ( $claim['release_id'] ?? '' ) ) || ! hash_equals( $checksum, strtolower( (string) ( $claim['deployed_package_checksum'] ?? '' ) ) ) ) {
+			return false;
+		}
+		$required_states = array(
+			'monitoring_status' => 'pass',
+			'support_status' => 'ready',
+			'backup_restore_status' => 'pass',
+			'slo_status' => 'pass',
+		);
+		foreach ( $required_states as $field => $expected ) {
+			if ( $expected !== sanitize_key( (string) ( $claim[ $field ] ?? '' ) ) ) {
+				return false;
+			}
+		}
+		$observed_at = strtotime( (string) ( $claim['observed_at'] ?? '' ) );
+		return false !== $observed_at && $observed_at <= time() + 60;
 	}
 
 	public function action_links( $links ) {

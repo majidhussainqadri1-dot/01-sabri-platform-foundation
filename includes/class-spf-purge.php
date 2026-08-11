@@ -113,21 +113,31 @@ final class SPF_Purge {
 			return new WP_Error( 'spf_purge_audit_head_invalid', __( 'Destructive purge is blocked because the audit-chain head is invalid.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
 		}
 
+		$backup_context = array( 'operation'=>'file01_purge','plan_hash'=>$hash,'submitted_evidence'=>$backup_evidence,'table_summary'=>$plan['tables'] );
 		$verified = SPF_Runtime::verify_evidence(
 			'spf_verify_backup_restore_evidence',
-			array( 'operation'=>'file01_purge','plan_hash'=>$hash,'submitted_evidence'=>$backup_evidence,'table_summary'=>$plan['tables'] ),
-			array( 'backup_id','backup_checksum','restore_tested_at','restore_environment','verifier','expires_at' )
+			$backup_context,
+			array( 'backup_id','backup_checksum','restore_tested_at','restore_environment','verifier','expires_at','operation','plan_hash' )
 		);
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
 		}
+		if ( ! hash_equals( 'file01_purge', (string) $verified['operation'] ) || ! hash_equals( $hash, strtolower( (string) $verified['plan_hash'] ) ) ) {
+			return new WP_Error( 'spf_purge_backup_evidence_binding_invalid', __( 'Backup/restore evidence is not bound to this exact purge plan.', 'sabri-platform-foundation' ), array( 'status'=>412 ) );
+		}
+		$assurance_context = array( 'operation'=>'file01_purge','plan_hash'=>$hash,'backup_evidence_hash'=>$verified['evidence_hash'],'audit_chain_head'=>$plan['audit_chain_head'] );
 		$assurance = SPF_Runtime::verify_evidence(
 			'spf_verify_file24_purge_assurance',
-			array( 'operation'=>'file01_purge','plan_hash'=>$hash,'backup_evidence_hash'=>$verified['evidence_hash'],'audit_chain_head'=>$plan['audit_chain_head'] ),
-			array( 'assurance_id','reviewed_at','verifier','expires_at' )
+			$assurance_context,
+			array( 'assurance_id','reviewed_at','verifier','expires_at','operation','plan_hash','backup_evidence_hash','audit_chain_head' )
 		);
 		if ( is_wp_error( $assurance ) ) {
 			return $assurance;
+		}
+		foreach ( array( 'operation','plan_hash','backup_evidence_hash','audit_chain_head' ) as $binding_field ) {
+			if ( ! hash_equals( (string) $assurance_context[ $binding_field ], (string) $assurance[ $binding_field ] ) ) {
+				return new WP_Error( 'spf_purge_assurance_binding_invalid', __( 'File 24 purge assurance is not bound to this exact destructive-operation evidence envelope.', 'sabri-platform-foundation' ), array( 'status'=>412, 'field'=>$binding_field ) );
+			}
 		}
 
 		$lock = SPF_Runtime::acquire_lock( 'destructive_purge', 3600, get_current_user_id() );

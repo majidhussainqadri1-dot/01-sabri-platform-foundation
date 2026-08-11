@@ -391,27 +391,41 @@ final class SPF_Registry {
 			return new WP_Error( 'spf_manifest_architecture_too_large', __( 'Manifest architecture declarations exceed the bounded registry envelope.', 'sabri-platform-foundation' ) );
 		}
 		$canonical_entities = array();
+		$seen_entities = array();
 		foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
-			$key = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
-			if ( '' === $key ) {
-				return new WP_Error( 'spf_invalid_manifest_entity', __( 'Every canonical entity declaration requires a valid canonical key.', 'sabri-platform-foundation' ) );
+			$raw_key = (string) ( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
+			$key = sanitize_key( $raw_key );
+			if ( '' === $key || $raw_key !== $key ) {
+				return new WP_Error( 'spf_invalid_manifest_entity', __( 'Every canonical entity declaration must already use its exact canonical key.', 'sabri-platform-foundation' ) );
 			}
+			if ( isset( $seen_entities[ $key ] ) ) {
+				return new WP_Error( 'spf_duplicate_manifest_entity', __( 'A canonical entity may be declared only once in a module manifest.', 'sabri-platform-foundation' ) );
+			}
+			$seen_entities[ $key ] = true;
 			$canonical_entities[] = $key;
 		}
-		$manifest['canonical_entities'] = array_values( array_unique( $canonical_entities ) );
+		$manifest['canonical_entities'] = $canonical_entities;
 		$writes = array();
+		$seen_writes = array();
 		foreach ( (array) ( $manifest['writes'] ?? array() ) as $write ) {
 			if ( ! is_array( $write ) ) {
 				return new WP_Error( 'spf_invalid_manifest_write', __( 'Every manifest write declaration must be structured.', 'sabri-platform-foundation' ) );
 			}
-			$target = sanitize_key( $write['owner_module'] ?? '' );
-			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $target ) ) {
-				return new WP_Error( 'spf_invalid_manifest_write_owner', __( 'Manifest write declarations require a canonical owner module.', 'sabri-platform-foundation' ) );
+			$raw_target = (string) ( $write['owner_module'] ?? '' );
+			$target = sanitize_key( $raw_target );
+			if ( $raw_target !== $target || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $target ) ) {
+				return new WP_Error( 'spf_invalid_manifest_write_owner', __( 'Manifest write declarations require an exact canonical owner module.', 'sabri-platform-foundation' ) );
 			}
-			$operation = substr( sanitize_key( $write['operation'] ?? 'write' ), 0, 64 );
-			if ( '' === $operation ) {
-				return new WP_Error( 'spf_invalid_manifest_write_operation', __( 'Manifest write declarations require a valid operation.', 'sabri-platform-foundation' ) );
+			$raw_operation = (string) ( $write['operation'] ?? 'write' );
+			$operation = substr( sanitize_key( $raw_operation ), 0, 64 );
+			if ( '' === $operation || $raw_operation !== $operation ) {
+				return new WP_Error( 'spf_invalid_manifest_write_operation', __( 'Manifest write declarations require an exact canonical operation.', 'sabri-platform-foundation' ) );
 			}
+			$write_identity = $target . '|' . $operation;
+			if ( isset( $seen_writes[ $write_identity ] ) ) {
+				return new WP_Error( 'spf_duplicate_manifest_write', __( 'A manifest write target/operation pair may be declared only once.', 'sabri-platform-foundation' ) );
+			}
+			$seen_writes[ $write_identity ] = true;
 			$writes[] = array(
 				'owner_module' => $target,
 				'operation'    => $operation,

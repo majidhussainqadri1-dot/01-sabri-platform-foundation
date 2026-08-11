@@ -20,10 +20,20 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
-      - name: Remove bootstrap workflow and regenerate exact-tree manifest
+      - name: Align current-release regression, remove bootstrap workflow and regenerate exact-tree manifest
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/fresh-eighty-round-review-tests.php')
+          s=p.read_text()
+          old='''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: runtime/version contract baseline drifted from File 01 v2.0.' );'''
+          new='''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.1' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.1 / 1.2.0 / 2.0.0.' );'''
+          if old not in s:
+              raise SystemExit('Expected Round 80 current-version assertion not found')
+          p.write_text(s.replace(old,new,1))
+          PY
           rm .github/workflows/refresh-2.0.1-manifest.yml
           find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 \
             | LC_ALL=C sort -z \
@@ -37,5 +47,5 @@ jobs:
           git config user.name 'majidhussainqadri1-dot'
           git config user.email 'majidhussainqadri1@gmail.com'
           git add -A
-          git commit -m 'release: finalize File 01 2.0.1 manifest [v2.0.1-manifest-refreshed]'
+          git commit -m 'release: finalize File 01 2.0.1 current-version evidence [v2.0.1-manifest-refreshed]'
           git push origin HEAD:fix/reconciliation-repair-ownership

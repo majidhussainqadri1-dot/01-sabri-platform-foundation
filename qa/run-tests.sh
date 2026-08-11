@@ -3,9 +3,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-printf 'Twelfth review exact checkout hashes\n'
-sha256sum includes/class-spf-authorization.php includes/class-spf-plugin.php includes/class-spf-event-bus.php includes/class-spf-governance.php includes/class-spf-privacy.php includes/class-spf-system-check.php uninstall.php tests/twelfth-ten-round-review-tests.php TWELFTH-TEN-ROUND-REVIEW-2026-08-11.md qa/run-tests.sh
-
 printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 

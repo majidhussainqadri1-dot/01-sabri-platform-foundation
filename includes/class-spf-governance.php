@@ -541,7 +541,7 @@ final class SPF_Governance {
 			} elseif ( is_bool( $v ) || is_int( $v ) || is_float( $v ) || null === $v ) {
 				$out[ $key ] = $v;
 			} elseif ( is_scalar( $v ) ) {
-				$out[ $key ] = substr( sanitize_text_field( (string) $v ), 0, 1000 );
+				$out[ $key ] = sanitize_text_field( (string) $v );
 			} else {
 				$out[ $key ] = '[unsupported]';
 			}

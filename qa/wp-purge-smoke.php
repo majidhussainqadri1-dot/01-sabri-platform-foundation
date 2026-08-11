@@ -4,7 +4,7 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 	return [
 		'claim_version'=>'1.1.0','allowed'=>true,'user_id'=>$request['user_id'],'action'=>$request['action'],'capability'=>$request['capability'],
 		'issued_at'=>time()-5,'expires_at'=>time()+300,'claim_id'=>wp_generate_uuid4(),'object_hash'=>$request['object_hash'],'purpose'=>$request['purpose'],
-		'institutional_role'=>'founder','suspended'=>false,'revoked'=>false,
+		'institutional_role'=>'founder','plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
 add_filter( 'spf_verify_backup_restore_evidence', static function ( $claim, array $context ) {

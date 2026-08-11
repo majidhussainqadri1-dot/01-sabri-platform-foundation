@@ -5,7 +5,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 // routes, release evidence and reconciliation snapshots remain intact. A
 // destructive purge is a separate Founder-authorized, backup/restore-proven,
 // File-24-assured operation and is intentionally unavailable from uninstall.
-foreach ( array( 'spf_dispatch_outbox', 'spf_privacy_retention', 'spf_reconcile_expired_flags' ) as $hook ) {
+foreach ( array( 'spf_dispatch_outbox', 'spf_privacy_retention', 'spf_reconcile_expired_flags', 'spf_future_foundation_tick' ) as $hook ) {
 	$timestamp = wp_next_scheduled( $hook );
 	while ( $timestamp ) {
 		wp_unschedule_event( $timestamp, $hook );

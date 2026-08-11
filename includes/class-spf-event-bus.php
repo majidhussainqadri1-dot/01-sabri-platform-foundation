@@ -4,17 +4,26 @@ defined( 'ABSPATH' ) || exit;
 final class SPF_Event_Bus {
 	public static function publish( $event_name, $aggregate_type, $aggregate_id, array $payload, $version = 1, $dedupe_key = '', $privacy_class = 'internal' ) {
 		global $wpdb;
-		$event_name = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $event_name );
-		$aggregate_type = sanitize_key( $aggregate_type );
-		$aggregate_id = substr( sanitize_text_field( (string) $aggregate_id ), 0, 191 );
+		$raw_event_name = (string) $event_name;
+		$event_name = preg_replace( '/[^A-Za-z0-9_.-]/', '', $raw_event_name );
+		$raw_aggregate_type = (string) $aggregate_type;
+		$aggregate_type = sanitize_key( $raw_aggregate_type );
+		$raw_aggregate_id = (string) $aggregate_id;
+		$aggregate_id = sanitize_text_field( $raw_aggregate_id );
 		$version_raw = $version;
 		$version = is_int( $version_raw ) ? $version_raw : ( is_string( $version_raw ) && ctype_digit( $version_raw ) ? (int) $version_raw : 0 );
-		if ( ! $event_name || ! $aggregate_type || ! $aggregate_id || $version < 1 || $version > 65535 ) {
-			return new WP_Error( 'spf_invalid_event', __( 'Invalid event contract.', 'sabri-platform-foundation' ) );
+		if (
+			! $event_name || $raw_event_name !== $event_name || strlen( $event_name ) > 191 ||
+			! $aggregate_type || $raw_aggregate_type !== $aggregate_type || strlen( $aggregate_type ) > 64 ||
+			! $aggregate_id || $raw_aggregate_id !== $aggregate_id || strlen( $aggregate_id ) > 191 ||
+			$version < 1 || $version > 65535
+		) {
+			return new WP_Error( 'spf_invalid_event', __( 'Event identity fields must already be canonical and within their bounded contract envelope.', 'sabri-platform-foundation' ) );
 		}
-		$privacy_class = sanitize_key( $privacy_class );
-		if ( ! in_array( $privacy_class, array( 'public','internal','restricted','confidential','ephemeral' ), true ) ) {
-			return new WP_Error( 'spf_invalid_event_privacy_class', __( 'A valid event privacy classification is required.', 'sabri-platform-foundation' ) );
+		$raw_privacy_class = (string) $privacy_class;
+		$privacy_class = sanitize_key( $raw_privacy_class );
+		if ( $raw_privacy_class !== $privacy_class || ! in_array( $privacy_class, array( 'public','internal','restricted','confidential','ephemeral' ), true ) ) {
+			return new WP_Error( 'spf_invalid_event_privacy_class', __( 'A canonical event privacy classification is required.', 'sabri-platform-foundation' ) );
 		}
 		$payload = self::sanitize_payload( $payload );
 		if ( is_wp_error( $payload ) ) {
@@ -212,7 +221,15 @@ final class SPF_Event_Bus {
 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
 				$result[ $safe_key ] = $value;
 			} elseif ( is_scalar( $value ) ) {
-				$result[ $safe_key ] = substr( sanitize_text_field( (string) $value ), 0, 1000 );
+				$raw_value = (string) $value;
+				$canonical_value = sanitize_text_field( $raw_value );
+				if ( strlen( $raw_value ) > 1000 ) {
+					return new WP_Error( 'spf_event_payload_value_too_large', __( 'Event payload string value exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
+				}
+				if ( $raw_value !== $canonical_value ) {
+					return new WP_Error( 'spf_event_payload_value_noncanonical', __( 'Event payload string values must already be canonical plain text.', 'sabri-platform-foundation' ) );
+				}
+				$result[ $safe_key ] = $raw_value;
 			} else {
 				return new WP_Error( 'spf_event_payload_value_invalid', __( 'Event payload contains an unsupported value type.', 'sabri-platform-foundation' ) );
 			}

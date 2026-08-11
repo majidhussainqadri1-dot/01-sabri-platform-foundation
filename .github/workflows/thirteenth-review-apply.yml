@@ -1,0 +1,45 @@
+name: Thirteenth Review Apply
+
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+    paths:
+      - .github/workflows/thirteenth-review-apply.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: file-01-thirteenth-review-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact review branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: codex/file-01-complete-foundation-1.0.0
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Reassemble and apply ten sequential corrective reviews
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat tools/.th13-parts/part*.txt > /tmp/apply-thirteenth-review.py
+          python3 -m py_compile /tmp/apply-thirteenth-review.py
+          python3 /tmp/apply-thirteenth-review.py
+      - name: Dispatch exact-final corrective QA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run corrective-qa.yml --ref codex/file-01-complete-foundation-1.0.0

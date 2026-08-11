@@ -1,0 +1,45 @@
+name: File 01 Eleventh Review Apply v5
+on:
+  push:
+    branches:
+      - codex/file-01-complete-foundation-1.0.0
+permissions:
+  contents: write
+  actions: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/file-01-complete-foundation-1.0.0
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Apply source corrections
+        run: python tools/eleventh-review-apply.py
+      - name: Finalize lifecycle QA
+        run: python tools/eleventh-review-finalize.py
+      - name: Fix meta-regression QA
+        run: python tools/eleventh-review-finalize-v2.py
+      - name: Remove temporary apply files
+        run: rm -f tools/eleventh-review-apply.py tools/eleventh-review-finalize.py tools/eleventh-review-finalize-v2.py .github/workflows/eleventh-review-apply.yml .github/workflows/eleventh-review-apply-v2.yml .github/workflows/eleventh-review-apply-v3.yml .github/workflows/eleventh-review-apply-v4.yml .github/workflows/eleventh-review-apply-v5.yml
+      - name: Regenerate source checksums
+        run: find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SOURCE-CHECKSUMS.sha256
+      - name: Run source QA
+        run: bash qa/run-tests.sh
+      - name: Commit corrected source
+        run: |
+          git config user.name 'File 01 Corrective QA'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: eleventh ten-round File 01 corrective review'
+          git push origin HEAD:codex/file-01-complete-foundation-1.0.0
+      - name: Dispatch exact-head QA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/actions/workflows/corrective-qa.yml/dispatches -d '{"ref":"codex/file-01-complete-foundation-1.0.0"}'

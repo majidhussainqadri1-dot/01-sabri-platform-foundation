@@ -53,7 +53,7 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 	return [
 		'claim_version'=>'1.2.0','allowed'=>true,'user_id'=>$request['user_id'],'actor_id'=>$request['user_id'],'action'=>$request['action'],'capability'=>$request['capability'],
 		'issued_at'=>time()-5,'expires_at'=>time()+300,'claim_id'=>wp_generate_uuid4(),'object_hash'=>$request['object_hash'],'purpose'=>$request['purpose'],
-		'institutional_role'=>$role,'suspended'=>false,'revoked'=>false,
+		'institutional_role'=>$role,'plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
 

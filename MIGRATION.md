@@ -1,6 +1,6 @@
-# Migration — supported historical software to 2.0.0 (schema 1.2.0)
+# Migration — supported historical software to 2.0.1 (schema 1.2.0)
 
-Software, schema and contract versions are distinct. The current candidate is software `2.0.0`, schema `1.2.0`, contract `2.0.0`; do not describe an upgrade to schema 1.2.0 as a software 1.2.0 release.
+Software, schema and contract versions are distinct. The current candidate is software `2.0.1`, schema `1.2.0`, contract `2.0.0`; do not describe an upgrade to schema 1.2.0 as a software 1.2.0 release.
 
 1. Freeze the exact staging reality before change: deployed plugin/package/checksum, database/schema version, migration/options state, relevant table shape/counts, runtime logs/configuration and active companion versions.
 2. Create and independently verify a complete database/files backup and restore proof before an upgrade.

@@ -1,10 +1,10 @@
-# QA Report — File 01 2.0.0 Repository Candidate
+# QA Report — File 01 2.0.1 Repository Candidate
 
 ## Automated scope
 
 The exact-head workflow covers PHP 8.1/8.3 lint and source assertions; structured authorization and separation-of-duties tests; manifest/contract/dependency/route bounds; schema plus exact-index tests; disposable WordPress/MySQL activation/reactivation/upgrade/runtime tests; release lifecycle and feature activation evidence; privacy/audit/reconciliation; concurrent idempotency; destructive-purge smoke; Future Foundation runtime checks; release-handoff/current-metadata consistency; and deterministic double-build/package integrity.
 
-The 2.0.0 suite inherits the 1.2.0 security and schema regressions and adds the later Future Foundation and corrective-cycle assertions. Current-facing release documents, WordPress stable tag and CycloneDX component identity are checked against `SPF_VERSION`, `SPF_SCHEMA_VERSION` and `SPF_CONTRACT_VERSION` so stale release metadata fails CI.
+The 2.0.1 suite inherits the 1.2.0 security and schema regressions and adds the later Future Foundation and corrective-cycle assertions. Current-facing release documents, WordPress stable tag and CycloneDX component identity are checked against `SPF_VERSION`, `SPF_SCHEMA_VERSION` and `SPF_CONTRACT_VERSION` so stale release metadata fails CI.
 
 ## Review discipline
 

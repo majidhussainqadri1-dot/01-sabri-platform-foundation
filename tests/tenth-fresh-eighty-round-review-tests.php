@@ -80,7 +80,7 @@ $checks = array(
     63 => array('includes/class-spf-reconciler.php', 'owner_rollback_completed', 'owner rollback is not idempotent'),
     64 => array('includes/class-spf-reconciler.php', 'reconciliation_compensation_incomplete', 'reconciliation compensation can be hidden'),
     65 => array('uninstall.php', 'wp_unschedule_event', 'uninstall does not clear scheduled work'),
-    66 => array('sabri-platform-foundation.php', "SPF_VERSION', '2.0.0", 'software version drifted from v2.0'),
+    66 => array('sabri-platform-foundation.php', "SPF_VERSION', '2.0.1", 'software version drifted from v2.0.1'),
     67 => array('sabri-platform-foundation.php', "SPF_CONTRACT_VERSION', '2.0.0", 'contract version drifted from v2.0'),
     68 => array('tools/build-package.sh', 'TOP="sabri-platform-foundation-01"', 'package top folder is not canonical'),
     69 => array('tools/build-package.sh', 'build1.zip', 'deterministic double-build is missing'),

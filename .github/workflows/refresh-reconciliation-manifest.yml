@@ -20,10 +20,19 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
-      - name: Remove bootstrap workflow and regenerate closed-world manifest
+      - name: Correct syntax, remove bootstrap workflow and regenerate closed-world manifest
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('includes/class-spf-repair.php')
+          s=p.read_text()
+          old="\t\t\t}\n\t\t}\n\t\tforeach ( self::RECONCILIATION_OWNED_OPTIONS as $option ) {"
+          new="\t\t\t}\n\t\t}\n\t\t}\n\t\tforeach ( self::RECONCILIATION_OWNED_OPTIONS as $option ) {"
+          if old not in s: raise SystemExit('Expected repair syntax anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
           rm .github/workflows/refresh-reconciliation-manifest.yml
           find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 \
             | LC_ALL=C sort -z \
@@ -37,5 +46,5 @@ jobs:
           git config user.name 'majidhussainqadri1-dot'
           git config user.email 'majidhussainqadri1@gmail.com'
           git add -A
-          git commit -m 'chore: refresh File 01 reconciliation exact-tree manifest [manifest-refreshed]'
+          git commit -m 'fix: close Safe Repair bypass and refresh exact-tree manifest [manifest-refreshed]'
           git push origin HEAD:fix/reconciliation-repair-ownership

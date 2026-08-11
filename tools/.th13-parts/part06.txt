@@ -2,4 +2,9 @@ _r10_paths=[ROOT/f'tools/.th13-r10-{i:02d}.b64' for i in range(6)]
 _r10_data=''.join(p.read_text().strip() for p in _r10_paths)
 for _p in _r10_paths+[ROOT/'tools/.th13-r10.b64']:
     if _p.exists(): _p.unlink()
-exec(gzip.decompress(base64.b64decode(_r10_data)).decode(), globals())
+_r10_src=gzip.decompress(base64.b64decode(_r10_data)).decode()
+_r10_marker="twelfth.write_text(s.replace(old,new,1))\n"
+_r10_inject=_r10_marker+"s=twelfth.read_text()\ns=s.replace(\"'file-01' !== sanitize_key( (string) \\\\$claim['plugin'] )\", \"'file-01' !== (string) \\\\$claim['plugin']\")\ntwelfth.write_text(s)\n"
+if _r10_marker not in _r10_src: raise SystemExit('Twelfth fixture injection marker missing')
+_r10_src=_r10_src.replace(_r10_marker,_r10_inject,1)
+exec(_r10_src, globals())

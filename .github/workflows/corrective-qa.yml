@@ -123,7 +123,7 @@ jobs:
           --health-retries=10
     env:
       FILE20_SHA: abeea0abeee82652e4552ba95998130f4795f3e5
-      FILE21_SHA: cde64d0fc8b1f150fa816d4b7ceeeff5943d1f3a
+      FILE21_SHA: 67b3e0d2754bf48c703453055e596c645462fba5
     steps:
       - name: Check out exact File 01 source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

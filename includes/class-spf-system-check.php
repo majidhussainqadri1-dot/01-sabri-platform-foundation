@@ -2,8 +2,18 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_System_Check {
-	public static function run( $persist = true ) {
+	public static function run( $persist = true, array $context = array() ) {
 		global $wpdb;
+		if ( $persist ) {
+			$purpose = sanitize_key( $context['purpose'] ?? 'operational_health' );
+			if ( '' === $purpose ) {
+				return new WP_Error( 'spf_system_check_purpose_invalid', __( 'A canonical purpose is required to persist a System Check.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+			$allowed = SPF_Authorization::require_action( 'run_system_check', array( 'object_id'=>'system-check' ), array( 'purpose'=>$purpose ) );
+			if ( is_wp_error( $allowed ) ) {
+				return $allowed;
+			}
+		}
 		$trace = SPF_Audit::trace_id();
 		$checks = array();
 

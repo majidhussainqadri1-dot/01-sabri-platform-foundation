@@ -28,7 +28,7 @@ final class SPF_Authorization {
 		'run_schema_upgrade',
 	);
 
-	private const LEGACY_BOOLEAN_BRIDGE_ACTIONS = array( 'view', 'system_check' );
+	private const LEGACY_BOOLEAN_BRIDGE_ACTIONS = array( 'view' );
 
 	public static function install_capabilities() {
 		$role = get_role( 'administrator' );
@@ -116,6 +116,9 @@ final class SPF_Authorization {
 		$action = sanitize_key( $action );
 		if ( in_array( $action, array( 'view', 'system_check' ), true ) ) {
 			return self::CAP_VIEW;
+		}
+		if ( 'run_system_check' === $action ) {
+			return self::CAP_MANAGE;
 		}
 		if ( in_array( $action, array( 'record_release', 'transition_release', 'run_reconciliation', 'run_schema_upgrade' ), true ) ) {
 			return self::CAP_RELEASE;

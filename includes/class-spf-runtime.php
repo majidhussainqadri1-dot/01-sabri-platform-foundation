@@ -41,9 +41,10 @@ final class SPF_Runtime {
 	}
 
 	public static function acquire_lock( $name, $ttl = 300, $owner = 0 ) {
-		$name = sanitize_key( $name );
-		if ( '' === $name ) {
-			return new WP_Error( 'spf_lock_name_invalid', __( 'A valid File 01 lock name is required.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
+		$raw_name = (string) $name;
+		$name = sanitize_key( $raw_name );
+		if ( '' === $name || $raw_name !== $name || strlen( $name ) > 128 ) {
+			return new WP_Error( 'spf_lock_name_invalid', __( 'A File 01 lock name must already be an exact canonical key of at most 128 bytes; silent lock-identity normalization is forbidden.', 'sabri-platform-foundation' ), array( 'status' => 400 ) );
 		}
 		$option = self::LOCK_PREFIX . $name;
 		$token = wp_generate_uuid4();
@@ -79,7 +80,12 @@ final class SPF_Runtime {
 	}
 
 	public static function release_lock( $name, $token ) {
-		$option = self::LOCK_PREFIX . sanitize_key( $name );
+		$raw_name = (string) $name;
+		$name = sanitize_key( $raw_name );
+		if ( '' === $name || $raw_name !== $name || strlen( $name ) > 128 ) {
+			return false;
+		}
+		$option = self::LOCK_PREFIX . $name;
 		$current = get_option( $option, array() );
 		if ( is_array( $current ) && isset( $current['token'] ) && wp_is_uuid( (string) $current['token'] ) && hash_equals( (string) $current['token'], (string) $token ) ) {
 			return self::delete_lock_if_matches( $option, $current );
@@ -166,8 +172,8 @@ final class SPF_Runtime {
 			return new WP_Error( 'spf_evidence_unverified', __( 'Required external evidence has not been independently verified.', 'sabri-platform-foundation' ), array( 'status' => 412 ) );
 		}
 		foreach ( $required_fields as $field ) {
-			if ( ! array_key_exists( $field, $claim ) || '' === (string) $claim[ $field ] ) {
-				return new WP_Error( 'spf_evidence_incomplete', sprintf( /* translators: %s evidence field */ __( 'Verified evidence is missing field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+			if ( ! array_key_exists( $field, $claim ) || ! self::has_meaningful_evidence_value( $claim[ $field ] ) ) {
+				return new WP_Error( 'spf_evidence_incomplete', sprintf( /* translators: %s evidence field */ __( 'Verified evidence is missing meaningful field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
 			}
 			if ( str_ends_with( (string) $field, '_at' ) ) {
 				$timestamp = strtotime( (string) $claim[ $field ] );
@@ -189,6 +195,30 @@ final class SPF_Runtime {
 		}
 		$claim['evidence_hash'] = self::hash( $canonical );
 		return $claim;
+	}
+
+	private static function has_meaningful_evidence_value( $value ) {
+		if ( null === $value || false === $value ) {
+			return false;
+		}
+		if ( true === $value || is_int( $value ) || is_float( $value ) ) {
+			return true;
+		}
+		if ( is_string( $value ) ) {
+			return '' !== trim( $value );
+		}
+		if ( is_array( $value ) ) {
+			if ( array() === $value ) {
+				return false;
+			}
+			foreach ( $value as $nested ) {
+				if ( self::has_meaningful_evidence_value( $nested ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return false;
 	}
 
 	public static function is_list( array $array ) {

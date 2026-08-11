@@ -47,7 +47,7 @@ $assert( str_contains($governance, 'spf_release_state_invalid') && str_contains(
 $assert( str_contains($system, 'spf_health_latest_query_failed') && str_contains($system, 'spf_health_latest_corrupt'), 'Round 12: latest health evidence can still fail/corrupt as a silent null.' );
 
 // 13-80: independent closure lenses on corrected source.
-$assert( str_contains($auth, 'LEGACY_BOOLEAN_BRIDGE_ACTIONS') && str_contains($auth, "array( 'view', 'system_check' )"), 'Round 13: legacy File 00 boolean bridge is not read-only.' );
+$assert( str_contains($auth, 'LEGACY_BOOLEAN_BRIDGE_ACTIONS') && str_contains($auth, "array( 'view' )") && str_contains($auth, 'run_system_check'), 'Round 13: legacy File 00 boolean bridge is not read-only.' );
 $assert( str_contains($auth, "'founder' !== \$institutional_role"), 'Round 14: Founder-only governance actions are not role-bound.' );
 $assert( str_contains($auth, '$issued < time() - 900') && str_contains($auth, '( $expires - $issued ) > 900'), 'Round 15: authorization claims are not short-lived.' );
 $assert( str_contains($auth, 'object_hash') && str_contains($auth, 'hash_equals( $expected_hash, $object_hash )'), 'Round 16: authorization claims are not object-bound.' );

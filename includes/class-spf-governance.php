@@ -530,8 +530,8 @@ final class SPF_Governance {
 			'superseded' => array( 'superseded_by','reason' ),
 		);
 		foreach ( $requirements[ $state ] ?? array() as $field ) {
-			if ( ! array_key_exists( $field, $evidence ) || '' === (string) $evidence[ $field ] ) {
-				return new WP_Error( 'spf_release_evidence_incomplete', sprintf( __( 'Release state %1$s requires evidence field %2$s.', 'sabri-platform-foundation' ), $state, $field ), array( 'status' => 422 ) );
+			if ( ! array_key_exists( $field, $evidence ) || ! self::has_meaningful_evidence_value( $evidence[ $field ] ) ) {
+				return new WP_Error( 'spf_release_evidence_incomplete', sprintf( __( 'Release state %1$s requires meaningful evidence field %2$s.', 'sabri-platform-foundation' ), $state, $field ), array( 'status' => 422 ) );
 			}
 		}
 		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
@@ -540,6 +540,30 @@ final class SPF_Governance {
 			}
 		}
 		return true;
+	}
+
+	private static function has_meaningful_evidence_value( $value ) {
+		if ( null === $value || false === $value ) {
+			return false;
+		}
+		if ( true === $value || is_int( $value ) || is_float( $value ) ) {
+			return true;
+		}
+		if ( is_string( $value ) ) {
+			return '' !== trim( $value );
+		}
+		if ( is_array( $value ) ) {
+			if ( array() === $value ) {
+				return false;
+			}
+			foreach ( $value as $nested ) {
+				if ( self::has_meaningful_evidence_value( $nested ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return false;
 	}
 
 	private static function validate_transition_evidence_binding( array $release, $next_status, array $evidence ) {

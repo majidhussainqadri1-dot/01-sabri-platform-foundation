@@ -8,7 +8,7 @@ The 2.0.0 suite inherits the 1.2.0 security and schema regressions and adds the 
 
 ## Review discipline
 
-Every corrective change is followed by regression testing. Historical review records remain evidence of their exact historical commits; they are not silently relabeled as current-head evidence. The current fresh ten-round review has its own permanent record and exact-head CI evidence.
+Every corrective change is followed by regression testing. Historical review records remain evidence of their exact historical commits; they are not silently relabeled as current-head evidence. The current Fourteenth fresh ten-round review has its own permanent record and exact-head CI evidence; exact identity, evidence-meaningfulness, filtered contract-query and persistent System Check authorization regressions are explicitly gated.
 
 ## Truth boundary
 

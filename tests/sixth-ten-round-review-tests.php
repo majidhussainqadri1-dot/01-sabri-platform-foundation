@@ -40,7 +40,7 @@ $expect( is_wp_error( $r ) && 'spf_invalid_contract_deprecation' === $r->get_err
 $runtime = $src( 'includes/class-spf-runtime.php' );
 $expect( str_contains( $runtime, "'expires' => \$created + \$ttl" ) && str_contains( $runtime, 'current_expires' ) && str_contains( $runtime, 'HOUR_IN_SECONDS' ), 'Round 7 lock-owned expiry/stale takeover protection missing' );
 $authorization = $src( 'includes/class-spf-authorization.php' );
-$expect( str_contains( $authorization, 'LEGACY_BOOLEAN_BRIDGE_ACTIONS' ) && str_contains( $authorization, "array( 'view', 'system_check' )" ), 'Round 8 legacy boolean bridge is not read-only' );
+$expect( str_contains( $authorization, 'LEGACY_BOOLEAN_BRIDGE_ACTIONS' ) && str_contains( $authorization, "array( 'view' )" ) && str_contains( $authorization, 'run_system_check' ), 'Round 8 legacy boolean bridge is not read-only' );
 $privacy = $src( 'includes/class-spf-privacy.php' );
 $purge = $src( 'includes/class-spf-purge.php' );
 $expect( str_contains( $privacy, 'privacy_hold_registry_missing' ) && str_contains( $purge, 'spf_purge_plan_query_failed' ) && str_contains( $purge, "'query_failures' => \$query_failures" ), 'Round 9 privacy/purge fail-closed inventory guards missing' );

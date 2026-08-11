@@ -191,9 +191,15 @@ final class SPF_Registry {
 
 	public static function acknowledge_contract( $contract_key, $contract_version, $consumer_module, array $context = array() ) {
 		global $wpdb;
-		$key = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $contract_key );
-		$version = sanitize_text_field( $contract_version );
-		$consumer = sanitize_key( $consumer_module );
+		$raw_key = (string) $contract_key;
+		$raw_version = (string) $contract_version;
+		$raw_consumer = (string) $consumer_module;
+		$key = preg_replace( '/[^A-Za-z0-9_.-]/', '', $raw_key );
+		$version = sanitize_text_field( $raw_version );
+		$consumer = sanitize_key( $raw_consumer );
+		if ( $raw_key !== $key || $raw_version !== $version || $raw_consumer !== $consumer || '' === $key || strlen( $key ) > 128 || ! self::valid_semver( $version ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $consumer ) ) {
+			return new WP_Error( 'spf_invalid_contract_acknowledgement', __( 'Contract acknowledgement identities must already be exact canonical values within their bounded schema.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+		}
 		$allowed = SPF_Authorization::require_action( 'acknowledge_contract', array( 'owner_module' => $consumer, 'contract_key' => $key ), array( 'purpose' => $context['purpose'] ?? 'contract_acknowledgement' ) );
 		if ( is_wp_error( $allowed ) ) {
 			return $allowed;
@@ -339,8 +345,42 @@ final class SPF_Registry {
 	public static function list_contracts( array $filters = array() ) {
 		global $wpdb;
 		$limit = max( 1, min( 200, absint( $filters['limit'] ?? 100 ) ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'contracts' ) . ' ORDER BY contract_key,contract_version LIMIT %d', $limit ), ARRAY_A );
-		return array_map( array( __CLASS__, 'contract_dto' ), $rows );
+		$offset = max( 0, min( 10000, absint( $filters['offset'] ?? 0 ) ) );
+		$where = array( '1=1' );
+		$params = array();
+
+		if ( isset( $filters['owner_module'] ) && '' !== (string) $filters['owner_module'] ) {
+			$raw_owner = (string) $filters['owner_module'];
+			$owner = sanitize_key( $raw_owner );
+			if ( $raw_owner !== $owner || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) ) {
+				return new WP_Error( 'spf_contract_filter_invalid', __( 'Contract owner filter must be an exact canonical module key.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+			$where[] = 'owner_module=%s';
+			$params[] = $owner;
+		}
+		if ( isset( $filters['contract_version'] ) && '' !== (string) $filters['contract_version'] ) {
+			$raw_version = (string) $filters['contract_version'];
+			if ( ! self::valid_semver( $raw_version ) || strlen( $raw_version ) > 32 ) {
+				return new WP_Error( 'spf_contract_filter_invalid', __( 'Contract version filter must be an exact bounded semantic version.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+			$where[] = 'contract_version=%s';
+			$params[] = $raw_version;
+		}
+		if ( isset( $filters['status'] ) && '' !== (string) $filters['status'] ) {
+			$raw_status = (string) $filters['status'];
+			$status = sanitize_key( $raw_status );
+			if ( $raw_status !== $status || ! in_array( $status, self::CONTRACT_STATES, true ) ) {
+				return new WP_Error( 'spf_contract_filter_invalid', __( 'Contract status filter must be an exact canonical contract state.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+			$where[] = 'status=%s';
+			$params[] = $status;
+		}
+
+		$sql = 'SELECT * FROM ' . SPF_Installer::table( 'contracts' ) . ' WHERE ' . implode( ' AND ', $where ) . ' ORDER BY contract_key,contract_version LIMIT %d OFFSET %d';
+		$params[] = $limit;
+		$params[] = $offset;
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ), ARRAY_A );
+		return array_map( array( __CLASS__, 'contract_dto' ), is_array( $rows ) ? $rows : array() );
 	}
 
 	public static function list_routes() {
@@ -360,14 +400,17 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_manifest', 'Missing ' . $field );
 			}
 		}
-		$module_key = sanitize_key( $manifest['module_key'] );
-		$owner_file = preg_replace( '/[^0-9A-Z-]/', '', strtoupper( (string) $manifest['owner_file'] ) );
-		if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $module_key ) || ! preg_match( '/^(?:0[0-9]|1[0-9]|2[0-6])$/', $owner_file ) || $module_key !== 'file-' . strtolower( $owner_file ) ) {
-			return new WP_Error( 'spf_invalid_manifest_owner', __( 'Manifest module key and owner file do not match the canonical numbered-file registry.', 'sabri-platform-foundation' ) );
+		$raw_module_key = (string) $manifest['module_key'];
+		$raw_owner_file = (string) $manifest['owner_file'];
+		$module_key = sanitize_key( $raw_module_key );
+		$owner_file = preg_replace( '/[^0-9A-Z-]/', '', strtoupper( $raw_owner_file ) );
+		if ( $raw_module_key !== $module_key || $raw_owner_file !== $owner_file || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $module_key ) || ! preg_match( '/^(?:0[0-9]|1[0-9]|2[0-6])$/', $owner_file ) || $module_key !== 'file-' . strtolower( $owner_file ) ) {
+			return new WP_Error( 'spf_invalid_manifest_owner', __( 'Manifest module key and owner file must already match the exact canonical numbered-file registry; silent identity normalization is forbidden.', 'sabri-platform-foundation' ) );
 		}
-		$state = sanitize_key( $manifest['state'] );
-		if ( ! in_array( $state, self::MODULE_STATES, true ) || ! self::valid_semver( (string) $manifest['software_version'] ) || ! self::valid_semver( (string) $manifest['contract_version'] ) ) {
-			return new WP_Error( 'spf_invalid_manifest', __( 'Manifest state or version is invalid.', 'sabri-platform-foundation' ) );
+		$raw_state = (string) $manifest['state'];
+		$state = sanitize_key( $raw_state );
+		if ( $raw_state !== $state || ! in_array( $state, self::MODULE_STATES, true ) || ! self::valid_semver( (string) $manifest['software_version'] ) || ! self::valid_semver( (string) $manifest['contract_version'] ) ) {
+			return new WP_Error( 'spf_invalid_manifest', __( 'Manifest state or version is invalid or noncanonical.', 'sabri-platform-foundation' ) );
 		}
 		foreach ( array( 'required','optional','capabilities','commands','queries','events','routes','data_classes' ) as $field ) {
 			if ( ! is_array( $manifest[ $field ] ) ) {
@@ -426,25 +469,40 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_duplicate_manifest_write', __( 'A manifest write target/operation pair may be declared only once.', 'sabri-platform-foundation' ) );
 			}
 			$seen_writes[ $write_identity ] = true;
+			$raw_purpose = (string) ( $write['purpose'] ?? '' );
+			$purpose = sanitize_text_field( $raw_purpose );
+			if ( $raw_purpose !== $purpose || strlen( $purpose ) > 191 ) {
+				return new WP_Error( 'spf_invalid_manifest_write_purpose', __( 'Manifest write purposes must already be canonical and within the bounded registry envelope; silent normalization or truncation is forbidden.', 'sabri-platform-foundation' ) );
+			}
 			$writes[] = array(
 				'owner_module' => $target,
 				'operation'    => $operation,
-				'purpose'      => substr( sanitize_text_field( $write['purpose'] ?? '' ), 0, 191 ),
+				'purpose'      => $purpose,
 			);
 		}
 		$manifest['writes'] = $writes;
 		$manifest['global_shell_owner'] = true === ( $manifest['global_shell_owner'] ?? false );
 		$manifest['application_shell_owner'] = true === ( $manifest['application_shell_owner'] ?? false );
+		$raw_owner_name = (string) $manifest['owner_name'];
+		$raw_slug = (string) $manifest['slug'];
+		$raw_namespace_prefix = (string) $manifest['namespace_prefix'];
+		$owner_name = sanitize_text_field( $raw_owner_name );
+		$slug = sanitize_title( $raw_slug );
+		$namespace_prefix = preg_replace( '/[^A-Za-z0-9_\\\\]/', '', $raw_namespace_prefix );
+		if (
+			'' === $owner_name || '' === $slug || '' === $namespace_prefix ||
+			$raw_owner_name !== $owner_name || $raw_slug !== $slug || $raw_namespace_prefix !== $namespace_prefix ||
+			strlen( $owner_name ) > 191 || strlen( $slug ) > 191 || strlen( $namespace_prefix ) > 64
+		) {
+			return new WP_Error( 'spf_invalid_manifest_identity', __( 'Manifest owner name, slug and namespace prefix must already be exact canonical identities within their bounded storage envelope; silent normalization or truncation is forbidden.', 'sabri-platform-foundation' ) );
+		}
 		$manifest['module_key'] = $module_key;
 		$manifest['owner_file'] = $owner_file;
-		$manifest['owner_name'] = substr( sanitize_text_field( $manifest['owner_name'] ), 0, 191 );
-		$manifest['slug'] = sanitize_title( $manifest['slug'] );
-		$manifest['namespace_prefix'] = substr( preg_replace( '/[^A-Za-z0-9_\\\\]/', '', (string) $manifest['namespace_prefix'] ), 0, 64 );
-		if ( '' === $manifest['owner_name'] || '' === $manifest['slug'] || '' === $manifest['namespace_prefix'] ) {
-			return new WP_Error( 'spf_invalid_manifest_identity', __( 'Manifest owner name, slug and namespace prefix must remain non-empty after canonical normalization.', 'sabri-platform-foundation' ) );
-		}
-		$manifest['software_version'] = sanitize_text_field( $manifest['software_version'] );
-		$manifest['contract_version'] = sanitize_text_field( $manifest['contract_version'] );
+		$manifest['owner_name'] = $owner_name;
+		$manifest['slug'] = $slug;
+		$manifest['namespace_prefix'] = $namespace_prefix;
+		$manifest['software_version'] = (string) $manifest['software_version'];
+		$manifest['contract_version'] = (string) $manifest['contract_version'];
 		$manifest['state'] = $state;
 		$manifest['required'] = self::normalize_dependencies( $manifest['required'] );
 		if ( is_wp_error( $manifest['required'] ) ) {
@@ -472,9 +530,10 @@ final class SPF_Registry {
 				if ( ! is_scalar( $value ) ) {
 					return new WP_Error( 'spf_manifest_collection_invalid', sprintf( __( 'Manifest collection contains a non-scalar value: %s', 'sabri-platform-foundation' ), $field ) );
 				}
-				$normalized_value = substr( sanitize_text_field( (string) $value ), 0, 191 );
-				if ( '' === $normalized_value ) {
-					return new WP_Error( 'spf_manifest_collection_invalid', sprintf( __( 'Manifest collection contains an empty or invalid value: %s', 'sabri-platform-foundation' ), $field ) );
+				$raw_value = (string) $value;
+				$normalized_value = sanitize_text_field( $raw_value );
+				if ( '' === $normalized_value || $raw_value !== $normalized_value || strlen( $normalized_value ) > 191 ) {
+					return new WP_Error( 'spf_manifest_collection_invalid', sprintf( __( 'Manifest collection contains an empty, noncanonical or oversized value: %s', 'sabri-platform-foundation' ), $field ) );
 				}
 				if ( isset( $seen_values[ $normalized_value ] ) ) {
 					return new WP_Error( 'spf_manifest_collection_duplicate', sprintf( __( 'Manifest collection contains a duplicate canonical value: %s', 'sabri-platform-foundation' ), $field ) );
@@ -498,17 +557,28 @@ final class SPF_Registry {
 			if ( ! is_array( $dependency ) || empty( $dependency['module_key'] ) || empty( $dependency['minimum_version'] ) ) {
 				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency declarations require module_key and minimum_version.', 'sabri-platform-foundation' ) );
 			}
-			$key = sanitize_key( $dependency['module_key'] );
-			$min = sanitize_text_field( $dependency['minimum_version'] );
-			$max = sanitize_text_field( $dependency['maximum_version'] ?? '' );
-			if ( ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && version_compare( $min, $max, '>' ) ) ) {
-				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency version range is invalid.', 'sabri-platform-foundation' ) );
+			$raw_key = (string) $dependency['module_key'];
+			$raw_min = (string) $dependency['minimum_version'];
+			$raw_max = (string) ( $dependency['maximum_version'] ?? '' );
+			$raw_purpose = (string) ( $dependency['purpose'] ?? '' );
+			$raw_fail_mode = (string) ( $dependency['fail_mode'] ?? '' );
+			$key = sanitize_key( $raw_key );
+			$min = sanitize_text_field( $raw_min );
+			$max = sanitize_text_field( $raw_max );
+			$purpose = sanitize_text_field( $raw_purpose );
+			$fail_mode = sanitize_text_field( $raw_fail_mode );
+			if (
+				$raw_key !== $key || $raw_min !== $min || $raw_max !== $max || $raw_purpose !== $purpose || $raw_fail_mode !== $fail_mode ||
+				strlen( $purpose ) > 191 || strlen( $fail_mode ) > 240 ||
+				! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && version_compare( $min, $max, '>' ) )
+			) {
+				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency identity, version range and evidence text must already be canonical and within the bounded registry envelope.', 'sabri-platform-foundation' ) );
 			}
 			if ( isset( $seen[ $key ] ) ) {
 				return new WP_Error( 'spf_duplicate_dependency', __( 'A dependency module may be declared only once in a dependency list.', 'sabri-platform-foundation' ) );
 			}
 			$seen[ $key ] = true;
-			$result[] = array( 'module_key' => $key, 'minimum_version' => $min, 'maximum_version' => $max, 'purpose' => substr( sanitize_text_field( $dependency['purpose'] ?? '' ), 0, 191 ), 'fail_mode' => substr( sanitize_text_field( $dependency['fail_mode'] ?? '' ), 0, 240 ) );
+			$result[] = array( 'module_key' => $key, 'minimum_version' => $min, 'maximum_version' => $max, 'purpose' => $purpose, 'fail_mode' => $fail_mode );
 		}
 		usort( $result, static function ( $a, $b ) { return strcmp( $a['module_key'], $b['module_key'] ); } );
 		return $result;
@@ -520,12 +590,16 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_contract', 'Missing ' . $field );
 			}
 		}
-		$key = preg_replace( '/[^A-Za-z0-9_.-]/', '', (string) $contract['contract_key'] );
-		$version = sanitize_text_field( $contract['contract_version'] );
-		$owner = sanitize_key( $contract['owner_module'] );
-		$status = sanitize_key( $contract['status'] );
-		if ( ! $key || ! self::valid_semver( $version ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) || ! in_array( $status, self::CONTRACT_STATES, true ) || ! is_array( $contract['schema'] ) || ! is_array( $contract['consumers'] ) ) {
-			return new WP_Error( 'spf_invalid_contract', __( 'Invalid contract.', 'sabri-platform-foundation' ) );
+		$raw_key = (string) $contract['contract_key'];
+		$raw_version = (string) $contract['contract_version'];
+		$raw_owner = (string) $contract['owner_module'];
+		$raw_status = (string) $contract['status'];
+		$key = preg_replace( '/[^A-Za-z0-9_.-]/', '', $raw_key );
+		$version = sanitize_text_field( $raw_version );
+		$owner = sanitize_key( $raw_owner );
+		$status = sanitize_key( $raw_status );
+		if ( $raw_key !== $key || $raw_version !== $version || $raw_owner !== $owner || $raw_status !== $status || ! $key || strlen( $key ) > 128 || ! self::valid_semver( $version ) || strlen( $version ) > 32 || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) || ! in_array( $status, self::CONTRACT_STATES, true ) || ! is_array( $contract['schema'] ) || ! is_array( $contract['consumers'] ) ) {
+			return new WP_Error( 'spf_invalid_contract', __( 'Contract identities, version and state must already be exact canonical values within the bounded contract schema.', 'sabri-platform-foundation' ) );
 		}
 		if ( count( $contract['consumers'] ) > 64 ) {
 			return new WP_Error( 'spf_contract_too_large', __( 'Contract schema or consumer list exceeds the bounded contract envelope.', 'sabri-platform-foundation' ) );
@@ -581,17 +655,39 @@ final class SPF_Registry {
 				return new WP_Error( 'spf_invalid_route', 'Missing ' . $field );
 			}
 		}
-		$key = sanitize_key( $route['route_key'] );
-		$path = '/' . trim( (string) $route['route_path'], '/' ) . '/';
+		$raw_key = (string) $route['route_key'];
+		$raw_path = (string) $route['route_path'];
+		$raw_owner = (string) $route['owner_module'];
+		$raw_status = (string) ( $route['status'] ?? 'registered' );
+		$raw_layout = (string) ( $route['layout_context'] ?? 'minimal' );
+		$key = sanitize_key( $raw_key );
+		$path = '/' . trim( $raw_path, '/' ) . '/';
 		$path = preg_replace( '#/+#', '/', $path );
-		$owner = sanitize_key( $route['owner_module'] );
-		$status = sanitize_key( $route['status'] ?? 'registered' );
-		if ( ! $key || ! preg_match( '#^/[A-Za-z0-9/_-]+/$#', $path ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) || ! in_array( $status, self::ROUTE_STATES, true ) ) {
-			return new WP_Error( 'spf_invalid_route', __( 'Invalid route declaration.', 'sabri-platform-foundation' ) );
+		$owner = sanitize_key( $raw_owner );
+		$status = sanitize_key( $raw_status );
+		$layout_context = sanitize_key( $raw_layout );
+		if (
+			$raw_key !== $key || $raw_path !== $path || $raw_owner !== $owner || $raw_status !== $status || $raw_layout !== $layout_context ||
+			! $key || strlen( $key ) > 128 || strlen( $path ) > 191 || '' === $layout_context || strlen( $layout_context ) > 64 ||
+			! preg_match( '#^/[A-Za-z0-9/_-]+/$#', $path ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $owner ) || ! in_array( $status, self::ROUTE_STATES, true )
+		) {
+			return new WP_Error( 'spf_invalid_route', __( 'Route identity, path, owner, layout and state must already be exact canonical values within the bounded route schema.', 'sabri-platform-foundation' ) );
 		}
-		$destination = isset( $route['destination'] ) ? esc_url_raw( $route['destination'] ) : '';
+		$raw_destination = isset( $route['destination'] ) ? (string) $route['destination'] : '';
+		$destination = '' === $raw_destination ? '' : esc_url_raw( $raw_destination );
+		if ( $raw_destination !== $destination || strlen( $destination ) > 255 ) {
+			return new WP_Error( 'spf_unsafe_route_destination', __( 'Route destination must already be a canonical bounded URL; silent URL normalization is forbidden.', 'sabri-platform-foundation' ) );
+		}
 		if ( $destination && ! self::same_origin( $destination ) ) {
 			return new WP_Error( 'spf_unsafe_route_destination', __( 'Route destination must be same-origin.', 'sabri-platform-foundation' ) );
+		}
+		$page_id = null;
+		if ( array_key_exists( 'page_id', $route ) && null !== $route['page_id'] && '' !== $route['page_id'] ) {
+			$raw_page_id = (string) $route['page_id'];
+			$page_id = absint( $route['page_id'] );
+			if ( 0 >= $page_id || $raw_page_id !== (string) $page_id ) {
+				return new WP_Error( 'spf_invalid_route_page', __( 'Route page_id must be an exact positive integer when supplied.', 'sabri-platform-foundation' ) );
+			}
 		}
 		$raw_redirects = (array) ( $route['redirects'] ?? array() );
 		if ( count( $raw_redirects ) > 64 ) {
@@ -599,14 +695,15 @@ final class SPF_Registry {
 		}
 		$redirects = array();
 		$seen_redirects = array();
-		foreach ( $raw_redirects as $redirect ) {
-			if ( ! is_scalar( $redirect ) ) {
+		foreach ( $raw_redirects as $raw_redirect ) {
+			if ( ! is_scalar( $raw_redirect ) ) {
 				return new WP_Error( 'spf_invalid_route_redirect', __( 'Every route redirect must be a canonical relative path.', 'sabri-platform-foundation' ) );
 			}
-			$redirect = '/' . trim( sanitize_text_field( (string) $redirect ), '/' ) . '/';
+			$raw_redirect = (string) $raw_redirect;
+			$redirect = '/' . trim( $raw_redirect, '/' ) . '/';
 			$redirect = preg_replace( '#/+#', '/', $redirect );
-			if ( ! preg_match( '#^/[A-Za-z0-9/_-]+/$#', $redirect ) || $redirect === $path ) {
-				return new WP_Error( 'spf_invalid_route_redirect', __( 'Every route redirect must be a distinct canonical relative path.', 'sabri-platform-foundation' ) );
+			if ( $raw_redirect !== $redirect || strlen( $redirect ) > 191 || ! preg_match( '#^/[A-Za-z0-9/_-]+/$#', $redirect ) || $redirect === $path ) {
+				return new WP_Error( 'spf_invalid_route_redirect', __( 'Every route redirect must already be a distinct canonical bounded relative path.', 'sabri-platform-foundation' ) );
 			}
 			if ( isset( $seen_redirects[ $redirect ] ) ) {
 				return new WP_Error( 'spf_duplicate_route_redirect', __( 'A route redirect may be declared only once.', 'sabri-platform-foundation' ) );
@@ -618,11 +715,11 @@ final class SPF_Registry {
 			'route_key' => $key,
 			'route_path' => $path,
 			'owner_module' => $owner,
-			'page_id' => empty( $route['page_id'] ) ? null : absint( $route['page_id'] ),
-			'layout_context' => sanitize_key( $route['layout_context'] ?? 'minimal' ),
+			'page_id' => $page_id,
+			'layout_context' => $layout_context,
 			'status' => $status,
 			'destination' => $destination,
-			'redirects' => array_values( array_unique( $redirects ) ),
+			'redirects' => $redirects,
 		);
 	}
 

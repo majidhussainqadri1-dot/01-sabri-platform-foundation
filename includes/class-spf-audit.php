@@ -54,13 +54,22 @@ final class SPF_Audit {
 			}
 			$created_at = SPF_Runtime::now_mysql();
 			$actor_id = get_current_user_id();
-			$purpose = substr( sanitize_text_field( $context['purpose'] ?? '' ), 0, 191 );
-			$action_name = substr( sanitize_key( $action ), 0, 128 );
-			$object_type = substr( sanitize_key( $object_type ), 0, 64 );
-			$object_id = substr( sanitize_text_field( (string) $object_id ), 0, 191 );
-			$result_code = substr( sanitize_key( $result ), 0, 64 );
-			if ( '' === $action_name || '' === $object_type || '' === $result_code ) {
-				return new WP_Error( 'spf_audit_record_invalid', __( 'The mandatory audit record is incomplete.', 'sabri-platform-foundation' ) );
+			$raw_purpose = (string) ( $context['purpose'] ?? '' );
+			$raw_action = (string) $action;
+			$raw_object_type = (string) $object_type;
+			$raw_object_id = (string) $object_id;
+			$raw_result = (string) $result;
+			$purpose = sanitize_text_field( $raw_purpose );
+			$action_name = sanitize_key( $raw_action );
+			$object_type = sanitize_key( $raw_object_type );
+			$object_id = sanitize_text_field( $raw_object_id );
+			$result_code = sanitize_key( $raw_result );
+			if (
+				'' === $action_name || '' === $object_type || '' === $result_code ||
+				$raw_action !== $action_name || $raw_object_type !== $object_type || $raw_object_id !== $object_id || $raw_result !== $result_code || $raw_purpose !== $purpose ||
+				strlen( $action_name ) > 128 || strlen( $object_type ) > 64 || strlen( $object_id ) > 191 || strlen( $result_code ) > 64 || strlen( $purpose ) > 191
+			) {
+				return new WP_Error( 'spf_audit_record_invalid', __( 'Mandatory audit identities and purpose must already be canonical and within their bounded storage envelope; silent normalization or truncation is forbidden.', 'sabri-platform-foundation' ) );
 			}
 			$entry_hash = self::entry_hash( $previous_hash, $trace_id, $action_name, $object_type, $object_id, $actor_id, $purpose, $result_code, $context_hash, $created_at );
 			$ok = $wpdb->insert(
@@ -167,7 +176,11 @@ final class SPF_Audit {
 			} elseif ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
 				$result[ $safe_key ] = $value;
 			} elseif ( is_scalar( $value ) ) {
-				$scalar = sanitize_text_field( (string) $value );
+				$raw_scalar = (string) $value;
+				$scalar = sanitize_text_field( $raw_scalar );
+				if ( $raw_scalar !== $scalar ) {
+					return new WP_Error( 'spf_audit_context_value_invalid', __( 'Audit context scalar evidence must already be canonical; silent normalization is forbidden.', 'sabri-platform-foundation' ) );
+				}
 				if ( strlen( $scalar ) > 500 ) {
 					return new WP_Error( 'spf_audit_context_value_too_large', __( 'Audit context scalar evidence exceeds the bounded envelope.', 'sabri-platform-foundation' ) );
 				}

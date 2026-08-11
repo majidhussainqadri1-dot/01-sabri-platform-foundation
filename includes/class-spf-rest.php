@@ -15,7 +15,7 @@ final class SPF_REST {
 		self::route( '/contracts/(?P<contract_key>[A-Za-z0-9_.-]+)/(?P<contract_version>[0-9A-Za-z.+-]+)/acknowledge', 'POST', array( __CLASS__, 'acknowledge_contract' ), 'acknowledge_contract' );
 		self::route( '/routes', 'GET', array( __CLASS__, 'routes' ), 'view' );
 		self::route( '/routes', 'POST', array( __CLASS__, 'map_route' ), 'map_route' );
-		self::route( '/system-check', 'POST', array( __CLASS__, 'system_check' ), 'system_check' );
+		self::route( '/system-check', 'POST', array( __CLASS__, 'system_check' ), 'run_system_check' );
 		self::route( '/reconciliation/plan', 'GET', array( __CLASS__, 'reconciliation_plan' ), 'view' );
 		self::route( '/reconciliation/apply', 'POST', array( __CLASS__, 'reconciliation_apply' ), 'run_reconciliation' );
 		self::route( '/reconciliation/rollback', 'POST', array( __CLASS__, 'reconciliation_rollback' ), 'run_reconciliation' );
@@ -50,6 +50,9 @@ final class SPF_REST {
 	}
 
 	private static function permission_object( WP_REST_Request $request, $action ) {
+		if ( 'run_system_check' === $action ) {
+			return array( 'object_id' => 'system-check' );
+		}
 		$params = (array) $request->get_json_params();
 		return array(
 			'module_key' => sanitize_key( $params['module_key'] ?? $params['owner_module'] ?? $request['module_key'] ?? '' ),
@@ -62,10 +65,22 @@ final class SPF_REST {
 	public static function status() { return rest_ensure_response( SPF_Plugin::instance()->status_dto() ); }
 	public static function modules( WP_REST_Request $r ) { return rest_ensure_response( SPF_Registry::list_modules( array( 'limit'=>$r->get_param('limit') ?: 100 ) ) ); }
 	public static function module_catalog() { return rest_ensure_response( SPF_Installer::canonical_module_catalog() ); }
-	public static function contracts( WP_REST_Request $r ) { return rest_ensure_response( SPF_Registry::list_contracts( array( 'limit'=>$r->get_param('limit') ?: 100 ) ) ); }
+	public static function contracts( WP_REST_Request $r ) {
+		return rest_ensure_response(
+			SPF_Registry::list_contracts(
+				array(
+					'owner_module'    => $r->get_param( 'owner_module' ) ?: '',
+					'contract_version'=> $r->get_param( 'contract_version' ) ?: '',
+					'status'          => $r->get_param( 'status' ) ?: '',
+					'limit'           => $r->get_param( 'limit' ) ?: 100,
+					'offset'          => $r->get_param( 'offset' ) ?: 0,
+				)
+			)
+		);
+	}
 	public static function routes() { return rest_ensure_response( SPF_Registry::list_routes() ); }
 	public static function readiness( WP_REST_Request $r ) { return rest_ensure_response( SPF_Dependency_Resolver::readiness( sanitize_key( $r['module_key'] ) ) ); }
-	public static function system_check() { return rest_ensure_response( SPF_System_Check::run( true ) ); }
+	public static function system_check( WP_REST_Request $r ) { return rest_ensure_response( SPF_System_Check::run( true, array( 'purpose'=>'rest_run_system_check' ) ) ); }
 	public static function releases( WP_REST_Request $r ) { return rest_ensure_response( SPF_Governance::list_releases( $r->get_param('limit') ?: 50 ) ); }
 	public static function amendments( WP_REST_Request $r ) { return rest_ensure_response( SPF_Governance::list_amendments( $r->get_param('limit') ?: 100 ) ); }
 	public static function flag_status( WP_REST_Request $r ) { return rest_ensure_response( array( 'owner_module'=>sanitize_key($r['owner_module']),'flag_key'=>sanitize_key($r['flag_key']),'enabled'=>SPF_Governance::is_flag_enabled($r['owner_module'],$r['flag_key'],$r->get_param('environment') ?: '') ) ); }

@@ -10,6 +10,7 @@
 - Bound migration backup evidence to module/from/to/environment and destructive purge evidence to the exact purge plan/evidence chain.
 - Rejected noncanonical/duplicate architecture declarations instead of silently collapsing them.
 - Corrected current release/staging handoff documents, WordPress stable tag and CycloneDX SBOM so software 2.0.0, schema 1.2.0 and contract 2.0.0 remain distinct and machine-checked.
+- Added Fourteenth-cycle fail-closed identity/evidence hardening, documented contract filters/pagination, and mutation-grade authorization for persisted System Check evidence.
 - Historical 1.2.0 and earlier review records are retained as historical evidence; they are not current-head claims.
 
 ## 1.2.0 — Earlier corrective baseline

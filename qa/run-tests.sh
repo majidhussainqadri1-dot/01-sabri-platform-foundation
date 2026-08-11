@@ -3,6 +3,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+printf 'Review-2 fixture hashes\n'
+sha256sum tests/unit-tests.php qa/wp-purge-smoke.php qa/wp-eleventh-ten-round-smoke.php qa/wp-runtime-smoke.php
+
 printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 

@@ -36,7 +36,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat tools/.th13-parts/part*.txt > /tmp/apply-thirteenth-review.py
+          cat \
+            tools/.th13-parts/part00.txt \
+            tools/.th13-parts/part01.txt \
+            tools/.th13-parts/part02.txt \
+            tools/.th13-parts/part03.txt \
+            tools/.th13-parts/part04.txt \
+            tools/.th13-parts/part05.txt \
+            tools/.th13-parts/tail00.txt \
+            tools/.th13-parts/tail01.txt \
+            tools/.th13-parts/tail02.txt \
+            tools/.th13-parts/tail03.txt \
+            > /tmp/apply-thirteenth-review.py
           python3 -m py_compile /tmp/apply-thirteenth-review.py
           python3 /tmp/apply-thirteenth-review.py
       - name: Dispatch exact-final corrective QA

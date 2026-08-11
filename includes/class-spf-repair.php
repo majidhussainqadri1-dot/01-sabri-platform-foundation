@@ -33,6 +33,7 @@ final class SPF_Repair {
 					}
 			}
 		}
+		}
 		foreach ( self::RECONCILIATION_OWNED_OPTIONS as $option ) {
 			if ( self::option_exists( $option ) ) {
 				$warnings[] = array(

@@ -96,9 +96,27 @@ final class SPF_Privacy {
 		$removed = false;
 		$idempotency = SPF_Installer::table( 'idempotency' );
 		if ( SPF_Runtime::table_exists( $idempotency ) ) {
-			$count = $wpdb->delete( $idempotency, array( 'actor_id' => $user->ID ), array( '%d' ) );
+			$wpdb->last_error = '';
+			$active = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT 1 FROM {$idempotency} WHERE actor_id=%d AND status NOT IN ('completed','failed') LIMIT 1",
+					$user->ID
+				)
+			);
+			if ( ! empty( $wpdb->last_error ) ) {
+				return array( 'items_removed'=>false, 'items_retained'=>true, 'messages'=>array( __( 'Active idempotency state could not be verified; privacy erasure is blocked until reconciliation succeeds.', 'sabri-platform-foundation' ) ), 'done'=>false );
+			}
+			if ( null !== $active ) {
+				return array( 'items_removed'=>false, 'items_retained'=>true, 'messages'=>array( __( 'An in-flight File 01 mutation still depends on this actor linkage. Erasure will retry after the mutation reaches a terminal state.', 'sabri-platform-foundation' ) ), 'done'=>false );
+			}
+			$count = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$idempotency} WHERE actor_id=%d AND status IN ('completed','failed')",
+					$user->ID
+				)
+			);
 			if ( false === $count ) {
-				return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Transient idempotency linkage could not be erased; retry is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
+				return array( 'items_removed'=>$removed, 'items_retained'=>true, 'messages'=>array( __( 'Terminal idempotency linkage could not be erased; retry is required.', 'sabri-platform-foundation' ) ), 'done'=>false );
 			}
 			$removed = $count > 0;
 		}

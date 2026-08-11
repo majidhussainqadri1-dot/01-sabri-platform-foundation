@@ -37,7 +37,7 @@ d4ddaa5203eef9bdc109ea1b60be5d2c94ad2bcc91d243eb1cb6146704b5fa4f  ./TENTH-FRESH-
 8f96b1b9e83748276db7f0fa5964beb4b19fb8a4bee597ec232e7e9c3e9dca1d  ./TRACEABILITY.md
 952194815f6b1c7325274b8039f26e49af92ca0185d44cf428dc96afd7a83f33  ./includes/class-spf-admin.php
 06585b0996a1ee7cdff95603509a8309890e6598bbfff4f04e79b627c47b5a1f  ./includes/class-spf-audit.php
-7ec1b840c9bb7c0b5f7dd01ff63135419aa271474a585c9356d0586d5a2bcb31  ./includes/class-spf-authorization.php
+89afec66b0754578d485e0104e4755c03a4a1686535e5ab601bae9c40754f45f  ./includes/class-spf-authorization.php
 e92e59c97102d55e05c9ea8e8e6f17057608ae41296c82d6b4ef4c8fb012ecf0  ./includes/class-spf-dependency-resolver.php
 6db4654563fd25f4a11a873bc4fed3ef604c9324dd3b85c86571ce24304f03a7  ./includes/class-spf-event-bus.php
 5fcaef7953720f640372ae9843a315794756ab4797bc5095fe3c6efe598fe235  ./includes/class-spf-future-foundation.php
@@ -56,7 +56,7 @@ fcb0bec4af68546d6714b077d5531fa7c16f9e9c7d5761b273c7ffddf637fd07  ./includes/cla
 f23612b64aaa3ce458e3143e5ec9abb32bd36ccb6baf90e28f0a29f6005a0b93  ./includes/class-spf-rest.php
 1a3a1db912b76f496e426c5e2d51c89f1f78ab4a1fe23e06da9cf3a0d2e88e7e  ./includes/class-spf-runtime.php
 95f82685cdc139b43c05d04955bdc625feb32ab9d6cdacb97ced518ac49d4a10  ./includes/class-spf-system-check.php
-436a0ca91deb8d73f278e258fa90b3d676d3a0858390a00ad65f336ef102d7aa  ./qa/run-tests.sh
+80ba18c876988d6bfa51ac836496499500192596c008fa74454a62b5730f63ab  ./qa/run-tests.sh
 5a884237ee632607a122ca1161419760ed3cbf1382d99132d54304c959b98eda  ./qa/wp-eleventh-ten-round-smoke.php
 c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future-foundation-smoke.php
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
@@ -80,6 +80,7 @@ cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema
 f2d035b8f3105fbb61a23501dd92331386590a763f5c0fe3fdabdc1eb60c674a  ./tests/source-quality-tests.php
 8ba279eb42c195c11ba8377c0f8c566bf2d8d937f67c00b9a0665f9398ae65f6  ./tests/tenth-fresh-eighty-round-review-tests.php
 63f2c7ed14a09ec8e29364763450e1937ad2f268a79247715e4fda27881e5eea  ./tests/third-ten-round-review-tests.php
+d9759463de8843b5663cb936ab58990b92e62af0e241e8498da41f222fb70d10  ./tests/twelfth-ten-round-review-tests.php
 838c9b168db2cafe03a4112173f7b1b944f7bc04ad9f70c07fb19b61877f46e0  ./tests/unit-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
 e1f0b1d07b0c8aac9f0b9ae998d3fef24ab187e81492dfa673729087286cef4e  ./uninstall.php

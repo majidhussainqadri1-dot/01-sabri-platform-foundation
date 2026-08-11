@@ -1,4 +1,4 @@
-70bfa88618a9fd1a29d58fb9f56596e9abdb944e463524df18b73531fbf277a6  ./.github/workflows/corrective-qa.yml
+d7a48c6a55a516535165e75bc8cb743f2255e1f7cea15c1a2dbc706da8c0ab3f  ./.github/workflows/corrective-qa.yml
 5684b6fd028d4aaa6a21d18f9fbbd0d10b1d0b73f5c1eaf28050aca58182eeb0  ./.gitignore
 e668113585172a974dfc79bfb7437cdcfdb4d082b0380c2a98c61da35a11181c  ./ADVERSARIAL-REVIEW-ROUND-2.md
 fad9c79da6683a6355fddbb18f81a5c915118d75d8e29e397fa45faba7e88376  ./ADVERSARIAL-REVIEW-ROUND-4.md
@@ -60,6 +60,7 @@ b7913b0c4c1498432754fa934c236587ef3222897a4dba6516136909e884d547  ./includes/cla
 6cd7f37d046608bcb121b15bf2fad1b599637da0eff9e2f4c49c56a65cc430e2  ./includes/class-spf-runtime.php
 85cda50a5f8950558661aea9599ad781d17f39025d4ef2e591b11d8231fad2d3  ./includes/class-spf-system-check.php
 bde39484f63d5e0a3aacc6ad4675a200e191a91411a08b38e2bb51a59fae2c42  ./qa/run-tests.sh
+75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 0825957278f279c9677ff550beed2254d3588b20868c4bb0108d5a9c9edaeac9  ./qa/wp-fourteenth-ten-round-smoke.php
 c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future-foundation-smoke.php

@@ -4,5 +4,3 @@ L42W7oDykPgCaQhPac8UDNbOMVKaE9wOw6o9CMxtP0oDT0qeRRaauNtte/Vsr20VAv4EOXswJBe1KHdh
 run('git','commit','--allow-empty','-m','review-8: event idempotency privacy purge recheck clean')
 run('git','commit','--allow-empty','-m','review-9: registry dependency REST ownership recheck clean')
 
-# R10 — close the QA/evidence gap created by the connected source corrections.
-(ROOT/'tests/thirteenth-ten-round-review-tests.php').write_text('<?php\ndeclare(strict_types=1);\n\n$root = dirname( __DIR__ );\n$governance = file_get_contents( $root . \'/includes/class-spf-governance.php\' );\n$authorization = file_get_contents( $root . \'/includes/class-spf-authorization.php\' );\n$plugin = file_get_contents( $root . \'/includes/class-spf-plugin.php\' );\n$installer = file_get_contents( $root . \'/includes/class-spf-installer.php\' );\n$resilience = file_get_contents( $root . \'/includes/class-spf-resilience-lab.php\' );\n$runtime = file_get_contents( $root . \'/includes/class-spf-runtime.php\' );\n$audit = file_get_contents( $root . \'/includes/c

@@ -33,6 +33,13 @@ final class SPF_Plugin {
 	}
 
 	public function maybe_upgrade() {
+		$current = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
+		if ( ! SPF_Registry::valid_semver( (string) $current ) ) {
+			$error = new WP_Error( 'spf_schema_version_invalid', __( 'The stored File 01 schema version is malformed; automatic upgrade is blocked pending reconciliation.', 'sabri-platform-foundation' ) );
+			update_option( 'spf_upgrade_state', array( 'status'=>'invalid_schema_version','stored_version'=>(string)$current,'checked_at'=>SPF_Runtime::now_mysql() ), false );
+			set_transient( 'spf_activation_notice', array( 'code'=>$error->get_error_code(),'message'=>$error->get_error_message() ), HOUR_IN_SECONDS );
+			return;
+		}
 		$result = SPF_Installer::maybe_upgrade();
 		if ( is_wp_error( $result ) ) {
 			set_transient( 'spf_activation_notice', array( 'code'=>$result->get_error_code(),'message'=>$result->get_error_message() ), HOUR_IN_SECONDS );
@@ -154,7 +161,6 @@ final class SPF_Plugin {
 			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
 	}
-
 
 	private static function validate_operational_claim( $claim, array $context ) {
 		$operational_claim = $claim;

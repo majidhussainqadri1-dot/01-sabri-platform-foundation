@@ -20,19 +20,30 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
-      - name: Align current-release regression, remove bootstrap workflow and regenerate exact-tree manifest
+      - name: Align current-release regressions, remove bootstrap workflow and regenerate exact-tree manifest
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('tests/fresh-eighty-round-review-tests.php')
-          s=p.read_text()
-          old='''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: runtime/version contract baseline drifted from File 01 v2.0.' );'''
-          new='''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.1' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.1 / 1.2.0 / 2.0.0.' );'''
-          if old not in s:
-              raise SystemExit('Expected Round 80 current-version assertion not found')
-          p.write_text(s.replace(old,new,1))
+
+          replacements = {
+            'tests/fresh-eighty-round-review-tests.php': [
+              ('''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: runtime/version contract baseline drifted from File 01 v2.0.' );''',
+               '''$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.1' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.1 / 1.2.0 / 2.0.0.' );''')
+            ],
+            'tests/tenth-fresh-eighty-round-review-tests.php': [
+              ('''66 => array('sabri-platform-foundation.php', "SPF_VERSION', '2.0.0", 'software version drifted from v2.0'),''',
+               '''66 => array('sabri-platform-foundation.php', "SPF_VERSION', '2.0.1", 'software version drifted from v2.0.1'),''')
+            ],
+          }
+          for path, pairs in replacements.items():
+              p=Path(path); s=p.read_text()
+              for old,new in pairs:
+                  if old not in s:
+                      raise SystemExit(f'Expected current-release assertion not found in {path}: {old}')
+                  s=s.replace(old,new,1)
+              p.write_text(s)
           PY
           rm .github/workflows/refresh-2.0.1-manifest.yml
           find . -type f -not -path './.git/*' -not -path './build/*' -not -path './dist/*' ! -name 'SOURCE-CHECKSUMS.sha256' -print0 \

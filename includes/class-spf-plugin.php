@@ -138,6 +138,7 @@ final class SPF_Plugin {
 			'deployed_package_checksum' => (string) ( $latest_release['checksum_sha256'] ?? '' ),
 			'release_status' => $release_status,
 			'health' => $health,
+			'health_hash' => is_array( $health ) ? SPF_Runtime::hash( $health ) : '',
 		);
 		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, $operational_context );
 		$operational = self::validate_operational_claim( $operational_claim, $operational_context );
@@ -171,6 +172,14 @@ final class SPF_Plugin {
 		if ( ! is_array( $health ) || 'pass' !== ( $health['overall_status'] ?? '' ) ) {
 			return false;
 		}
+		$health_checked_at = strtotime( (string) ( $health['checked_at'] ?? '' ) );
+		$health_hash = strtolower( (string) ( $context['health_hash'] ?? '' ) );
+		$claimed_health_hash = strtolower( trim( (string) ( $claim['health_hash'] ?? '' ) ) );
+		if ( false === $health_checked_at || $health_checked_at > time() + 60 || $health_checked_at < time() - 900
+			|| ! preg_match( '/^[a-f0-9]{64}$/', $health_hash ) || ! preg_match( '/^[a-f0-9]{64}$/', $claimed_health_hash )
+			|| ! hash_equals( $health_hash, $claimed_health_hash ) ) {
+			return false;
+		}
 		$release_id = (string) ( $context['release_id'] ?? '' );
 		$checksum = strtolower( (string) ( $context['deployed_package_checksum'] ?? '' ) );
 		if ( '' === $release_id || ! preg_match( '/^[a-f0-9]{64}$/', $checksum ) ) {
@@ -191,7 +200,12 @@ final class SPF_Plugin {
 			}
 		}
 		$observed_at = strtotime( (string) ( $claim['observed_at'] ?? '' ) );
-		return false !== $observed_at && $observed_at <= time() + 60;
+		$expires_at = strtotime( (string) ( $claim['expires_at'] ?? '' ) );
+		$verifier = trim( (string) ( $claim['verifier'] ?? '' ) );
+		return false !== $observed_at && false !== $expires_at
+			&& $observed_at <= time() + 60 && $observed_at >= time() - 900
+			&& $expires_at > time() && $expires_at <= $observed_at + 900
+			&& '' !== $verifier && strlen( $verifier ) <= 191;
 	}
 
 	public function action_links( $links ) {

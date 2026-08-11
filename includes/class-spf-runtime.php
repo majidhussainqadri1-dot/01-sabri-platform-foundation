@@ -169,8 +169,14 @@ final class SPF_Runtime {
 			if ( ! array_key_exists( $field, $claim ) || '' === (string) $claim[ $field ] ) {
 				return new WP_Error( 'spf_evidence_incomplete', sprintf( /* translators: %s evidence field */ __( 'Verified evidence is missing field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
 			}
-			if ( str_ends_with( (string) $field, '_at' ) && false === strtotime( (string) $claim[ $field ] ) ) {
-				return new WP_Error( 'spf_evidence_timestamp_invalid', sprintf( /* translators: %s evidence field */ __( 'Verified evidence contains an invalid timestamp field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+			if ( str_ends_with( (string) $field, '_at' ) ) {
+				$timestamp = strtotime( (string) $claim[ $field ] );
+				if ( false === $timestamp ) {
+					return new WP_Error( 'spf_evidence_timestamp_invalid', sprintf( /* translators: %s evidence field */ __( 'Verified evidence contains an invalid timestamp field: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+				}
+				if ( 'expires_at' !== (string) $field && $timestamp > time() + 60 ) {
+					return new WP_Error( 'spf_evidence_timestamp_future', sprintf( /* translators: %s evidence field */ __( 'Verified evidence contains a future-dated historical timestamp: %s', 'sabri-platform-foundation' ), $field ), array( 'status' => 412 ) );
+				}
 			}
 		}
 		if ( ! empty( $claim['expires_at'] ) && strtotime( (string) $claim['expires_at'] ) <= time() ) {

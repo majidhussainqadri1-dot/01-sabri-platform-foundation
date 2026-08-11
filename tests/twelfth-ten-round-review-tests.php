@@ -22,7 +22,7 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 // Review 2: a File 00 authorization claim must be scoped to this plugin and
 // the exact File 01 contract version; action/object/purpose alone is not enough.
 $assert( str_contains( $authorization, "'institutional_role', 'plugin', 'contract'" ), 'Authorization claim required fields do not include plugin and contract binding.' );
-$assert( str_contains( $authorization, "'file-01' !== sanitize_key( (string) \$claim['plugin'] )" ), 'Authorization claim is not bound to File 01.' );
+$assert( str_contains( $authorization, "'file-01' !== (string) \$claim['plugin']" ), 'Authorization claim is not bound to File 01.' );
 $assert( str_contains( $authorization, "hash_equals( (string) SPF_CONTRACT_VERSION, (string) \$claim['contract'] )" ), 'Authorization claim is not bound to the exact File 01 contract version.' );
 $assert( str_contains( $authorization, "'plugin'       => 'file-01'" ) && str_contains( $authorization, "'contract'     => SPF_CONTRACT_VERSION" ), 'Authorization request does not ask File 00 for plugin/contract-scoped evidence.' );
 $assert( str_contains( $plugin, "'plugin'=>array('type'=>'string','required'=>true)" ) && str_contains( $plugin, "'contract'=>array('type'=>'semver','required'=>true)" ), 'Published FoundationAuthorizationClaim contract schema is stale relative to runtime validation.' );
@@ -35,7 +35,7 @@ $assert( str_contains( $event_bus, 'spf_event_payload_value_too_large' ) && str_
 $assert( str_contains( $plugin, 'spf_schema_version_invalid' ) && str_contains( $plugin, "'status'=>'invalid_schema_version'" ), 'Malformed stored schema version does not block the automatic upgrade entry point.' );
 
 // Review 6: immutable governance evidence must not be silently shortened.
-$assert( str_contains( $governance, '$out[ $key ] = sanitize_text_field( (string) $v );' ) && ! str_contains( $governance, "substr( sanitize_text_field( (string) \$v ), 0, 1000 )" ), 'Governance evidence can still be silently truncated before hashing/storage.' );
+$assert( str_contains( $governance, 'spf_governance_evidence_value_noncanonical' ) && ! str_contains( $governance, "substr( sanitize_text_field( (string) \$v ), 0, 1000 )" ), 'Governance evidence can still be silently truncated or normalized before hashing/storage.' );
 
 // Review 7: every File 01 scheduled task, including Future Foundation health, must be removed on uninstall.
 $assert( str_contains( $uninstall, "'spf_future_foundation_tick'" ), 'Future Foundation cron remains scheduled after non-destructive uninstall.' );

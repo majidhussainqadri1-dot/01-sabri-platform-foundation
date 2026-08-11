@@ -51,7 +51,7 @@ $assert( str_contains($auth, 'LEGACY_BOOLEAN_BRIDGE_ACTIONS') && str_contains($a
 $assert( str_contains($auth, "'founder' !== \$institutional_role"), 'Round 14: Founder-only governance actions are not role-bound.' );
 $assert( str_contains($auth, '$issued < time() - 900') && str_contains($auth, '( $expires - $issued ) > 900'), 'Round 15: authorization claims are not short-lived.' );
 $assert( str_contains($auth, 'object_hash') && str_contains($auth, 'hash_equals( $expected_hash, $object_hash )'), 'Round 16: authorization claims are not object-bound.' );
-$assert( str_contains($auth, 'expected_purpose') && str_contains($auth, "sanitize_key( \$claim['purpose'] )"), 'Round 17: authorization claims are not purpose-bound.' );
+$assert( str_contains($auth, 'expected_purpose') && str_contains($auth, "(string) \$claim['purpose'] !== \$expected_purpose") && str_contains($auth, '$raw_identity !== sanitize_key( $raw_identity )'), 'Round 17: authorization claims are not purpose-bound.' );
 $assert( str_contains($registry, 'spf_manifest_self_dependency'), 'Round 18: module registry does not reject self-dependency.' );
 $assert( str_contains($registry, 'spf_invalid_manifest_write_owner') && str_contains($registry, 'canonical_entities'), 'Round 19: manifest architecture ownership declarations are not validated.' );
 $assert( str_contains($registry, 'spf_invalid_contract_deprecation') || str_contains($registry, 'spf_contract_deprecation'), 'Round 20: contract deprecation timestamps lack validation.' );

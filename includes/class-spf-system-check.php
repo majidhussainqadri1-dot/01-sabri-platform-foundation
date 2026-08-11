@@ -76,8 +76,9 @@ final class SPF_System_Check {
 		$checks = array_merge( $checks, self::queue_checks() );
 		$checks = array_merge( $checks, self::privacy_checks() );
 
-		$audit = SPF_Audit::verify_chain( 50000 );
-		$checks[] = self::check( 'audit_chain', ! is_wp_error($audit), is_wp_error($audit)?'broken':('verified-'.(int)$audit['rows']), 'Audit chain integrity verification failed.', 'fail' );
+		$audit_ceiling = max( 50000, min( 1000000, absint( apply_filters( 'spf_audit_health_verification_ceiling', 500000 ) ) ) );
+		$audit = SPF_Audit::verify_chain( $audit_ceiling );
+		$checks[] = self::check( 'audit_chain', ! is_wp_error($audit), is_wp_error($audit)?'broken':('verified-'.(int)$audit['rows']), 'Audit chain integrity verification failed or exceeded the configured complete-verification ceiling.', 'fail' );
 
 		$upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
 		$schema_current = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );

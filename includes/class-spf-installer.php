@@ -118,7 +118,11 @@ final class SPF_Installer {
 	 */
 	public static function maybe_upgrade() {
 		$current = get_option( self::SCHEMA_OPTION, '0.0.0' );
-		if ( ! SPF_Registry::valid_semver( (string) $current ) || version_compare( $current, SPF_SCHEMA_VERSION, '>=' ) ) {
+		if ( ! SPF_Registry::valid_semver( (string) $current ) ) {
+			update_option( 'spf_upgrade_state', array( 'status'=>'invalid_schema_version', 'stored_version'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
+			return new WP_Error( 'spf_schema_version_invalid', __( 'The stored File 01 schema version is malformed; schema upgrade is blocked pending reconciliation.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+		}
+		if ( version_compare( $current, SPF_SCHEMA_VERSION, '>=' ) ) {
 			return true;
 		}
 		if ( ! SPF_Authorization::can( 'run_schema_upgrade', array( 'module_key' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION ), array( 'purpose' => 'schema_upgrade' ) ) ) {

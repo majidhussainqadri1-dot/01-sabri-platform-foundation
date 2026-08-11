@@ -149,16 +149,22 @@ final class SPF_Authorization {
 		if ( '' === $claim_id || strlen( $claim_id ) > 191 || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $claim_id ) ) {
 			return false;
 		}
-		if ( ! is_int( $claim['user_id'] ) || $claim['user_id'] < 1 || $claim['user_id'] !== (int) $user_id || sanitize_key( $claim['action'] ) !== sanitize_key( $action ) ) {
+		foreach ( array( 'action','capability','purpose','institutional_role','plugin' ) as $identity_field ) {
+			$raw_identity = (string) $claim[ $identity_field ];
+			if ( '' === $raw_identity || $raw_identity !== sanitize_key( $raw_identity ) ) {
+				return false;
+			}
+		}
+		if ( ! is_int( $claim['user_id'] ) || $claim['user_id'] < 1 || $claim['user_id'] !== (int) $user_id || (string) $claim['action'] !== sanitize_key( $action ) ) {
 			return false;
 		}
 		if ( array_key_exists( 'actor_id', $claim ) && ( ! is_int( $claim['actor_id'] ) || $claim['actor_id'] < 1 || $claim['actor_id'] !== (int) $user_id ) ) {
 			return false;
 		}
-		if ( sanitize_key( $claim['capability'] ) !== sanitize_key( $required ) ) {
+		if ( (string) $claim['capability'] !== sanitize_key( $required ) ) {
 			return false;
 		}
-		if ( 'file-01' !== sanitize_key( (string) $claim['plugin'] ) || ! hash_equals( (string) SPF_CONTRACT_VERSION, (string) $claim['contract'] ) ) {
+		if ( 'file-01' !== (string) $claim['plugin'] || ! hash_equals( (string) SPF_CONTRACT_VERSION, (string) $claim['contract'] ) ) {
 			return false;
 		}
 		$issued  = is_numeric( $claim['issued_at'] ) ? (int) $claim['issued_at'] : strtotime( (string) $claim['issued_at'] );
@@ -175,10 +181,10 @@ final class SPF_Authorization {
 			return false;
 		}
 		$expected_purpose = sanitize_key( $context['purpose'] ?? $action );
-		if ( '' === $expected_purpose || sanitize_key( $claim['purpose'] ) !== $expected_purpose ) {
+		if ( '' === $expected_purpose || (string) $claim['purpose'] !== $expected_purpose ) {
 			return false;
 		}
-		$institutional_role = sanitize_key( $claim['institutional_role'] );
+		$institutional_role = (string) $claim['institutional_role'];
 		if ( '' === $institutional_role ) {
 			return false;
 		}

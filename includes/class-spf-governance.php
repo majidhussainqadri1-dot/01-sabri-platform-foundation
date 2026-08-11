@@ -12,9 +12,10 @@ final class SPF_Governance {
 			}
 		}
 		$status = sanitize_key( $release['status'] ?? 'planned' );
-		$package_name = substr( sanitize_file_name( (string) $release['package_name'] ), 0, 191 );
+		$raw_package_name = (string) $release['package_name'];
+		$package_name = sanitize_file_name( $raw_package_name );
 		$raw_evidence_json = wp_json_encode( $release['evidence'] );
-		if ( '' === $package_name ) { return new WP_Error( 'spf_release_package_name_invalid', __( 'Release evidence must bind a non-empty canonical package filename.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
+		if ( '' === $package_name || strlen( $package_name ) > 191 || ! hash_equals( $raw_package_name, $package_name ) ) { return new WP_Error( 'spf_release_package_name_invalid', __( 'Release evidence must bind an exact canonical package filename of at most 191 bytes; silent filename normalization is forbidden.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		if ( false === $raw_evidence_json || strlen( $raw_evidence_json ) > 262144 ) { return new WP_Error( 'spf_release_evidence_too_large', __( 'Release evidence exceeds the bounded immutable evidence envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		if ( 'planned' !== $status ) {
 			return new WP_Error( 'spf_release_initial_state_invalid', __( 'A release must be created as planned.', 'sabri-platform-foundation' ), array( 'status' => 409 ) );
@@ -23,6 +24,9 @@ final class SPF_Governance {
 			return new WP_Error( 'spf_invalid_release', __( 'Release evidence is invalid.', 'sabri-platform-foundation' ) );
 		}
 		$evidence = self::sanitize_evidence( $release['evidence'] );
+		if ( is_wp_error( $evidence ) ) {
+			return $evidence;
+		}
 		$evidence_error = self::validate_evidence_for_state( $status, $evidence );
 		if ( is_wp_error( $evidence_error ) ) {
 			return $evidence_error;
@@ -100,6 +104,9 @@ final class SPF_Governance {
 		$raw_evidence_json = wp_json_encode( $evidence );
 		if ( false === $raw_evidence_json || strlen( $raw_evidence_json ) > 262144 ) { return new WP_Error( 'spf_release_evidence_too_large', __( 'Release transition evidence exceeds the bounded immutable evidence envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
 		$evidence = self::sanitize_evidence( $evidence );
+		if ( is_wp_error( $evidence ) ) {
+			return $evidence;
+		}
 		$evidence_error = self::validate_evidence_for_state( $next_status, $evidence );
 		if ( is_wp_error( $evidence_error ) ) {
 			return $evidence_error;
@@ -203,9 +210,22 @@ final class SPF_Governance {
 		}
 		$decision_json = wp_json_encode( $amendment['decision'] );
 		if ( false === $decision_json || strlen( $decision_json ) > 262144 ) { return new WP_Error( 'spf_amendment_decision_too_large', __( 'Amendment decision evidence exceeds the bounded governance envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) ); }
-		$id = substr( sanitize_text_field( $amendment['amendment_id'] ), 0, 64 );
-		if ( '' === $id ) {
-			return new WP_Error( 'spf_invalid_amendment_id', __( 'Amendment identifier is invalid after normalization.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		$decision = self::sanitize_evidence( $amendment['decision'] );
+		if ( is_wp_error( $decision ) ) { return $decision; }
+		$raw_id = (string) $amendment['amendment_id'];
+		$id = sanitize_text_field( $raw_id );
+		if ( '' === $id || strlen( $id ) > 64 || $raw_id !== $id || ! preg_match( '/^[A-Za-z0-9._:-]+$/', $id ) ) {
+			return new WP_Error( 'spf_invalid_amendment_id', __( 'Amendment identifier must already be an exact canonical stable identifier of at most 64 bytes.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$raw_supersedes = (string) ( $amendment['supersedes'] ?? '' );
+		$supersedes = sanitize_text_field( $raw_supersedes );
+		if ( strlen( $supersedes ) > 191 || $raw_supersedes !== $supersedes || ( '' !== $supersedes && ! preg_match( '/^[A-Za-z0-9._:-]+$/', $supersedes ) ) ) {
+			return new WP_Error( 'spf_invalid_amendment_supersedes', __( 'Superseded amendment reference must be an exact canonical stable identifier of at most 191 bytes.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
+		}
+		$raw_approver_ref = (string) $amendment['approver_ref'];
+		$approver_ref = sanitize_text_field( $raw_approver_ref );
+		if ( '' === $approver_ref || strlen( $approver_ref ) > 191 || $raw_approver_ref !== $approver_ref ) {
+			return new WP_Error( 'spf_invalid_amendment_approver_ref', __( 'Approver reference must be exact canonical text of at most 191 bytes.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 		}
 		$effective_ts = strtotime( (string) $amendment['effective_at'] );
 		if ( false === $effective_ts ) {
@@ -225,7 +245,7 @@ final class SPF_Governance {
 			return $tx;
 		}
 		try {
-			$ok = $wpdb->insert( SPF_Installer::table( 'amendments' ), array( 'amendment_id'=>$id,'effective_at'=>$effective_at,'supersedes'=>substr(sanitize_text_field($amendment['supersedes']??''),0,191),'decision_json'=>wp_json_encode(self::sanitize_evidence($amendment['decision'])),'approver_ref'=>substr(sanitize_text_field($amendment['approver_ref']),0,191),'status'=>'approved','record_version'=>1,'created_at'=>SPF_Runtime::now_mysql() ) );
+			$ok = $wpdb->insert( SPF_Installer::table( 'amendments' ), array( 'amendment_id'=>$id,'effective_at'=>$effective_at,'supersedes'=>$supersedes,'decision_json'=>wp_json_encode($decision),'approver_ref'=>$approver_ref,'status'=>'approved','record_version'=>1,'created_at'=>SPF_Runtime::now_mysql() ) );
 			if ( false === $ok ) {
 				throw new RuntimeException( 'Amendment could not be stored.' );
 			}
@@ -370,14 +390,36 @@ final class SPF_Governance {
 		return 1 === (int) $row['enabled'];
 	}
 
-	public static function reconcile_expired_flags() {
+	public static function reconcile_expired_flags( array $expected_snapshot = array() ) {
 		global $wpdb;
 		$table = SPF_Installer::table( 'flags' );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=%s LIMIT 100", SPF_Runtime::now_mysql() ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=%s ORDER BY id ASC LIMIT 100", SPF_Runtime::now_mysql() ), ARRAY_A );
 		if ( ! empty( $wpdb->last_error ) ) {
 			return new WP_Error( 'spf_flag_expiry_query_failed', __( 'Expired feature flags could not be queried safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
 		}
-		$result = array( 'expired'=>0, 'conflict'=>0, 'failed'=>0, 'event_failed'=>0 );
+		if ( $expected_snapshot ) {
+			$expected_by_id = array();
+			foreach ( $expected_snapshot as $expected ) {
+				$id = isset( $expected['id'] ) ? (int) $expected['id'] : 0;
+				$version = isset( $expected['record_version'] ) ? (int) $expected['record_version'] : 0;
+				$row_hash = strtolower( (string) ( $expected['row_hash'] ?? '' ) );
+				if ( $id < 1 || $version < 1 || ! preg_match( '/^[a-f0-9]{64}$/', $row_hash ) || isset( $expected_by_id[ $id ] ) ) {
+					return new WP_Error( 'spf_flag_expiry_snapshot_invalid', __( 'The bounded self-heal flag snapshot is malformed.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+				}
+				$expected_by_id[ $id ] = array( 'record_version'=>$version, 'row_hash'=>$row_hash );
+			}
+			$current_by_id = array();
+			foreach ( $rows as $row ) { $current_by_id[ (int) $row['id'] ] = $row; }
+			$bound_rows = array();
+			foreach ( $expected_by_id as $id => $expected ) {
+				if ( empty( $current_by_id[ $id ] ) || (int) $current_by_id[ $id ]['record_version'] !== $expected['record_version'] || ! hash_equals( $expected['row_hash'], SPF_Runtime::hash( $current_by_id[ $id ] ) ) ) {
+					return new WP_Error( 'spf_flag_expiry_snapshot_changed', __( 'An expired feature flag changed after the self-heal dry run; regenerate the plan.', 'sabri-platform-foundation' ), array( 'status'=>409, 'flag_id'=>$id ) );
+				}
+				$bound_rows[] = $current_by_id[ $id ];
+			}
+			$rows = $bound_rows;
+		}
+		$result = array( 'expired'=>0, 'conflict'=>0, 'failed'=>0, 'event_failed'=>0, 'audit_failed'=>0, 'processed_ids'=>array() );
 		foreach ( $rows as $row ) {
 			$tx = SPF_Runtime::begin();
 			if ( is_wp_error( $tx ) ) {
@@ -403,6 +445,12 @@ final class SPF_Governance {
 				SPF_Audit::record( 'feature_flag_expiry_event_failed', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'failed', array( 'purpose'=>'flag_expiry_reconciliation' ) );
 				continue;
 			}
+			$audit = SPF_Audit::record_required( 'feature_flag_expired', 'foundation_flag', $row['owner_module'].':'.$row['flag_key'].':'.$row['environment'], 'success', array( 'purpose'=>'flag_expiry_reconciliation', 'record_version'=>(int)$row['record_version']+1 ) );
+			if ( is_wp_error( $audit ) ) {
+				SPF_Runtime::rollback();
+				$result['audit_failed']++;
+				continue;
+			}
 			$commit = SPF_Runtime::commit();
 			if ( is_wp_error( $commit ) ) {
 				SPF_Runtime::rollback();
@@ -411,6 +459,7 @@ final class SPF_Governance {
 				continue;
 			}
 			$result['expired']++;
+			$result['processed_ids'][] = (int) $row['id'];
 		}
 		return $result;
 	}
@@ -530,22 +579,35 @@ final class SPF_Governance {
 		return true;
 	}
 
-	private static function sanitize_evidence( array $input ) {
+	private static function sanitize_evidence( array $input, $depth = 0 ) {
+		if ( $depth > 8 || count( $input ) > 100 ) {
+			return new WP_Error( 'spf_governance_evidence_envelope_invalid', __( 'Governance evidence exceeds the bounded canonical structure envelope.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+		}
 		$out = array();
 		foreach ( $input as $k => $v ) {
-			$key = substr( sanitize_key( $k ), 0, 128 );
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message_body|payment|identity_document/i', (string) $k ) ) {
+			$raw_key = (string) $k;
+			$key = sanitize_key( $raw_key );
+			if ( '' === $key || strlen( $raw_key ) > 128 || $raw_key !== $key || array_key_exists( $key, $out ) ) {
+				return new WP_Error( 'spf_governance_evidence_key_noncanonical', __( 'Governance evidence keys must already be unique canonical keys of at most 128 bytes; silent normalization is forbidden.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+			}
+			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message_body|payment|identity_document/i', $raw_key ) ) {
 				$out[ $key ] = '[redacted]';
 			} elseif ( is_array( $v ) ) {
-				$out[ $key ] = self::sanitize_evidence( $v );
+				$nested = self::sanitize_evidence( $v, $depth + 1 );
+				if ( is_wp_error( $nested ) ) { return $nested; }
+				$out[ $key ] = $nested;
 			} elseif ( is_bool( $v ) || is_int( $v ) || is_float( $v ) || null === $v ) {
 				$out[ $key ] = $v;
 			} elseif ( is_scalar( $v ) ) {
-				$out[ $key ] = sanitize_text_field( (string) $v );
+				$raw_value = (string) $v;
+				$safe_value = sanitize_text_field( $raw_value );
+				if ( $raw_value !== $safe_value ) {
+					return new WP_Error( 'spf_governance_evidence_value_noncanonical', __( 'Governance evidence scalar values must already be canonical text; silent normalization is forbidden.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+				}
+				$out[ $key ] = $safe_value;
 			} else {
-				$out[ $key ] = '[unsupported]';
+				return new WP_Error( 'spf_governance_evidence_value_invalid', __( 'Governance evidence contains an unsupported value type.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
 			}
 		}
 		return SPF_Runtime::canonicalize( $out );
-	}
-}
+	}}

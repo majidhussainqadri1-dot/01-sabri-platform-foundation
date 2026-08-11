@@ -57,11 +57,11 @@ f23612b64aaa3ce458e3143e5ec9abb32bd36ccb6baf90e28f0a29f6005a0b93  ./includes/cla
 1a3a1db912b76f496e426c5e2d51c89f1f78ab4a1fe23e06da9cf3a0d2e88e7e  ./includes/class-spf-runtime.php
 95f82685cdc139b43c05d04955bdc625feb32ab9d6cdacb97ced518ac49d4a10  ./includes/class-spf-system-check.php
 80ba18c876988d6bfa51ac836496499500192596c008fa74454a62b5730f63ab  ./qa/run-tests.sh
-5a884237ee632607a122ca1161419760ed3cbf1382d99132d54304c959b98eda  ./qa/wp-eleventh-ten-round-smoke.php
+509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future-foundation-smoke.php
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
-4a21239ef7603c8c13646255682bb87d142a1a3907ffb39d6a70021129776c7e  ./qa/wp-purge-smoke.php
-31cf466c094053e7ef74b184179cb1a5c4c5609052058a558ba0c844cd3f820a  ./qa/wp-runtime-smoke.php
+f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
+8bc550178993426d75a52795f06425a2ae2abd7df75444e108ffd72f17fa22e1  ./qa/wp-runtime-smoke.php
 a765f552c4f15a94d15db70a979ea55812eddfc8b691a5e5bd23fd8f87eae3fa  ./readme.txt
 e79218e151c38193492392ea43f142a0f05a3decb23d7361a4b3797245795147  ./sabri-platform-foundation.php
 1d7f1bc67a1d18d12fccf22a809eef9e8ba975f0fd82d1a5704aa0df26c061bf  ./tests/bootstrap-minimal.php
@@ -72,7 +72,7 @@ d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-
 2d4b6010e5743f542fd331abe1ac383b1282fdc8b11a250d11a3ce2ed79e4c78  ./tests/fourth-ten-round-review-tests.php
 18caa15a2676287197080ec53618c4499da68e8424040ffc9ac63609c2a7ff95  ./tests/fresh-eighty-round-review-tests.php
 e95a4a261875e670ea04f06ad92f00346a4a8d90d46058f9f36d39337469c560  ./tests/future-foundation-tests.php
-86401c8aa95a4a6e0660a5f23a60ac0a5bee49ec34cfcda55b5cea9855f75665  ./tests/release-handoff-contract-tests.php
+851e37cd940e34a23b13535ca66b5968c90357f7e1a07cc1625d02bf5c455abc  ./tests/release-handoff-contract-tests.php
 cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema-tests.php
 38560cdf8d4f76e28e5b79e912f2317aa88b327a36fb0045c830a1025079e2a4  ./tests/security-tests.php
 2c5c82b596418ab6410bcc582b3bdfc986f3ba3bbfa0bfabc3701447fcf0850e  ./tests/seventh-ten-round-review-tests.php
@@ -81,6 +81,6 @@ f2d035b8f3105fbb61a23501dd92331386590a763f5c0fe3fdabdc1eb60c674a  ./tests/source
 8ba279eb42c195c11ba8377c0f8c566bf2d8d937f67c00b9a0665f9398ae65f6  ./tests/tenth-fresh-eighty-round-review-tests.php
 63f2c7ed14a09ec8e29364763450e1937ad2f268a79247715e4fda27881e5eea  ./tests/third-ten-round-review-tests.php
 d9759463de8843b5663cb936ab58990b92e62af0e241e8498da41f222fb70d10  ./tests/twelfth-ten-round-review-tests.php
-838c9b168db2cafe03a4112173f7b1b944f7bc04ad9f70c07fb19b61877f46e0  ./tests/unit-tests.php
+1dab3824c56fa8a62d162c9379f44a41b8186d98305017b936b2574f43cd33c7  ./tests/unit-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
 e1f0b1d07b0c8aac9f0b9ae998d3fef24ab187e81492dfa673729087286cef4e  ./uninstall.php

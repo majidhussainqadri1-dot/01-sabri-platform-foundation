@@ -85,6 +85,8 @@ jobs:
         run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-thirteenth-ten-round-smoke.php --user=admin --path=/tmp/wp
       - name: Run Fourteenth ten-round runtime smoke
         run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-fourteenth-ten-round-smoke.php --user=admin --path=/tmp/wp
+      - name: Run live reconciliation ownership regression smoke
+        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-reconciliation-ownership-smoke.php --user=admin --path=/tmp/wp
       - name: Run concurrent idempotency test
         run: |
           wp option delete spf_concurrency_counter --path=/tmp/wp || true

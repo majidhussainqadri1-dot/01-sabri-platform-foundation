@@ -180,7 +180,7 @@ $assert( true === $e1 && true === $e2 && true === $e3 && 2 === $e_count, 'Explic
 
 update_option( SPF_Installer::SCHEMA_OPTION, '1.0.0', false );
 add_filter( 'spf_verify_migration_backup_evidence', static function ( $claim, array $context ) {
-    return [ 'verified'=>true,'backup_id'=>'wrong-context-backup','restore_tested_at'=>gmdate('c'),'verifier'=>'CI negative probe','module'=>(string)($context['module']??''),'from'=>(string)($context['from']??''),'to'=>(string)($context['to']??''),'environment'=>'production','expires_at'=>gmdate('c',time()+3600) ];
+    return [ 'verified'=>true,'backup_id'=>'wrong-context-backup','restore_tested_at'=>gmdate('c'),'verifier'=>'CI negative probe','module'=>'file-99','from'=>(string)($context['from']??''),'to'=>(string)($context['to']??''),'environment'=>(string)($context['environment']??''),'expires_at'=>gmdate('c',time()+3600) ];
 }, 50, 2 );
 $bad_upgrade = SPF_Installer::maybe_upgrade();
 $assert( is_wp_error( $bad_upgrade ) && 'spf_migration_backup_evidence_binding_invalid' === $bad_upgrade->get_error_code(), 'Wrong-context migration backup evidence was accepted.' );

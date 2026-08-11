@@ -15,7 +15,7 @@ Repository/source and automated-runtime evidence only. It does not convert repos
 | 7 | File 00 authorization boundary | No new defect found; sensitive mutations remain structured-claim fail-closed. | Clean. |
 | 8 | Outbox replay/failure safety | No new defect found; ambiguous handler completion remains `reconciliation_required`. | Clean. |
 | 9 | Ownership/package boundary | No new defect found; canonical folder and non-owner boundaries remain intact. | Clean. |
-| 10 | Staging/live/operational + regression contract | **F01-R11-Q001:** an inherited Fresh-80 assertion still encoded the obsolete rule `staged = Staging-Accepted`; **F01-R11-Q002:** the first meta-regression guard then falsely treated the old text inside its own negative assertion as an active rule. Both QA contracts were corrected to verify semantics, not mere substring absence; product code was not weakened. | QA defect fixed + full regression rerun. |
+| 10 | Staging/live/operational + regression contract | **F01-R11-Q001:** an inherited Fresh-80 assertion still encoded the obsolete rule `staged = Staging-Accepted`; **F01-R11-Q002:** the first meta-regression guard falsely treated the old text inside its own negative assertion as an active rule; **F01-R11-Q003:** the first migration negative fixture used `production` as its intended wrong environment, but CI itself resolved to `production`, so the fixture was not actually mismatched. The negative probe now uses impossible `module=file-99`, making the mismatch deterministic. These were QA-contract/fixture defects only; product code was not weakened. | QA defect fixed + full regression rerun. |
 
 **Defect-bearing rounds: 1, 2, 3, 4, 5, 6, 10.**  
 **Clean rounds: 7, 8, 9.**

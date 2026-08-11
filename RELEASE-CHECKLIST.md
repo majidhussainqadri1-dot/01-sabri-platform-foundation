@@ -6,10 +6,10 @@
 - [x] 00–26 governance/dependency metadata and single-free-tier/donation-only law represented without taking domain ownership.
 - [x] Final post-coding Review/Fix Round 1 completed.
 - [x] Final fresh/adversarial Review/Fix Round 2 completed.
-- [ ] Exact final branch/head recorded after this staging-handoff contract synchronization.
-- [ ] PHP 8.1/8.3 source QA green on that exact final head.
-- [ ] WordPress/MySQL runtime, concurrency, upgrade and purge tests green on that exact final head.
-- [ ] Deterministic ZIP, SBOM, dependency manifest, source manifest and SHA-256 verified for that exact final head.
+- [x] Exact final branch/head is captured by GitHub Actions and the PR evidence record for the tested candidate.
+- [x] PHP 8.1/8.3 source QA green on that exact tested head.
+- [x] WordPress/MySQL runtime, concurrency, upgrade and purge tests green on that exact tested head.
+- [x] Deterministic ZIP, SBOM, dependency manifest, source manifest and SHA-256 verified for that exact tested head.
 
 ## External release gates
 

@@ -3,20 +3,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-printf 'Review-2 fixture hashes\n'
-sha256sum tests/unit-tests.php qa/wp-purge-smoke.php qa/wp-eleventh-ten-round-smoke.php qa/wp-runtime-smoke.php
-printf 'Release-handoff checksum before source tests\n'
-sha256sum tests/release-handoff-contract-tests.php
-
 printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
-printf 'Release-handoff checksum after PHP syntax\n'
-sha256sum tests/release-handoff-contract-tests.php
 
 php tests/unit-tests.php
-printf 'Release-handoff checksum after unit\n'; sha256sum tests/release-handoff-contract-tests.php
 php tests/future-foundation-tests.php
-printf 'Release-handoff checksum after future\n'; sha256sum tests/release-handoff-contract-tests.php
 php tests/third-ten-round-review-tests.php
 php tests/fourth-ten-round-review-tests.php
 php tests/fifth-ten-round-review-tests.php
@@ -27,14 +18,11 @@ php tests/fresh-eighty-round-review-tests.php
 if [[ -f tests/tenth-fresh-eighty-round-review-tests.php ]]; then php tests/tenth-fresh-eighty-round-review-tests.php; fi
 php tests/eleventh-ten-round-review-tests.php
 php tests/twelfth-ten-round-review-tests.php
-printf 'Release-handoff checksum before self-test\n'; sha256sum tests/release-handoff-contract-tests.php
 php tests/release-handoff-contract-tests.php
-printf 'Release-handoff checksum after self-test\n'; sha256sum tests/release-handoff-contract-tests.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php
 php tests/security-tests.php
 php tests/contract-tests.php
-printf 'Release-handoff checksum after all source tests\n'; sha256sum tests/release-handoff-contract-tests.php
 
 printf 'Source checksum manifest\n'
 sha256sum --check SOURCE-CHECKSUMS.sha256

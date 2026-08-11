@@ -50,7 +50,21 @@ jobs:
             > /tmp/apply-thirteenth-review.py
           python3 -m py_compile /tmp/apply-thirteenth-review.py
           python3 /tmp/apply-thirteenth-review.py
-      - name: Dispatch exact-final corrective QA
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run corrective-qa.yml --ref codex/file-01-complete-foundation-1.0.0
+      - name: Pack exact final source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=build --exclude=dist -czf /tmp/file01-thirteenth-final-source.tgz .
+          sha256sum /tmp/file01-thirteenth-final-source.tgz
+          git rev-parse HEAD > /tmp/file01-thirteenth-final-head.txt
+          git rev-parse HEAD^{tree} > /tmp/file01-thirteenth-final-tree.txt
+      - name: Upload exact final source tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: file01-thirteenth-final-source
+          path: |
+            /tmp/file01-thirteenth-final-source.tgz
+            /tmp/file01-thirteenth-final-head.txt
+            /tmp/file01-thirteenth-final-tree.txt
+          if-no-files-found: error
+          retention-days: 30

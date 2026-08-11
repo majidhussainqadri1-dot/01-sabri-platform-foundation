@@ -1,0 +1,23 @@
+
+
+# Preserve Twelfth invariant semantics while accepting the stronger canonical-value implementation.
+twelfth=ROOT/'tests/twelfth-ten-round-review-tests.php'
+s=twelfth.read_text()
+old="$assert( str_contains( $governance, '$out[ $key ] = sanitize_text_field( (string) $v );' ) && ! str_contains( $governance, \"substr( sanitize_text_field( (string) \\$v ), 0, 1000 )\" ), 'Governance evidence can still be silently truncated before hashing/storage.' );"
+new="$assert( str_contains( $governance, 'spf_governance_evidence_value_noncanonical' ) && ! str_contains( $governance, \"substr( sanitize_text_field( (string) \\$v ), 0, 1000 )\" ), 'Governance evidence can still be silently truncated or normalized before hashing/storage.' );"
+if old not in s:
+    raise SystemExit('Twelfth governance assertion marker not found')
+twelfth.write_text(s.replace(old,new,1))
+
+runner=ROOT/'qa/run-tests.sh'
+s=runner.read_text()
+marker='php tests/twelfth-ten-round-review-tests.php\n'
+if marker not in s: raise SystemExit('QA runner marker missing')
+runner.write_text(s.replace(marker, marker+'php tests/thirteenth-ten-round-review-tests.php\n',1))
+
+workflow=ROOT/'.github/workflows/corrective-qa.yml'
+s=workflow.read_text()
+marker="      - name: Run Future Foundation 18-enhancement runtime smoke\n        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-future-foundation-smoke.php --user=admin --path=/tmp/wp\n"
+insert=marker+"      - name: Run Thirteenth ten-round runtime smoke\n        run: wp eval-file /tmp/wp/wp-content/plugins/sabri-platform-foundation-01/qa/wp-thirteenth-ten-round-smoke.php --user=admin --path=/tmp/wp\n"
+if marker not in s: raise SystemExit('Runtime workflow marker missing')
+workflow.write_text(s.replace(marker,

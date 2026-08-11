@@ -10,7 +10,7 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 $admin = get_user_by( 'login', 'admin' );
 wp_set_current_user( $admin ? $admin->ID : 1 );
 
-$assert( defined( 'SPF_VERSION' ) && '2.0.0' === SPF_VERSION, 'Plugin version mismatch.' );
+$assert( defined( 'SPF_VERSION' ) && '2.0.1' === SPF_VERSION, 'Plugin version mismatch.' );
 $assert( '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version mismatch after activation.' );
 $assert( '2.0.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
 $schema = SPF_Installer::verify_schema();

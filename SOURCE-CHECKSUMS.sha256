@@ -1,4 +1,4 @@
-72ec7dedddc62d039826a523c69871389dc28fb562bfec6b376d2fa282a49796  ./.github/workflows/corrective-qa.yml
+45f5eabe6ff4685494b40d46daf8e842a1f08d90dc4210b7325bc46ec1c5212b  ./.github/workflows/corrective-qa.yml
 5684b6fd028d4aaa6a21d18f9fbbd0d10b1d0b73f5c1eaf28050aca58182eeb0  ./.gitignore
 e668113585172a974dfc79bfb7437cdcfdb4d082b0380c2a98c61da35a11181c  ./ADVERSARIAL-REVIEW-ROUND-2.md
 fad9c79da6683a6355fddbb18f81a5c915118d75d8e29e397fa45faba7e88376  ./ADVERSARIAL-REVIEW-ROUND-4.md
@@ -15,6 +15,7 @@ a8ee2781f6e980cddb7360a7a525c256aee5ba48eeda3d3929d57d66147dba68  ./FUTURE-FOUND
 f85b12550c1ab265ef5860881f3f871104723bac27db1e2e8b17cd6177ac2c46  ./FUTURE-FOUNDATION-ADVERSARIAL-ROUND-2-2026-08-08.md
 1831420b7c5f88b6a1aec819b05924b2da553867fd5e2b1d203a7d97faa29de9  ./FUTURE-FOUNDATION-REVIEW-ROUND-1-2026-08-08.md
 b29955b71cdd13ba9874d0f9fb1c6787c3cd5a246e87eb3f517c5c80ace0640b  ./KNOWN-LIMITATIONS.md
+7cecebe94d3422ba116b16945080790570d53bc9ba0f94142f7e5fafdeb8d84c  ./LIVE-RECONCILIATION-CORRECTIVE-EVIDENCE-2026-08-11.md
 d4fe615caec945548e09bc03232622c9b6252211fcd375dfc3e74e5d9a5e7ba7  ./MIGRATION.md
 46317afd163947da6716164b5aa8788bb131e99cf4d502f5ca0df4ba1822139f  ./NINTH-FRESH-EIGHTY-ROUND-REVIEW-2026-08-09.md
 349c2bf9ddd2d1d0c5909995e34ea47ca29e69119a49f861169c341ff82de671  ./PRIVACY.md
@@ -67,10 +68,10 @@ c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
 ba8adc9a3b9d6df280a15c91b1566c847ace9a35dabc2359712099ecaf3db957  ./qa/wp-reconciliation-ownership-smoke.php
-8bc550178993426d75a52795f06425a2ae2abd7df75444e108ffd72f17fa22e1  ./qa/wp-runtime-smoke.php
+872d25d1a4571a2ff97f27d4ae14ae4d66b6579bd7cedc3abce170ef2af9062b  ./qa/wp-runtime-smoke.php
 ecf2a2f89dec47c37fe602941381dc3ada2a39f7c84730979fc12c23841b52b0  ./qa/wp-thirteenth-ten-round-smoke.php
 fad7ab9718869f1ade77bf5f039967accd0fa0f31f760ab5a137b550b0b63c5e  ./readme.txt
-839cff0d5fda2d6cc3509870a876b5f17985bebe5c39f2a58713c0350035e625  ./sabri-platform-foundation.php
+52162ec591535d40d2363e064e2c352ef4f3b61080b730f2eae3d24ae5a84f2a  ./sabri-platform-foundation.php
 1d7f1bc67a1d18d12fccf22a809eef9e8ba975f0fd82d1a5704aa0df26c061bf  ./tests/bootstrap-minimal.php
 d60c99e3ec839ad92a4b6cefa1cd901e8b77b62c6a4b261976d3b5d52129f60b  ./tests/contract-tests.php
 6b97d63aff30c987f5dc820cf8d6a49bf2f6364bd506642088212448f184cc9f  ./tests/eighth-ten-round-review-tests.php

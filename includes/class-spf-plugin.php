@@ -95,7 +95,7 @@ final class SPF_Plugin {
 					'allowed'=>array('type'=>'boolean','required'=>true),'user_id'=>array('type'=>'integer','required'=>true),'actor_id'=>array('type'=>'integer','required'=>false),
 					'action'=>array('type'=>'string','required'=>true),'capability'=>array('type'=>'string','required'=>true),'object_hash'=>array('type'=>'sha256','required'=>true),
 					'purpose'=>array('type'=>'string','required'=>true),'issued_at'=>array('type'=>'timestamp','required'=>true),'expires_at'=>array('type'=>'timestamp','required'=>true),
-					'institutional_role'=>array('type'=>'string','required'=>true),
+					'institutional_role'=>array('type'=>'string','required'=>true),'plugin'=>array('type'=>'string','required'=>true),'contract'=>array('type'=>'semver','required'=>true),
 				),
 				'consumers'=>array('file-00','file-24'),
 			),

@@ -1,37 +1,36 @@
 === Sabri Platform Foundation ===
-Contributors: sabrihomeopathy
-Tags: homeopathy, social platform, news feed, foundation
+Contributors: majidhussainqadri1-dot
 Requires at least: 6.0
-Tested up to: 7.0
-Requires PHP: 7.4
-Stable tag: 0.1.0
+Requires PHP: 8.1
+Stable tag: 2.0.0
 License: GPLv2 or later
 
-Modular foundation, navigation, public home and news shell for the Sabri Social Homeopathy Platform.
+Canonical File 01-B governance, registry, dependency, route, privacy, event, health, reconciliation, repair and release-evidence runtime for the Sabri Social Homeopathy Platform.
+
+== Description ==
+
+This plugin is a governance and compatibility plane. It does not create a second public shell, feed, profile, identity system, Security Center, notification owner, or search/discovery/ranking backend.
+
+Version 2.0.0 is the current repository candidate. Its schema remains 1.2.0 and its contract version is 2.0.0. It incorporates the approved Future Foundation enhancements and the later corrective hardening of authorization, event/outbox safety, dependency/registry rules, release evidence, migration/rollback evidence, resilience and staging handoff. Production use still requires the separate Hostinger staging, Founder-acceptance, deployment and operational gates in STAGING-ACCEPTANCE.md.
 
 == Installation ==
 
-1. In WordPress Admin, open Plugins > Add New Plugin > Upload Plugin.
-2. Select sabri-platform-foundation-0.1.0.zip.
-3. Click Install Now and then Activate.
-4. Open Sabri Platform in the WordPress Admin menu.
-5. Click View Sabri Platform Home and review it before changing the live homepage.
-
-== What this first module does ==
-
-* Creates a separate Sabri Platform Home page without replacing the current homepage.
-* Creates the approved central module pages without overwriting existing pages with the same slugs.
-* Shows published WordPress posts in the public News Area.
-* Keeps pending or draft doctor posts hidden from public visitors.
-* Adds the exact approved one-line navigation and light bright orange design foundation.
-* Adds modular templates, CSS and JavaScript for later ZIP modules.
-
-== Important ==
-
-Google OAuth requires approved credentials and will be connected in the dedicated Authentication module. This foundation does not modify the active theme and does not automatically set itself as the site homepage.
+1. Verify the exact candidate HEAD, package SHA-256 and SOURCE-MANIFEST.sha256.
+2. Freeze the current staging reality before changing anything.
+3. Install only on isolated staging after independently verified backup/restore evidence.
+4. Activate as an authorized operator.
+5. Run the redacted System Check and schema/index verification.
+6. Register real owner manifests from companion modules; do not seed placeholder truth.
+7. Complete STAGING-ACCEPTANCE.md before any production approval.
 
 == Changelog ==
 
-= 0.1.0 =
-* Initial approved foundation release.
+= 2.0.0 =
+* Added the approved Future Foundation 18-enhancement control-plane/resilience layer.
+* Hardened exact table/lock truth, registry normalization, cron evidence, event payloads, config drift, SLO/rings, event schemas and self-heal recovery/compensation.
+* Hardened release/staging truth so repository, staging, live and operational states cannot be conflated.
+* Added exact software/schema/contract handoff checks and current-document/SBOM consistency protection.
+* Preserved File 00/20/21/24/25/26 canonical ownership boundaries without a second domain truth.
 
+= 1.2.0 =
+* Earlier corrective baseline for actor/object/purpose-bound claims, event privacy classification, exact indexes, feature activation evidence, reconciliation receipts and purge safeguards.

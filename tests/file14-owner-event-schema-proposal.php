@@ -5,8 +5,8 @@ require __DIR__ . '/../includes/class-spf-file14-owner-event-schema-v1.php';
 $now = 1750000000;
 $good = array(
     'contract' => SPF_File14_Owner_Event_Schema_V1::CONTRACT,
-    'owner' => 'file09', 'event' => 'File09.ApplicationStarted.v1',
-    'stage' => 'application_started',
+    'owner' => 'file09', 'event' => 'File09.ApplicationSubmitted.v1',
+    'stage' => 'application_submitted',
     'event_id' => '12345678-1234-4123-8123-123456789abc',
     'emitted_at' => $now, 'purpose' => 'conversion_analytics',
     'optional_analytics_consent' => true, 'gpc' => false, 'minor' => false,
@@ -15,7 +15,7 @@ $good = array(
 $cases = array();
 $cases[] = array( 'canonical File09 schema', $good, true );
 foreach ( array(
-    array( 'owner'=>'file08', 'event'=>'File08.BookingStarted.v1', 'stage'=>'booking_started' ),
+    array( 'owner'=>'file08', 'event'=>'File08.AppointmentRequested.v1', 'stage'=>'appointment_requested' ),
     array( 'owner'=>'file07', 'event'=>'File07.DirectoryServed.v1', 'stage'=>'destination_served' ),
 ) as $change ) {
     $cases[] = array( 'other canonical owner schema', array_merge( $good, $change ), true );
@@ -23,7 +23,7 @@ foreach ( array(
 $edits = array(
     array( 'contract', 'v2' ), array( 'owner', 'file99' ),
     array( 'owner', 'FILE09' ), array( 'owner', '' ),
-    array( 'event', 'File08.BookingStarted.v1' ), array( 'stage', 'booking_started' ),
+    array( 'event', 'File08.AppointmentRequested.v1' ), array( 'stage', 'appointment_requested' ),
     array( 'stage', 'cta_selected' ), array( 'event_id', 'bad' ),
     array( 'event_id', 123 ), array( 'event_id', '12345678-1234-0123-8123-123456789abc' ),
     array( 'emitted_at', $now - 301 ), array( 'emitted_at', $now + 301 ),

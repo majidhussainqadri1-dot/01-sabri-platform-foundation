@@ -22,6 +22,7 @@ php tests/thirteenth-ten-round-review-tests.php
 php tests/fourteenth-ten-round-review-tests.php
 php tests/live-reconciliation-regression-tests.php
 php tests/release-handoff-contract-tests.php
+php tests/file14-owner-event-schema-proposal.php
 php tests/source-quality-tests.php
 php tests/schema-tests.php
 php tests/security-tests.php

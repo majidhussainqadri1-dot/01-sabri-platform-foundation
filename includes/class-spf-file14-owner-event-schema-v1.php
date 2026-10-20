@@ -5,6 +5,11 @@
  * This is a schema validator only. It does NOT verify producer identity,
  * cryptographic evidence, consent provenance or a delivery/erasure ledger.
  * Not registered at runtime. It MUST NOT unlock File14 conversion scoring.
+ * File08 native outbox records AppointmentRequested.v1 (a request, NOT a
+ * completed booking); File09 native post-commit hook is submitted, NOT merely
+ * started. Normalized names below are an UNAPPROVED compatibility proposal;
+ * existing File14 legacy counters must not be reinterpreted or migrated by
+ * this schema-only class.
  */
 defined( 'ABSPATH' ) || exit;
 
@@ -14,8 +19,8 @@ final class SPF_File14_Owner_Event_Schema_V1 {
     public static function stages() {
         return array(
             'file07' => array( 'event' => 'File07.DirectoryServed.v1', 'stage' => 'destination_served' ),
-            'file08' => array( 'event' => 'File08.BookingStarted.v1', 'stage' => 'booking_started' ),
-            'file09' => array( 'event' => 'File09.ApplicationStarted.v1', 'stage' => 'application_started' ),
+            'file08' => array( 'event' => 'File08.AppointmentRequested.v1', 'stage' => 'appointment_requested' ),
+            'file09' => array( 'event' => 'File09.ApplicationSubmitted.v1', 'stage' => 'application_submitted' ),
         );
     }
 

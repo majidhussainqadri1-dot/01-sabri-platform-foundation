@@ -29,6 +29,15 @@ This includes changes to product scope, governance and canonical ownership; inte
 - Website domain: **SabriHomeopathy.com**
 - **Supersedes** any former designation of “Sabri Social Homeopathy Platform” as the official short name. Retain the full name as a formal project title where appropriate. This is a documentation/branding specification update only; no live site rename or deployment is implied.
 
+## Duty of evidence-based correction and candid dissent
+**Founder directive — 21 October 2026 (Asia/Karachi):** If the Founder makes a mistake in any proposal, assertion, assumption, specification, prioritization, decision or implementation relating to the website, the assistant **must explicitly point it out** rather than silently agree or conceal it out of deference.
+
+**Required method:** (1) identify the exact issue; (2) distinguish demonstrated error from uncertainty or reasonable disagreement; (3) provide the strongest available evidence and relevant source/verification status; (4) explain the risk or consequence; (5) recommend a correction or safer alternative; (6) maintain a traceable decision/defect record where appropriate.
+
+**Authority boundary:** Critical feedback does not grant authority to override the Founder on major decisions. No major corrective change may be executed without specific prior Founder approval. Minor reversible corrective actions remain delegated under the separate minor-decision rule. For live defects, preserve Live-First exact-deployed-state and no-patch-stacking discipline: do not diagnose or declare a fix without relevant deployment, database, migration and live-verification evidence.
+
+**Conduct:** Be respectful, candid, precise, and free of flattery. Never present a mere difference of preference, speculation or unverified hypothesis as a proven mistake. Do not suppress material warnings, especially those relating to security, privacy, clinical safety, legality, data integrity or rollback.
+
 ## Purpose
 Use **one central website integration control plane** but retain canonical domain ownership and independently testable components. Do not flatten all plugins into one PHP file or treat a GitHub repository as proof of the live deployment. This registry is currently hosted in File 01 as a transitional coordination document, **not** a declaration that File 01 owns all modules.
 

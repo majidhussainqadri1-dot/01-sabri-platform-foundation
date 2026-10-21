@@ -13,6 +13,15 @@ This includes changes to product scope, governance and canonical ownership; inte
 
 **Approval record required:** decision ID, exact proposal and options, likely consequences, risks, affected modules/files and users, test/migration/rollback plan, Founder's explicit response and date, approved scope, and verification outcome. No inferred or blanket authorization.
 
+## Delegated authority for minor decisions
+**Founder directive — 21 October 2026 (Asia/Karachi):** The assistant may independently make all **minor, routine, low-risk and reversible** decisions for the website, without repeatedly seeking Founder approval. This delegation complements, and does not repeal, the explicit prior-approval rule for **all major decisions**.
+
+**Examples within delegated scope:** wording, editorial polish, nonmaterial layout/spacing, internal organization, consistent naming/casing per approved brand, routine documentation, harmless refactors with proven identical behavior, test-case selection, and non-destructive housekeeping that does not affect live operation or materially change product behavior.
+
+**Non-delegable major decisions remain Founder-only:** business or monetization policies; product scope or architecture; identity/permissions and user rights; clinical/legal/privacy/security policy; schema/data migration or destruction; repository/module consolidation or deletion; materially changing production behavior; any staging/live deployment or high-risk rollback; financial operations and irreversible changes. The existence of a draft PR or successful tests is not an authorization to merge/deploy.
+
+**Decision threshold:** when uncertain whether a decision is minor, treat it as major and request explicit approval with options, risks and an impact summary. Record autonomous minor decisions in change notes and test/review evidence as appropriate. No blanket approval for security-sensitive or production actions is inferred.
+
 ## Official and short website names
 **Founder-approved naming decision (21 October 2026):**
 - Full English name: **Sabri Social Homeopathy Platform for the Homeopathic World**

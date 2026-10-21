@@ -13,6 +13,13 @@ This includes changes to product scope, governance and canonical ownership; inte
 
 **Approval record required:** decision ID, exact proposal and options, likely consequences, risks, affected modules/files and users, test/migration/rollback plan, Founder's explicit response and date, approved scope, and verification outcome. No inferred or blanket authorization.
 
+## Official and short website names
+**Founder-approved naming decision (21 October 2026):**
+- Full English name: **Sabri Social Homeopathy Platform for the Homeopathic World**
+- Official short name: **Sabri Homeopathy**
+- Website domain: **SabriHomeopathy.com**
+- **Supersedes** any former designation of “Sabri Social Homeopathy Platform” as the official short name. Retain the full name as a formal project title where appropriate. This is a documentation/branding specification update only; no live site rename or deployment is implied.
+
 ## Purpose
 Use **one central website integration control plane** but retain canonical domain ownership and independently testable components. Do not flatten all plugins into one PHP file or treat a GitHub repository as proof of the live deployment. This registry is currently hosted in File 01 as a transitional coordination document, **not** a declaration that File 01 owns all modules.
 

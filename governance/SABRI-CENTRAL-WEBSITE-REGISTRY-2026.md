@@ -38,7 +38,7 @@ This includes changes to product scope, governance and canonical ownership; inte
 
 **Conduct:** Be respectful, candid, precise, and free of flattery. Never present a mere difference of preference, speculation or unverified hypothesis as a proven mistake. Do not suppress material warnings, especially those relating to security, privacy, clinical safety, legality, data integrity or rollback.
 
-## Purpose
+NaN## Purpose
 Use **one central website integration control plane** but retain canonical domain ownership and independently testable components. Do not flatten all plugins into one PHP file or treat a GitHub repository as proof of the live deployment. This registry is currently hosted in File 01 as a transitional coordination document, **not** a declaration that File 01 owns all modules.
 
 ## Source inventory

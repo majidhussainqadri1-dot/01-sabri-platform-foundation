@@ -1,6 +1,18 @@
 # Sabri Social Homeopathy Platform — Central Website Integration Registry
 **Working draft: 2026-10-21.** Governance and consolidation index only. No code was moved, rewritten, or deployed by this file.
 
+## Founder consent: non-delegable major decisions
+**Founder directive — 21 October 2026 (Asia/Karachi), explicit.**
+> "کوئی بھی بڑا فیصلہ میری مرضی کے بغیر خود نہ کرنا، اس ویب کا۔"
+
+**Binding rule:** No major decision concerning **Sabri Social Homeopathy Platform for the Homeopathic World** may be made, approved, merged, deployed, or implemented autonomously. Obtain the Founder's **specific, explicit, prior approval** for each materially consequential decision. Silence, prior broad instructions, a tool's technical capability, a completed draft, passing tests, and absence of objections do **not** constitute consent.
+
+This includes changes to product scope, governance and canonical ownership; integration, separation, migration or deletion of repositories/plugins; architecture, security/privacy policy, users' rights, clinical or payment/fee policies; database/data migrations and destructive operations; production/staging deployment, rollback with material impact; domain/branding; and public release or binding commitments.
+
+**Permitted without additional approval:** read-only fact finding, non-destructive inspection, analysis, comparison, preparation of clearly labeled draft documents, proposed patches on isolated review branches, and tests in safe local environments — so long as they do not change deployed systems, policies or irreversible data. Explicitly mark recommendations **"تجویز — منظوری باقی"** until approved.
+
+**Approval record required:** decision ID, exact proposal and options, likely consequences, risks, affected modules/files and users, test/migration/rollback plan, Founder's explicit response and date, approved scope, and verification outcome. No inferred or blanket authorization.
+
 ## Purpose
 Use **one central website integration control plane** but retain canonical domain ownership and independently testable components. Do not flatten all plugins into one PHP file or treat a GitHub repository as proof of the live deployment. This registry is currently hosted in File 01 as a transitional coordination document, **not** a declaration that File 01 owns all modules.
 

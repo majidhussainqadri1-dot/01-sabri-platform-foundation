@@ -193,6 +193,40 @@ $purge_plan = SPF_Purge::plan();
 $bad_purge = SPF_Purge::apply( 'PURGE FILE 01 GOVERNANCE DATA', [ 'backup_id'=>'submitted' ], SPF_Purge::plan_hash( $purge_plan ) );
 $assert( is_wp_error( $bad_purge ) && 'spf_purge_backup_evidence_binding_invalid' === $bad_purge->get_error_code(), 'Wrong-plan purge backup evidence was accepted.' );
 
+ // V12 migration truth: a wp_options version string cannot override actual schema.
+$original_schema_option = get_option( SPF_Installer::SCHEMA_OPTION );
+$original_upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
+$migrations_table = SPF_Installer::table( 'migrations' );
+$migration_count_before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" );
+update_option( SPF_Installer::SCHEMA_OPTION, '9.0.0', false );
+$downgrade_result = SPF_Installer::maybe_upgrade();
+$assert( is_wp_error( $downgrade_result ) && 'spf_schema_downgrade_blocked' === $downgrade_result->get_error_code(), 'Newer stored schema was incorrectly accepted by an older File 01 runtime.' );
+$assert( 'downgrade_blocked' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Future-schema downgrade blocker was not reported.' );
+$assert( '9.0.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Downgrade probe silently mutated the schema-version option.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+
+// Operate only in disposable WordPress CI: remove an owned nonunique index,
+// prove "already current" is rejected, and restore the exact index immediately.
+$flags_table = SPF_Installer::table( 'flags' );
+$index_dropped = $wpdb->query( "ALTER TABLE {$flags_table} DROP INDEX expires_at" );
+if ( false === $index_dropped ) {
+	$assert( false, 'CI could not establish the intentionally missing-index fixture.' );
+} else {
+	try {
+		$stale_result = SPF_Installer::maybe_upgrade();
+		$assert( is_wp_error( $stale_result ) && 'spf_schema_integrity_required' === $stale_result->get_error_code(), 'Matching schema-version option bypassed missing-index verification.' );
+		$assert( 'schema_integrity_required' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Incomplete same-version schema was not recorded as a blocker.' );
+		$assert( $original_schema_option === get_option( SPF_Installer::SCHEMA_OPTION ), 'Stale schema probe changed the version option.' );
+	} finally {
+		$index_restored = $wpdb->query( "ALTER TABLE {$flags_table} ADD INDEX expires_at (expires_at)" );
+		$assert( false !== $index_restored && true === SPF_Installer::verify_schema(), 'Disposable missing-index fixture could not be completely restored.' );
+	}
+}
+$assert( $migration_count_before === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" ), 'Schema-parity dry runs created a migration record.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+update_option( 'spf_upgrade_state', $original_upgrade_state, false );
+$assert( true === SPF_Installer::maybe_upgrade(), 'Restored current schema was not accepted after truth checks.' );
+
 $bad_manifest = SPF_Registry::get_module( 'file-01' );
 $bad_manifest['canonical_entities'] = [ 'Not Canonical' ];
 $bad_manifest['writes'] = [];

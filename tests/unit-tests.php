@@ -15,6 +15,19 @@ $assert( SPF_Runtime::canonical_json( $unordered ) === SPF_Runtime::canonical_js
 $assert( SPF_Runtime::hash( $unordered ) === SPF_Runtime::hash( $ordered ), 'Canonical hash is not stable.' );
 $assert( SPF_Registry::valid_semver( '1.2.0' ), 'Valid semantic version rejected.' );
 $assert( ! SPF_Registry::valid_semver( '1.2.0.2' ), 'Four-part non-semver accepted.' );
+// V12 canonical dependency precedence: do not use PHP version_compare() for SemVer metadata.
+foreach ( array( array( '1.2.3+build.2', '1.2.3', 0 ), array( '1.2.3+build.2', '1.2.3+build.3', 0 ), array( '1.2.3-alpha.1', '1.2.3', -1 ), array( '1.2.3', '1.2.3-rc.99', 1 ), array( '1.2.3-alpha.2', '1.2.3-alpha.10', -1 ), array( '1.2.3-alpha', '1.2.3-alpha.1', -1 ), array( '1.2.3-9', '1.2.3-alpha', -1 ), array( '1.2.3-alpha', '1.2.3-9', 1 ), array( '999999999999999999999.2.3', '10.2.3', 1 ), array( '1.2.3-alpha.1+one', '1.2.3-alpha.1+two', 0 ), array( '1.2.3-rc.1', '1.2.3-beta.99', 1 ), array( '1.2.3-1', '1.2.3-2', -1 ), array( '2.0.0', '1.999.999', 1 ) ) as $case ) {
+	$assert( $case[2] === SPF_Registry::compare_semver( $case[0], $case[1] ), 'Semantic precedence wrong: ' . $case[0] . ' vs ' . $case[1] );
+}
+$assert( null === SPF_Registry::compare_semver( '1.0.0-01', '1.0.0' ), 'Invalid version was treated as comparable.' );
+require_once dirname( __DIR__ ) . '/includes/class-spf-dependency-resolver.php';
+$range_method = new ReflectionMethod( SPF_Dependency_Resolver::class, 'range_status' );
+$range_method->setAccessible( true );
+$build_range = $range_method->invoke( null, array( 'software_version'=>'1.2.3+build.2' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.2.3', 'maximum_version'=>'1.2.3' ) );
+$assert( true === $build_range, 'Build-only version was incorrectly rejected by a closed exact dependency range.' );
+$pre_range = $range_method->invoke( null, array( 'software_version'=>'1.2.3-alpha.2' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.2.3' ) );
+$assert( is_array( $pre_range ) && ( $pre_range['code'] ?? '' ) === 'dependency_below_minimum', 'Pre-release below stable minimum was incorrectly accepted.' );
+
 foreach ( array( '0.0.0', '1.2.3-beta.2', '2.0.1-alpha.1+build.17', '1.0.0-0', '1.0.0-0alpha' ) as $version ) {
 	$assert( SPF_Registry::valid_semver( $version ), 'Valid SemVer 2.0.0 rejected: ' . $version );
 }

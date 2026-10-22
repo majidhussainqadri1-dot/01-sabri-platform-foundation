@@ -54,7 +54,7 @@ d71681a271054261937bb6f15c500ec136837c7ac5d9b5d4836ae185b85dfbca  ./includes/cla
 6a34f1ab8b2ff12a162fc3a86d932c0b3e2c9707218592c68a7c2f23f4b1b873  ./includes/class-spf-privacy.php
 a82df8988a5cb532dbba2c41ea4a4b3caad3593859276631552707ca9fd612c1  ./includes/class-spf-purge.php
 0ecf4d5c7ddbd34b760bb83d2ecc270cedfcd22218f1eed27e854b10e20110a5  ./includes/class-spf-reconciler.php
-c4f6ce304634aadc2501a0f39dcabcbe03a698d0261ad12a76ef64b2b7264981  ./includes/class-spf-registry.php
+139a176500dd5bea59a29e37aa8de185239ecd47e5629616ad92e9b3cb26df84  ./includes/class-spf-registry.php
 84a6c0b0b2d4a7f758a31b1c6688f9c19e909715745e38930eb0ca9e9512668b  ./includes/class-spf-repair.php
 3ddb34354a164c0fd626725c1cdee1d928ca6cd6311c94b29a1065d1944eef24  ./includes/class-spf-resilience-lab.php
 b7913b0c4c1498432754fa934c236587ef3222897a4dba6516136909e884d547  ./includes/class-spf-rest.php
@@ -92,6 +92,6 @@ d1830e1e727993792abee70b1a16f282a7828ef689e7b385d64e37524034b1bc  ./tests/tenth-
 63f2c7ed14a09ec8e29364763450e1937ad2f268a79247715e4fda27881e5eea  ./tests/third-ten-round-review-tests.php
 32c441898bed0021564a6e7f175fdf52c6828d14a9dd72932fb83d0435efc376  ./tests/thirteenth-ten-round-review-tests.php
 12115d5c5d5ea131c7ceaa8df4652d5e5df43b2b42dd4d19d456b95d96c26232  ./tests/twelfth-ten-round-review-tests.php
-1dab3824c56fa8a62d162c9379f44a41b8186d98305017b936b2574f43cd33c7  ./tests/unit-tests.php
+aa795298eaa165a2311e21a6df17b89bcf906a6518092f4a2aef3165c033be5d  ./tests/unit-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
 46d7d6f98025cd3c0c218a2d1a9290d6b78c6158d87ee887e89336943fba749b  ./uninstall.php

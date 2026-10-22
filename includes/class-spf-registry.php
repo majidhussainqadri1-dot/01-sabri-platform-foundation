@@ -390,7 +390,24 @@ final class SPF_Registry {
 	}
 
 	public static function valid_semver( $version ) {
-		return is_string( $version ) && 1 === preg_match( '/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version );
+		// Strict SemVer 2.0.0: identifiers may not be empty; numeric pre-release
+		// identifiers may not contain leading zeroes. Never normalize identity.
+		if ( ! is_string( $version ) || strlen( $version ) > 191 ) {
+			return false;
+		}
+		$pattern = '/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/D';
+		if ( 1 !== preg_match( $pattern, $version, $matches ) ) {
+			return false;
+		}
+		if ( empty( $matches['prerelease'] ) ) {
+			return true;
+		}
+		foreach ( explode( '.', $matches['prerelease'] ) as $identifier ) {
+			if ( ctype_digit( $identifier ) && strlen( $identifier ) > 1 && '0' === $identifier[0] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static function normalize_manifest( array $manifest ) {

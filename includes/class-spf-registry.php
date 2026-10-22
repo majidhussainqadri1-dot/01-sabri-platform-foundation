@@ -410,6 +410,51 @@ final class SPF_Registry {
 		return true;
 	}
 
+	/** Strict SemVer 2.0.0 precedence; build metadata never affects order. */
+	public static function compare_semver( $left, $right ) {
+		if ( ! self::valid_semver( $left ) || ! self::valid_semver( $right ) ) {
+			return null;
+		}
+		$left_parts  = explode( '-', explode( '+', $left, 2 )[0], 2 );
+		$right_parts = explode( '-', explode( '+', $right, 2 )[0], 2 );
+		$left_core   = explode( '.', $left_parts[0] );
+		$right_core  = explode( '.', $right_parts[0] );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$cmp = self::compare_numeric_semver_id( $left_core[$i], $right_core[$i] );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+		}
+		$left_pre  = $left_parts[1] ?? null;
+		$right_pre = $right_parts[1] ?? null;
+		if ( null === $left_pre || null === $right_pre ) {
+			return null === $left_pre && null === $right_pre ? 0 : ( null === $left_pre ? 1 : -1 );
+		}
+		$left_ids  = explode( '.', $left_pre );
+		$right_ids = explode( '.', $right_pre );
+		$limit = min( count( $left_ids ), count( $right_ids ) );
+		for ( $i = 0; $i < $limit; $i++ ) {
+			$a = $left_ids[$i];
+			$b = $right_ids[$i];
+			$a_numeric = ctype_digit( $a );
+			$b_numeric = ctype_digit( $b );
+			if ( $a_numeric !== $b_numeric ) {
+				return $a_numeric ? -1 : 1;
+			}
+			$cmp = $a_numeric ? self::compare_numeric_semver_id( $a, $b ) : ( strcmp( $a, $b ) <=> 0 );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+		}
+		return count( $left_ids ) <=> count( $right_ids );
+	}
+
+	private static function compare_numeric_semver_id( $left, $right ) {
+		return strlen( $left ) === strlen( $right )
+			? ( strcmp( $left, $right ) <=> 0 )
+			: ( strlen( $left ) <=> strlen( $right ) );
+	}
+
 	private static function normalize_manifest( array $manifest ) {
 		$required_fields = array( 'module_key','owner_file','owner_name','slug','namespace_prefix','software_version','contract_version','state','required','optional','capabilities','commands','queries','events','routes','data_classes','health' );
 		foreach ( $required_fields as $field ) {
@@ -587,7 +632,7 @@ final class SPF_Registry {
 			if (
 				$raw_key !== $key || $raw_min !== $min || $raw_max !== $max || $raw_purpose !== $purpose || $raw_fail_mode !== $fail_mode ||
 				strlen( $purpose ) > 191 || strlen( $fail_mode ) > 240 ||
-				! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && version_compare( $min, $max, '>' ) )
+				! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && self::compare_semver( $min, $max ) > 0 )
 			) {
 				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency identity, version range and evidence text must already be canonical and within the bounded registry envelope.', 'sabri-platform-foundation' ) );
 			}

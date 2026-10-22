@@ -100,6 +100,16 @@ $train=SPF_Platform_Engineering::plan_release_train([
  ['module_key'=>'file-20','software_version'=>'1.2.0','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0'],['module_key'=>'file-00','minimum_version'=>'1.2.0']]],
  ['module_key'=>'file-21','software_version'=>'1.0.1','required'=>[['module_key'=>'file-20','minimum_version'=>'1.2.0']]],
 ]);
+$build_train = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.2.3+build.9','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'1.2.3','maximum_version'=>'1.2.3']]],
+]);
+$assert( $build_train['valid'] === true && empty( $build_train['incompatible'] ), 'Release train incorrectly rejects build-only SemVer metadata.' );
+$pre_train = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.2.3-alpha.1','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'1.2.3']]],
+]);
+$assert( $pre_train['valid'] === false && !empty( $pre_train['incompatible']['file-20'] ), 'Release train incorrectly accepts pre-release below stable minimum.' );
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
 $bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'banana','required'=>[]]]);

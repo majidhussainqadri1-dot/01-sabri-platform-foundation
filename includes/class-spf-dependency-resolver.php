@@ -97,10 +97,10 @@ final class SPF_Dependency_Resolver {
 	}
 
 	private static function range_status( array $target, array $dependency ) {
-		if ( version_compare( $target['software_version'], $dependency['minimum_version'], '<' ) ) {
+		if ( SPF_Registry::compare_semver( $target['software_version'], $dependency['minimum_version'] ) < 0 ) {
 			return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_below_minimum', 'actual' => $target['software_version'], 'minimum' => $dependency['minimum_version'] );
 		}
-		if ( ! empty( $dependency['maximum_version'] ) && version_compare( $target['software_version'], $dependency['maximum_version'], '>' ) ) {
+		if ( ! empty( $dependency['maximum_version'] ) && SPF_Registry::compare_semver( $target['software_version'], $dependency['maximum_version'] ) > 0 ) {
 			return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_above_maximum', 'actual' => $target['software_version'], 'maximum' => $dependency['maximum_version'] );
 		}
 		return true;

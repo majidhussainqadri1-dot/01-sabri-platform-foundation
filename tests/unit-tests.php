@@ -15,6 +15,13 @@ $assert( SPF_Runtime::canonical_json( $unordered ) === SPF_Runtime::canonical_js
 $assert( SPF_Runtime::hash( $unordered ) === SPF_Runtime::hash( $ordered ), 'Canonical hash is not stable.' );
 $assert( SPF_Registry::valid_semver( '1.2.0' ), 'Valid semantic version rejected.' );
 $assert( ! SPF_Registry::valid_semver( '1.2.0.2' ), 'Four-part non-semver accepted.' );
+foreach ( array( '0.0.0', '1.2.3-beta.2', '2.0.1-alpha.1+build.17', '1.0.0-0', '1.0.0-0alpha' ) as $version ) {
+	$assert( SPF_Registry::valid_semver( $version ), 'Valid SemVer 2.0.0 rejected: ' . $version );
+}
+foreach ( array( '1.0.0-01', '1.0.0-alpha..2', '1.0.0+build..7', '1.0.0-1.02', '1.0.0-', '1.0.0+', '01.0.0', '1.0.0.' ) as $version ) {
+	$assert( ! SPF_Registry::valid_semver( $version ), 'Invalid SemVer 2.0.0 accepted: ' . $version );
+}
+
 
 $valid_claim = [
 	'claim_version'=>'1.2.0','allowed'=>true,'user_id'=>7,'actor_id'=>7,'action'=>'record_release','capability'=>SPF_Authorization::CAP_RELEASE,

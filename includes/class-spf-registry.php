@@ -787,13 +787,21 @@ final class SPF_Registry {
 
 	private static function module_dto( array $row ) {
 		$manifest = json_decode( $row['manifest_json'], true );
+		$manifest_valid = is_array( $manifest )
+			&& ( $manifest['module_key'] ?? null ) === $row['module_key']
+			&& ( $manifest['software_version'] ?? null ) === $row['software_version']
+			&& ( $manifest['contract_version'] ?? null ) === $row['contract_version']
+			&& is_array( $manifest['required'] ?? null )
+			&& is_array( $manifest['optional'] ?? null )
+			&& ! is_wp_error( self::normalize_dependencies( $manifest['required'] ) )
+			&& ! is_wp_error( self::normalize_dependencies( $manifest['optional'] ) );
 		if ( ! is_array( $manifest ) ) {
 			$manifest = array();
 		}
 		return array(
 			'module_key' => $row['module_key'], 'owner_file' => $row['owner_file'], 'owner_name' => $row['owner_name'], 'slug' => $row['slug'],
 			'namespace_prefix' => $row['namespace_prefix'], 'software_version' => $row['software_version'], 'contract_version' => $row['contract_version'],
-			'state' => $row['state'], 'required' => $manifest['required'] ?? array(), 'optional' => $manifest['optional'] ?? array(),
+			'state' => $row['state'], 'manifest_valid' => $manifest_valid, 'required' => $manifest['required'] ?? array(), 'optional' => $manifest['optional'] ?? array(),
 			'capabilities' => $manifest['capabilities'] ?? array(), 'commands' => $manifest['commands'] ?? array(), 'queries' => $manifest['queries'] ?? array(),
 			'events' => $manifest['events'] ?? array(), 'routes' => $manifest['routes'] ?? array(), 'data_classes' => $manifest['data_classes'] ?? array(),
 			'canonical_entities' => $manifest['canonical_entities'] ?? array(), 'writes' => $manifest['writes'] ?? array(),

@@ -27,6 +27,15 @@ $build_range = $range_method->invoke( null, array( 'software_version'=>'1.2.3+bu
 $assert( true === $build_range, 'Build-only version was incorrectly rejected by a closed exact dependency range.' );
 $pre_range = $range_method->invoke( null, array( 'software_version'=>'1.2.3-alpha.2' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.2.3' ) );
 $assert( is_array( $pre_range ) && ( $pre_range['code'] ?? '' ) === 'dependency_below_minimum', 'Pre-release below stable minimum was incorrectly accepted.' );
+$bad_installed_version = $range_method->invoke( null, array( 'software_version'=>'not-a-version' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.0.0' ) );
+$assert( is_array( $bad_installed_version ) && 'dependency_version_invalid' === ( $bad_installed_version['code'] ?? '' ), 'Malformed installed module version falsely satisfied a required dependency.' );
+$bad_minimum_version = $range_method->invoke( null, array( 'software_version'=>'1.0.0' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.0.0-01' ) );
+$assert( is_array( $bad_minimum_version ) && 'dependency_version_invalid' === ( $bad_minimum_version['code'] ?? '' ), 'Malformed dependency minimum falsely passed compatibility.' );
+$bad_maximum_version = $range_method->invoke( null, array( 'software_version'=>'1.0.0' ), array( 'module_key'=>'file-20', 'minimum_version'=>'1.0.0', 'maximum_version'=>'1.0.0..bad' ) );
+$assert( is_array( $bad_maximum_version ) && 'dependency_version_invalid' === ( $bad_maximum_version['code'] ?? '' ), 'Malformed dependency maximum falsely passed compatibility.' );
+$stable_minimum = $range_method->invoke( null, array( 'software_version'=>'0.0.0-alpha.1' ), array( 'module_key'=>'file-20', 'minimum_version'=>'0.0.0' ) );
+$assert( is_array( $stable_minimum ) && 'dependency_below_minimum' === ( $stable_minimum['code'] ?? '' ), 'Runtime resolver let a prerelease pass stable 0.0.0 minimum.' );
+
 
 foreach ( array( '0.0.0', '1.2.3-beta.2', '2.0.1-alpha.1+build.17', '1.0.0-0', '1.0.0-0alpha' ) as $version ) {
 	$assert( SPF_Registry::valid_semver( $version ), 'Valid SemVer 2.0.0 rejected: ' . $version );

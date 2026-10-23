@@ -48,7 +48,7 @@ c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/cla
 9c9ff45407a37639c0144e5ee68ec2b82993d18c9b24e8609fe939fe13382bda  ./includes/class-spf-governance-control-plane.php
 3b7832b51fc735ed323e93cb54e3eeeb0d7e45e9021ee70154b630c396daf8ac  ./includes/class-spf-governance.php
 9cdb0a0038ae0eb30f1c2a8b7aa251ed59903cdfef5f5cbb6e4f9b3593dd9b57  ./includes/class-spf-idempotency.php
-6554ea1bb046df6b225585e1f746d434592c50e1125aa60f118b320a5d07ee4f  ./includes/class-spf-installer.php
+5660a76fa6432919430eccea3d214e29bd5d1d2aef82844cc967f707e5fb38d1  ./includes/class-spf-installer.php
 286c421630b6cb00a628b1870bebc68e3d083f8396fe709128832eb86e16da32  ./includes/class-spf-platform-engineering.php
 86a3ce9e469c57961801eac24d8af9b7de189c180e128672ba9a9c60c6fc1034  ./includes/class-spf-plugin.php
 6a34f1ab8b2ff12a162fc3a86d932c0b3e2c9707218592c68a7c2f23f4b1b873  ./includes/class-spf-privacy.php
@@ -59,7 +59,7 @@ dabe24bd027acc327a7987e7acc6f54ed47e75c36edfcd08e588d58716451d05  ./includes/cla
 3ddb34354a164c0fd626725c1cdee1d928ca6cd6311c94b29a1065d1944eef24  ./includes/class-spf-resilience-lab.php
 b7913b0c4c1498432754fa934c236587ef3222897a4dba6516136909e884d547  ./includes/class-spf-rest.php
 6cd7f37d046608bcb121b15bf2fad1b599637da0eff9e2f4c49c56a65cc430e2  ./includes/class-spf-runtime.php
-5231c473aa58716a9f96b7518b6b240ca4472d7e54d7b68e8121df154ee9cb72  ./includes/class-spf-system-check.php
+f7e158615d5c6419e525f7b4c374fc09a00be782858d622ea5abbc1bbc5a38d8  ./includes/class-spf-system-check.php
 bde39484f63d5e0a3aacc6ad4675a200e191a91411a08b38e2bb51a59fae2c42  ./qa/run-tests.sh
 75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
@@ -68,7 +68,7 @@ c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
 ba8adc9a3b9d6df280a15c91b1566c847ace9a35dabc2359712099ecaf3db957  ./qa/wp-reconciliation-ownership-smoke.php
-872d25d1a4571a2ff97f27d4ae14ae4d66b6579bd7cedc3abce170ef2af9062b  ./qa/wp-runtime-smoke.php
+f20ee775efdde8cc0855ee6a1879399b0387fdc8ffab22e0c3a53251721b08c3  ./qa/wp-runtime-smoke.php
 ecf2a2f89dec47c37fe602941381dc3ada2a39f7c84730979fc12c23841b52b0  ./qa/wp-thirteenth-ten-round-smoke.php
 fad7ab9718869f1ade77bf5f039967accd0fa0f31f760ab5a137b550b0b63c5e  ./readme.txt
 52162ec591535d40d2363e064e2c352ef4f3b61080b730f2eae3d24ae5a84f2a  ./sabri-platform-foundation.php
@@ -83,7 +83,7 @@ d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-
 dd3955afe11e7da4e03da62dead4c58436d75de8c81113939aad9bfe943ad7b8  ./tests/future-foundation-tests.php
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 ae8d008040495796b155be8e79501013452497a89f49a7dee8227a8eb0ac15ca  ./tests/release-handoff-contract-tests.php
-cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema-tests.php
+ec149f671dea4948cfa10ed025ed55285d8296722168124b537247b276f83d82  ./tests/schema-tests.php
 38560cdf8d4f76e28e5b79e912f2317aa88b327a36fb0045c830a1025079e2a4  ./tests/security-tests.php
 2c5c82b596418ab6410bcc582b3bdfc986f3ba3bbfa0bfabc3701447fcf0850e  ./tests/seventh-ten-round-review-tests.php
 b710cbcaa0f89c0529df7a2ab3e0a4a50a2d815b7a6e968d5d2eac39805d81d9  ./tests/sixth-ten-round-review-tests.php

@@ -49,7 +49,7 @@ c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/cla
 3b7832b51fc735ed323e93cb54e3eeeb0d7e45e9021ee70154b630c396daf8ac  ./includes/class-spf-governance.php
 9cdb0a0038ae0eb30f1c2a8b7aa251ed59903cdfef5f5cbb6e4f9b3593dd9b57  ./includes/class-spf-idempotency.php
 5660a76fa6432919430eccea3d214e29bd5d1d2aef82844cc967f707e5fb38d1  ./includes/class-spf-installer.php
-286c421630b6cb00a628b1870bebc68e3d083f8396fe709128832eb86e16da32  ./includes/class-spf-platform-engineering.php
+8e60f4673924dcc115824205358ee37e1bcbca278d2d8c95cd6a357a575d416f  ./includes/class-spf-platform-engineering.php
 86a3ce9e469c57961801eac24d8af9b7de189c180e128672ba9a9c60c6fc1034  ./includes/class-spf-plugin.php
 6a34f1ab8b2ff12a162fc3a86d932c0b3e2c9707218592c68a7c2f23f4b1b873  ./includes/class-spf-privacy.php
 a82df8988a5cb532dbba2c41ea4a4b3caad3593859276631552707ca9fd612c1  ./includes/class-spf-purge.php
@@ -80,7 +80,7 @@ d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-
 4ac0015a88d62ec98160cbad91b15a1b9fdb15521f4d40851daa8286fbd8685a  ./tests/fourteenth-ten-round-review-tests.php
 2d4b6010e5743f542fd331abe1ac383b1282fdc8b11a250d11a3ce2ed79e4c78  ./tests/fourth-ten-round-review-tests.php
 6fbff3851e1b443bb4076d87c47088ee1190f96492e55273c1d40b8e0f3b30c3  ./tests/fresh-eighty-round-review-tests.php
-dd3955afe11e7da4e03da62dead4c58436d75de8c81113939aad9bfe943ad7b8  ./tests/future-foundation-tests.php
+f26cc037fb85b0820a756ed5886bc32892596c5c0a70e967152ad97bdbe8d41f  ./tests/future-foundation-tests.php
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 ae8d008040495796b155be8e79501013452497a89f49a7dee8227a8eb0ac15ca  ./tests/release-handoff-contract-tests.php
 ec149f671dea4948cfa10ed025ed55285d8296722168124b537247b276f83d82  ./tests/schema-tests.php

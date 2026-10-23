@@ -110,6 +110,32 @@ $pre_train = SPF_Platform_Engineering::plan_release_train([
  ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'1.2.3']]],
 ]);
 $assert( $pre_train['valid'] === false && !empty( $pre_train['incompatible']['file-20'] ), 'Release train incorrectly accepts pre-release below stable minimum.' );
+
+$zero_floor_prerelease = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'0.0.0-alpha.1','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'0.0.0']]],
+]);
+$assert( false === $zero_floor_prerelease['valid'] && !empty( $zero_floor_prerelease['incompatible']['file-20'] ), 'Release train bypassed the stable 0.0.0 minimum for an earlier prerelease.' );
+$zero_floor_stable = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'0.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'0.0.0']]],
+]);
+$assert( true === $zero_floor_stable['valid'], 'Release train incorrectly rejects an exact stable 0.0.0 minimum.' );
+$noncanonical_owner_case = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'FILE-01','software_version'=>'1.0.0','required'=>[]],
+]);
+$assert( false === $noncanonical_owner_case['valid'] && !empty( $noncanonical_owner_case['manifest_errors'] ), 'Release train silently normalized a noncanonical module identity.' );
+$noncanonical_dep_case = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'FILE-01','minimum_version'=>'1.0.0']]],
+]);
+$assert( false === $noncanonical_dep_case['valid'] && !empty( $noncanonical_dep_case['manifest_errors'] ), 'Release train silently normalized a noncanonical dependency identity.' );
+$duplicate_dep_case = SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'1.0.0'],['module_key'=>'file-01','minimum_version'=>'1.0.0']]],
+]);
+$assert( false === $duplicate_dep_case['valid'] && in_array( 'duplicate_dependency', array_column( $duplicate_dep_case['manifest_errors'], 'code' ), true ), 'Release train silently accepted duplicate required dependency declarations.' );
+
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
 $bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'banana','required'=>[]]]);

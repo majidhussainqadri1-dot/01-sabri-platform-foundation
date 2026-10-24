@@ -7,7 +7,8 @@ $assert=static function(bool $c,string $m)use(&$assertions,&$failures):void{$ass
 $features=SPF_Future_Foundation::feature_catalog();
 $assert(count($features)===18,'18 enhancements missing.');
 $assert(isset($features['F01-FUT-001'],$features['F01-FUT-018']),'Stable future IDs incomplete.');
-$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='coded'))===18,'Not all future enhancements coded.');
+$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='implementation_present_unverified'))===18,'Not all future enhancement entrypoints are available.');
+$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='coded'))===0,'A static feature catalog must not claim independently verified coding completion.');
 
 $policies=SPF_Governance_Control_Plane::default_policies();
 $assert(SPF_Governance_Control_Plane::evaluate_policy('claim_global_shell',[],$policies)['decision']==='deny','Duplicate shell not denied.');

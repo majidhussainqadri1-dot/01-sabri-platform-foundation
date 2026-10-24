@@ -31,6 +31,9 @@ $lint=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[
 $codes=array_column($lint['findings'],'code');
 $assert($lint['pass']===false,'Architecture linter missed conflicts.');
 foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}
+$same_owner_route=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[],'routes'=>[['route_path'=>'/same','owner_module'=>'file-20'],['route_path'=>'/same','owner_module'=>'file-20']],'global_shell_owners'=>['file-20']]);
+$assert($same_owner_route['pass']===false && in_array('duplicate_route_declaration',array_column($same_owner_route['findings'],'code'),true),'Duplicate same-owner route was silently accepted.');
+
 
 $normalize_manifest=new ReflectionMethod(SPF_Registry::class,'normalize_manifest');$normalize_manifest->setAccessible(true);
 $architecture_manifest=$normalize_manifest->invoke(null,[
@@ -46,11 +49,17 @@ $trace=SPF_Governance_Control_Plane::build_traceability_report([['id'=>'REQ-1'],
  'REQ-2'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true,'live'=>true,'operational'=>true],
 ]);
 $assert($trace['total']===2,'Duplicate requirement IDs inflated trace total.');
-$assert($trace['coded_complete']===2,'Trace coded count wrong.');
-$assert($trace['release_ready']===2,'Trace release-ready count wrong.');
-$assert($trace['live_deployed']===1,'Trace live count wrong.');
-$assert($trace['production_complete']===1,'Trace operational completion truth wrong.');
+$assert($trace['coded_complete']===0,'Unattested caller booleans falsely counted as verified code.');
+$assert($trace['release_ready']===0,'Unattested caller booleans falsely counted as approved release.');
+$assert($trace['live_deployed']===0,'Unattested caller booleans falsely counted as a live deployment.');
+$assert($trace['production_complete']===0,'Unattested caller booleans falsely counted as operational completion.');
+$assert($trace['coded_completion_claim_allowed']===false && $trace['v12_requirement_coverage_complete']===false,'Partial, unverified requirements falsely certified completion.');
+$assert(count(SPF_Governance_Control_Plane::file01_v12_requirement_ids())===43,'Full V12 43-requirement baseline missing.');
 $assert($trace['duplicate_requirement_ids']===['REQ-1'],'Duplicate requirement IDs not reported.');
+$all_v12_ids=array_map(static fn($id)=>['id'=>$id],SPF_Governance_Control_Plane::file01_v12_requirement_ids());
+$unattested_v12=SPF_Governance_Control_Plane::build_traceability_report($all_v12_ids,[]);
+$assert($unattested_v12['v12_requirement_coverage_complete']===true && $unattested_v12['coded_completion_claim_allowed']===false,'Full requirement coverage without verified proof falsely certified coding.');
+
 
 $scaffold=SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-26','owner_file'=>'26','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]]);
 $assert(!is_wp_error($scaffold),'Structured golden-path dependency rejected.');
@@ -86,6 +95,19 @@ $event_extra=SPF_Platform_Engineering::validate_event_fixture($event+['secret'=>
 $assert($event_extra['valid']===false && in_array('unknown:secret',$event_extra['errors'],true),'Unknown event field not rejected.');
 $replay=SPF_Platform_Engineering::replay_event_fixture($event,$schema,true);
 $assert($replay['simulation_only']===true && $replay['dispatched']===false,'Replay dispatched without explicit safe gate.');
+$bad_event_string=$event;$bad_event_string['event_id']=123;
+$invalid_string=SPF_Platform_Engineering::validate_event_fixture($bad_event_string,$schema);
+$assert($invalid_string['valid']===false,'Integer event ID accepted as string.');
+$bad_event_integer=$event;$bad_event_integer['count']='2';
+$invalid_integer=SPF_Platform_Engineering::validate_event_fixture($bad_event_integer,$schema);
+$assert($invalid_integer['valid']===false,'Numeric text accepted as a typed integer.');
+$bad_event_time=$event;$bad_event_time['occurred_at']='tomorrow';
+$invalid_time=SPF_Platform_Engineering::validate_event_fixture($bad_event_time,$schema);
+$assert($invalid_time['valid']===false,'Relative timestamp accepted as an immutable event timestamp.');
+$schema_missing_identity=$schema;unset($schema_missing_identity['fields']['event_id']);
+$unsafe_replay=SPF_Platform_Engineering::replay_event_fixture(['occurred_at'=>$event['occurred_at'],'count'=>2],$schema_missing_identity,true);
+$assert(is_wp_error($unsafe_replay)&&'spf_event_replay_unsafe'===$unsafe_replay->get_error_code(),'Replay dispatched without verified event identity.');
+
 
 $GLOBALS['spf_test_options'][SPF_Platform_Engineering::CONFIG_BASELINE_OPTION]=['staging'=>['mode'=>'safe','api_token'=>['secret_hash'=>hash('sha256','x'),'redacted'=>true]]];
 $drift=SPF_Platform_Engineering::detect_config_drift('staging',['mode'=>'unsafe','api_token'=>'x']);
@@ -93,6 +115,10 @@ $assert($drift['baseline_found']===true && $drift['drifted']===true,'Config drif
 $sanitize_config=new ReflectionMethod(SPF_Platform_Engineering::class,'sanitize_config');$sanitize_config->setAccessible(true);
 $nested=$sanitize_config->invoke(null,['provider'=>['api_token'=>'nested-secret','mode'=>'safe']]);
 $assert(($nested['provider']['api_token']['redacted']??false)===true,'Nested configuration secret not redacted.');
+$secret_variants=$sanitize_config->invoke(null,['provider'=>['db_pass'=>'test-secret-should-not-persist','clientsecret'=>'test-secret-should-not-persist','authorization'=>'test-secret-should-not-persist','access_key'=>'test-secret-should-not-persist','mode'=>'safe']]);
+foreach(['db_pass','clientsecret','authorization','access_key'] as $secret_key){$assert(($secret_variants['provider'][$secret_key]['redacted']??false)===true,'Unrecognized sensitive configuration key: '.$secret_key);}
+$assert(!str_contains(json_encode($secret_variants),'test-secret-should-not-persist'),'Configuration sanitizer persisted a test secret in plaintext.');
+
 
 $train=SPF_Platform_Engineering::plan_release_train([
  ['module_key'=>'file-01','software_version'=>'2.0.0','required'=>[]],
@@ -148,6 +174,11 @@ $too_new=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-01',
 $assert($too_new['valid']===false && !empty($too_new['incompatible']['file-20']),'Maximum dependency version was not enforced.');
 $noncanonical=SPF_Platform_Engineering::plan_release_train([['module_key'=>'rogue','software_version'=>'1.0.0','required'=>[]]]);
 $assert($noncanonical['valid']===false,'Non-canonical release-train module was accepted.');
+$huge_major_previous=str_repeat('9',30);
+$huge_major_next='1'.str_repeat('0',30);
+$huge_major_compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>$huge_major_previous.'.0.0','schema'=>['field'=>['type'=>'string','required'=>true]]],['contract_version'=>$huge_major_next.'.0.0','schema'=>[]]);
+$assert($huge_major_compat['breaking_change']===true && $huge_major_compat['major_bump_ok']===true,'Overflowed huge SemVer major version prevented valid breaking-version bump.');
+
 
 
 $slo=SPF_Platform_Engineering::evaluate_slo_gate(['availability'=>99.95,'latency_p95'=>300,'error_rate'=>0.5,'error_budget_remaining'=>10],['availability'=>99.9,'latency_p95'=>500,'error_rate'=>1.0]);

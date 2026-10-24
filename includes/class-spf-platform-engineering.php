@@ -120,7 +120,7 @@ final class SPF_Platform_Engineering {
 
 	public static function contract_compatibility( array $old, array $new ) {
 		$issues=array();$old_schema=(array)($old['schema']??array());$new_schema=(array)($new['schema']??array());foreach($old_schema as $field=>$definition){$definition=(array)$definition;if(!array_key_exists($field,$new_schema)){$issues[]=array('severity'=>'breaking','code'=>'field_removed','field'=>$field);continue;}$new_definition=(array)$new_schema[$field];if(($definition['type']??'')!==($new_definition['type']??'')){$issues[]=array('severity'=>'breaking','code'=>'type_changed','field'=>$field);}if(empty($definition['required'])&&!empty($new_definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'optional_became_required','field'=>$field);}}foreach($new_schema as $field=>$definition){if(!array_key_exists($field,$old_schema)&&!empty($definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'new_required_field','field'=>$field);}}
-		$old_version=sanitize_text_field($old['contract_version']??'0.0.0');$new_version=sanitize_text_field($new['contract_version']??'0.0.0');$version_valid=SPF_Registry::valid_semver($old_version)&&SPF_Registry::valid_semver($new_version);if(!$version_valid){$issues[]=array('severity'=>'breaking','code'=>'contract_version_invalid');}elseif(SPF_Registry::compare_semver($new_version,$old_version)<0){$issues[]=array('severity'=>'breaking','code'=>'contract_version_regressed','old_version'=>$old_version,'new_version'=>$new_version);}$breaking=(bool)array_filter($issues,static function($issue){return 'breaking'===($issue['severity']??'');});$major_bumped=$version_valid&&(int)strtok($new_version,'.')>(int)strtok($old_version,'.');
+		$old_version=sanitize_text_field($old['contract_version']??'0.0.0');$new_version=sanitize_text_field($new['contract_version']??'0.0.0');$version_valid=SPF_Registry::valid_semver($old_version)&&SPF_Registry::valid_semver($new_version);if(!$version_valid){$issues[]=array('severity'=>'breaking','code'=>'contract_version_invalid');}elseif(SPF_Registry::compare_semver($new_version,$old_version)<0){$issues[]=array('severity'=>'breaking','code'=>'contract_version_regressed','old_version'=>$old_version,'new_version'=>$new_version);}$breaking=(bool)array_filter($issues,static function($issue){return 'breaking'===($issue['severity']??'');});$old_major=explode('.', $old_version, 2)[0];$new_major=explode('.', $new_version, 2)[0];$major_bumped=$version_valid&&SPF_Registry::compare_semver($new_major.'.0.0',$old_major.'.0.0')>0;
 		return array('compatible'=>!$breaking,'breaking_change'=>$breaking,'major_bump_ok'=>!$breaking||$major_bumped,'version_valid'=>$version_valid,'version_monotonic'=>$version_valid&&SPF_Registry::compare_semver($new_version,$old_version)>=0,'issues'=>$issues,'old_hash'=>SPF_Runtime::hash($old_schema),'new_hash'=>SPF_Runtime::hash($new_schema));
 	}
 
@@ -199,7 +199,7 @@ final class SPF_Platform_Engineering {
 			'valid'       => empty( $errors ),
 			'errors'      => $errors,
 			'fixture_hash'=> SPF_Runtime::hash( $event ),
-			'replay_safe' => ! empty( $event['event_id'] ) && ! empty( $event['occurred_at'] ),
+			'replay_safe' => isset( $normalized['fields']['event_id'], $normalized['fields']['occurred_at'] ) && true === $normalized['fields']['event_id']['required'] && true === $normalized['fields']['occurred_at']['required'] && 'string' === $normalized['fields']['event_id']['type'] && 'timestamp' === $normalized['fields']['occurred_at']['type'] && is_string( $event['event_id'] ?? null ) && 1 === preg_match( '/^[A-Za-z0-9_.:-]{1,128}$/D', $event['event_id'] ) && self::value_matches_type( $event['occurred_at'] ?? null, 'timestamp' ),
 			'dispatched'  => false,
 		);
 	}
@@ -210,8 +210,11 @@ final class SPF_Platform_Engineering {
 		if ( is_wp_error( $validation ) || empty( $validation['valid'] ) ) {
 			return $validation;
 		}
+		if ( true === $dispatch && empty( $validation['replay_safe'] ) ) {
+			return new WP_Error( 'spf_event_replay_unsafe', __( 'Event replay dispatch requires a verified, typed event identity and timestamp.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+		}
 		$environment = function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : ( defined( 'WP_ENVIRONMENT_TYPE' ) ? WP_ENVIRONMENT_TYPE : 'production' );
-		$allowed_dispatch = true === $dispatch && defined( 'SPF_EVENT_REPLAY_DISPATCH' ) && true === SPF_EVENT_REPLAY_DISPATCH && 'production' !== $environment;
+		$allowed_dispatch = true === $dispatch && defined( 'SPF_EVENT_REPLAY_DISPATCH' ) && true === SPF_EVENT_REPLAY_DISPATCH && in_array( $environment, array( 'local','development','staging','ci','test' ), true );
 		if ( $allowed_dispatch ) {
 			do_action( 'spf_event_replay_fixture', SPF_Runtime::canonicalize( $event ), SPF_Runtime::canonicalize( $schema ) );
 			$validation['dispatched'] = true;
@@ -560,13 +563,22 @@ final class SPF_Platform_Engineering {
 
 	private static function value_matches_type( $value, $type ) {
 		switch ( $type ) {
-			case 'integer': return is_int( $value ) || ctype_digit( (string) $value );
-			case 'number': return is_numeric( $value );
-			case 'boolean': return is_bool( $value );
-			case 'array': return is_array( $value ) && SPF_Runtime::is_list( $value );
-			case 'object': return is_array( $value ) && ! SPF_Runtime::is_list( $value );
-			case 'timestamp': return is_numeric( $value ) || false !== strtotime( (string) $value );
-			default: return is_scalar( $value );
+			case 'string':
+				return is_string( $value );
+			case 'integer':
+				return is_int( $value );
+			case 'number':
+				return ( is_int( $value ) || is_float( $value ) ) && is_finite( (float) $value );
+			case 'boolean':
+				return is_bool( $value );
+			case 'array':
+				return is_array( $value ) && SPF_Runtime::is_list( $value );
+			case 'object':
+				return is_array( $value ) && ! SPF_Runtime::is_list( $value );
+			case 'timestamp':
+				return is_string( $value ) && 1 === preg_match( '/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/D', $value ) && false !== strtotime( $value );
+			default:
+				return false;
 		}
 	}
 
@@ -590,7 +602,11 @@ final class SPF_Platform_Engineering {
 			if ( '' === $key || $raw_key !== $key || array_key_exists( $key, $out ) ) {
 				return new WP_Error( 'spf_config_key_invalid', __( 'Configuration keys must already be unique canonical keys.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}
-			if ( preg_match( '/(^|_)(secret|password|token|private_key|api_key|encryption_key|credential)($|_)/i', $key ) ) {
+			// Detect canonical and compact credential names, including db_pass,
+			// clientsecret and authorization. Unknown values remain descriptive
+			// config, never a substitute for explicit allowlisted secret metadata.
+			$compact = str_replace( '_', '', $key );
+			if ( 1 === preg_match( '/(?:secret|password|passwd|pwd|token|credential|authorization|authheader|apikey|privatekey|encryptionkey|signingkey|accesskey|clientkey|dbpass|connectionstring|bearer|dsn)/i', $compact ) ) {
 				$out[ $key ] = array( 'secret_hash'=>SPF_Runtime::hash( $value ), 'redacted'=>true );
 				continue;
 			}

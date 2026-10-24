@@ -37,7 +37,8 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $future = SPF_Future_Foundation::status();
-$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['implementation_present_count'] ?? 0 ), 'Future Foundation 18 implementation entrypoints are incomplete.' );
+$assert( 0 === (int) ( $future['coded_count'] ?? -1 ) && false === ( $future['coded_completion_verified'] ?? true ), 'An unverified capability catalogue falsely certifies coding completion.' );
 $assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
 
 $unauthorized = SPF_Governance::record_release( [

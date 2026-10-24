@@ -390,7 +390,69 @@ final class SPF_Registry {
 	}
 
 	public static function valid_semver( $version ) {
-		return is_string( $version ) && 1 === preg_match( '/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/', $version );
+		// Strict SemVer 2.0.0: identifiers may not be empty; numeric pre-release
+		// identifiers may not contain leading zeroes. Never normalize identity.
+		if ( ! is_string( $version ) || strlen( $version ) > 191 ) {
+			return false;
+		}
+		$pattern = '/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/D';
+		if ( 1 !== preg_match( $pattern, $version, $matches ) ) {
+			return false;
+		}
+		if ( empty( $matches['prerelease'] ) ) {
+			return true;
+		}
+		foreach ( explode( '.', $matches['prerelease'] ) as $identifier ) {
+			if ( ctype_digit( $identifier ) && strlen( $identifier ) > 1 && '0' === $identifier[0] ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Strict SemVer 2.0.0 precedence; build metadata never affects order. */
+	public static function compare_semver( $left, $right ) {
+		if ( ! self::valid_semver( $left ) || ! self::valid_semver( $right ) ) {
+			return null;
+		}
+		$left_parts  = explode( '-', explode( '+', $left, 2 )[0], 2 );
+		$right_parts = explode( '-', explode( '+', $right, 2 )[0], 2 );
+		$left_core   = explode( '.', $left_parts[0] );
+		$right_core  = explode( '.', $right_parts[0] );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$cmp = self::compare_numeric_semver_id( $left_core[$i], $right_core[$i] );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+		}
+		$left_pre  = $left_parts[1] ?? null;
+		$right_pre = $right_parts[1] ?? null;
+		if ( null === $left_pre || null === $right_pre ) {
+			return null === $left_pre && null === $right_pre ? 0 : ( null === $left_pre ? 1 : -1 );
+		}
+		$left_ids  = explode( '.', $left_pre );
+		$right_ids = explode( '.', $right_pre );
+		$limit = min( count( $left_ids ), count( $right_ids ) );
+		for ( $i = 0; $i < $limit; $i++ ) {
+			$a = $left_ids[$i];
+			$b = $right_ids[$i];
+			$a_numeric = ctype_digit( $a );
+			$b_numeric = ctype_digit( $b );
+			if ( $a_numeric !== $b_numeric ) {
+				return $a_numeric ? -1 : 1;
+			}
+			$cmp = $a_numeric ? self::compare_numeric_semver_id( $a, $b ) : ( strcmp( $a, $b ) <=> 0 );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+		}
+		return count( $left_ids ) <=> count( $right_ids );
+	}
+
+	private static function compare_numeric_semver_id( $left, $right ) {
+		return strlen( $left ) === strlen( $right )
+			? ( strcmp( $left, $right ) <=> 0 )
+			: ( strlen( $left ) <=> strlen( $right ) );
 	}
 
 	private static function normalize_manifest( array $manifest ) {
@@ -570,7 +632,7 @@ final class SPF_Registry {
 			if (
 				$raw_key !== $key || $raw_min !== $min || $raw_max !== $max || $raw_purpose !== $purpose || $raw_fail_mode !== $fail_mode ||
 				strlen( $purpose ) > 191 || strlen( $fail_mode ) > 240 ||
-				! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && version_compare( $min, $max, '>' ) )
+				! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/', $key ) || ! self::valid_semver( $min ) || ( $max && ! self::valid_semver( $max ) ) || ( $max && self::compare_semver( $min, $max ) > 0 )
 			) {
 				return new WP_Error( 'spf_invalid_dependency', __( 'Dependency identity, version range and evidence text must already be canonical and within the bounded registry envelope.', 'sabri-platform-foundation' ) );
 			}
@@ -725,13 +787,21 @@ final class SPF_Registry {
 
 	private static function module_dto( array $row ) {
 		$manifest = json_decode( $row['manifest_json'], true );
+		$manifest_valid = is_array( $manifest )
+			&& ( $manifest['module_key'] ?? null ) === $row['module_key']
+			&& ( $manifest['software_version'] ?? null ) === $row['software_version']
+			&& ( $manifest['contract_version'] ?? null ) === $row['contract_version']
+			&& is_array( $manifest['required'] ?? null )
+			&& is_array( $manifest['optional'] ?? null )
+			&& ! is_wp_error( self::normalize_dependencies( $manifest['required'] ) )
+			&& ! is_wp_error( self::normalize_dependencies( $manifest['optional'] ) );
 		if ( ! is_array( $manifest ) ) {
 			$manifest = array();
 		}
 		return array(
 			'module_key' => $row['module_key'], 'owner_file' => $row['owner_file'], 'owner_name' => $row['owner_name'], 'slug' => $row['slug'],
 			'namespace_prefix' => $row['namespace_prefix'], 'software_version' => $row['software_version'], 'contract_version' => $row['contract_version'],
-			'state' => $row['state'], 'required' => $manifest['required'] ?? array(), 'optional' => $manifest['optional'] ?? array(),
+			'state' => $row['state'], 'manifest_valid' => $manifest_valid, 'required' => $manifest['required'] ?? array(), 'optional' => $manifest['optional'] ?? array(),
 			'capabilities' => $manifest['capabilities'] ?? array(), 'commands' => $manifest['commands'] ?? array(), 'queries' => $manifest['queries'] ?? array(),
 			'events' => $manifest['events'] ?? array(), 'routes' => $manifest['routes'] ?? array(), 'data_classes' => $manifest['data_classes'] ?? array(),
 			'canonical_entities' => $manifest['canonical_entities'] ?? array(), 'writes' => $manifest['writes'] ?? array(),

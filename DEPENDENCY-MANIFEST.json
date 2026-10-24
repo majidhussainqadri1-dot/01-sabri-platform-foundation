@@ -1,7 +1,7 @@
 {
   "manifest_version": "1.1.0",
   "module_key": "file-01",
-  "software_version": "2.0.0",
+  "software_version": "2.0.1",
   "schema_version": "1.2.0",
   "contract_version": "2.0.0",
   "hard_dependencies": [],
@@ -49,6 +49,7 @@
     "donor_advantage": false
   },
   "governing_sources": [
+    "SSH MASTER 12 (approved working requirements baseline; not a claim of completed deployment)",
     "SSH-F01-PLAN-2026-v1.0",
     "File 01 Future Foundation 18 Enhancements v2.0",
     "Continuous Value / Third Central Plan v1.0"

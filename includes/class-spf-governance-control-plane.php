@@ -265,8 +265,9 @@ final class SPF_Governance_Control_Plane {
 		}
 		foreach ( $route_claims as $path => $owners ) {
 			$owners = array_values( array_unique( array_filter( $owners ) ) );
-			if ( count( $owners ) > 1 ) {
-				$findings[] = self::finding( 'high', 'duplicate_route_owner', $path, 'One canonical route is claimed by multiple owners.', array( 'owners' => $owners ) );
+			if ( count( $route_claims[ $path ] ) > 1 ) {
+				$code = count( $owners ) > 1 ? 'duplicate_route_owner' : 'duplicate_route_declaration';
+				$findings[] = self::finding( 'high', $code, $path, 'The canonical route has multiple declarations; every route path must be unique.', array( 'owners' => $owners, 'declaration_count' => count( $route_claims[ $path ] ) ) );
 			}
 		}
 		$known_shell_owners = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) ) );
@@ -283,6 +284,21 @@ final class SPF_Governance_Control_Plane {
 		);
 	}
 
+	public static function file01_v12_requirement_ids() {
+		$ids = array();
+		foreach ( array( 'FR'=>12, 'NFR'=>10, 'CEN'=>3, 'FUT'=>18 ) as $family => $count ) {
+			for ( $i = 1; $i <= $count; $i++ ) {
+				$ids[] = 'F01-' . $family . '-' . sprintf( '%03d', $i );
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * Evidence is supplied by callers; raw booleans are NOT verification.
+	 * The only way to label a row coded_complete is for a separate verifier
+	 * to attest its bound evidence through the explicit integration hook.
+	 */
 	public static function build_traceability_report( array $requirements, array $evidence ) {
 		$rows = array();
 		$missing = array();
@@ -301,29 +317,46 @@ final class SPF_Governance_Control_Plane {
 				continue;
 			}
 			$seen[ $id ] = true;
-			$item = (array) ( $evidence[ $id ] ?? array() );
+			$item = is_array( $evidence[ $id ] ?? null ) ? $evidence[ $id ] : array();
+			$proof = is_array( $item['proof'] ?? null ) ? $item['proof'] : array();
+			$refs = array( 'design_ref','code_ref','test_ref','test_run' );
+			$proof_structured = true;
+			foreach ( $refs as $field ) {
+				$proof_structured = $proof_structured && is_string( $proof[ $field ] ?? null ) && '' !== trim( $proof[ $field ] ) && strlen( $proof[ $field ] ) <= 500;
+			}
+			$proof_structured = $proof_structured && is_string( $proof['commit_sha'] ?? null )
+				&& 1 === preg_match( '/^[a-f0-9]{40}$/D', (string) ( $proof['commit_sha'] ?? '' ) )
+				&& 'passed' === ( $proof['test_result'] ?? null );
+			$declared = true === ( $item['design'] ?? false ) && true === ( $item['code'] ?? false ) && true === ( $item['test'] ?? false );
+			$verified = $declared && $proof_structured
+				&& true === apply_filters( 'spf_verify_traceability_requirement_evidence', false, $id, $proof );
 			$status = array(
 				'requirement' => $id,
-				'design'      => true === ( $item['design'] ?? false ),
-				'code'        => true === ( $item['code'] ?? false ),
-				'test'        => true === ( $item['test'] ?? false ),
-				'package'     => true === ( $item['package'] ?? false ),
-				'staging'     => true === ( $item['staging'] ?? false ),
-				'approval'    => true === ( $item['approval'] ?? false ),
-				'live'        => true === ( $item['live'] ?? false ) || true === ( $item['deployed'] ?? false ),
+				'design' => true === ( $item['design'] ?? false ),
+				'code' => true === ( $item['code'] ?? false ),
+				'test' => true === ( $item['test'] ?? false ),
+				'evidence_registered' => $proof_structured,
+				'evidence_verified' => $verified,
+				'package' => true === ( $item['package'] ?? false ),
+				'staging' => true === ( $item['staging'] ?? false ),
+				'approval' => true === ( $item['approval'] ?? false ),
+				'live' => true === ( $item['live'] ?? false ) || true === ( $item['deployed'] ?? false ),
 				'operational' => true === ( $item['operational'] ?? false ),
 			);
-			$status['coded_complete'] = $status['design'] && $status['code'] && $status['test'];
-			$status['packaged_complete'] = $status['coded_complete'] && $status['package'];
+			$status['coded_complete'] = $verified;
+			$status['packaged_complete'] = $verified && $status['package'];
 			$status['staging_complete'] = $status['packaged_complete'] && $status['staging'];
 			$status['release_ready'] = $status['staging_complete'] && $status['approval'];
 			$status['live_deployed'] = $status['release_ready'] && $status['live'];
 			$status['production_complete'] = $status['live_deployed'] && $status['operational'];
 			$rows[] = $status;
-			if ( ! $status['coded_complete'] ) {
+			if ( ! $verified ) {
 				$missing[] = $id;
 			}
 		}
+		$expected = self::file01_v12_requirement_ids();
+		$coverage_complete = empty( array_diff( $expected, array_keys( $seen ) ) )
+			&& empty( array_diff( array_keys( $seen ), $expected ) ) && count( $seen ) === count( $expected );
 		$unexpected_evidence_ids = array_values( array_diff( array_map( 'strval', array_keys( $evidence ) ), array_keys( $seen ) ) );
 		sort( $unexpected_evidence_ids, SORT_STRING );
 		$total = count( $rows );
@@ -332,24 +365,25 @@ final class SPF_Governance_Control_Plane {
 		$live = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['live_deployed'] ); } ) );
 		$production = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['production_complete'] ); } ) );
 		$report_valid = empty( $duplicate_ids ) && empty( $invalid_requirement_entries ) && empty( $unexpected_evidence_ids );
-		$claimable_coded_complete = $report_valid && $total > 0 && $coded === $total;
+		$claimable_coded_complete = $report_valid && $coverage_complete && $coded === count( $expected );
 		return array(
-			'report_valid'            => $report_valid,
+			'report_valid' => $report_valid,
+			'v12_requirement_coverage_complete' => $coverage_complete,
 			'coded_completion_claim_allowed' => $claimable_coded_complete,
-			'total'                   => $total,
-			'coded_complete'          => $coded,
-			'release_ready'           => $release_ready,
-			'live_deployed'           => $live,
-			'production_complete'     => $production,
-			'coded_percentage'        => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
-			'release_ready_percentage'=> $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
-			'live_percentage'         => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
-			'production_percentage'   => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
-			'missing_coded_evidence'  => $missing,
-			'duplicate_requirement_ids'=> array_values( array_unique( $duplicate_ids ) ),
-			'invalid_requirement_entries'=> $invalid_requirement_entries,
+			'total' => $total,
+			'coded_complete' => $coded,
+			'release_ready' => $release_ready,
+			'live_deployed' => $live,
+			'production_complete' => $production,
+			'coded_percentage' => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
+			'release_ready_percentage' => $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
+			'live_percentage' => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
+			'production_percentage' => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
+			'missing_coded_evidence' => $missing,
+			'duplicate_requirement_ids' => array_values( array_unique( $duplicate_ids ) ),
+			'invalid_requirement_entries' => $invalid_requirement_entries,
 			'unexpected_evidence_ids' => $unexpected_evidence_ids,
-			'rows'                    => $rows,
+			'rows' => $rows,
 		);
 	}
 

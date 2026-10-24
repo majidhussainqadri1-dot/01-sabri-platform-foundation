@@ -651,7 +651,7 @@ final class SPF_Installer {
 			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
 			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),
 			'source'           => 'SSH-F01-PLAN-2026-v1.0',
-			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0' ),
+			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0', 'Sabri-Website-Master-Plan-v12.docx (requirements baseline; release approval remains separate)' ),
 		);
 	}
 

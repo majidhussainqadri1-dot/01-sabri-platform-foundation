@@ -9,4 +9,9 @@ foreach(['class SPF_Runtime','class SPF_Authorization','class SPF_Registry','cla
 foreach(['FoundationModuleActivated.v1','FoundationModuleDeactivated.v1','FoundationContractDeprecated.v1','FoundationHealthChanged.v1','FoundationReleaseStateChanged.v1','ReleaseApproved.v1','FoundationPrivacyErasureCompleted.v1','FeatureFlagChanged.v1','FeatureFlagExpired.v1']as$event){$assert(str_contains($all,$event),"Missing event {$event}");}
 foreach(['spf_file00_authorization_claim','spf_verify_backup_restore_evidence','spf_verify_file24_purge_assurance','spf_owner_reconciliation_plan','spf_execute_owner_reconciliation','spf_rollback_owner_reconciliation']as$hook){$assert(str_contains($all,$hook),"Missing cross-file hook {$hook}");}
 foreach(['planned','built','verified','staged','approved','deployed','rolled_back','superseded']as$state){$assert(str_contains($all,"'{$state}'"),"Missing release state {$state}");}
+foreach ( range( 1, 18 ) as $number ) {
+	$requirement_id = sprintf( 'F01-FUT-%03d', $number );
+	$assert( 1 === preg_match( '/^\\| ' . preg_quote( $requirement_id, '/' ) . ' \\S.*\\|/m', $trace ), "V12 lacks individually traceable requirement {$requirement_id}" );
+}
+$assert( ! str_contains( $trace, 'F01-FUT-01..18 Future Foundation' ), 'Future requirements are still collapsed into one unverifiable traceability row.' );
 if($failures){fwrite(STDERR,"Contract tests failed:\n- ".implode("\n- ",$failures)."\n");exit(1);}echo "Contract assertions: {$assertions}/{$assertions} PASS\n";

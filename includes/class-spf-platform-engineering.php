@@ -615,7 +615,13 @@ final class SPF_Platform_Engineering {
 				if ( is_wp_error( $nested ) ) { return $nested; }
 				$out[ $key ] = $nested;
 			} elseif ( is_scalar( $value ) || null === $value ) {
-				$out[ $key ] = is_string( $value ) ? substr( sanitize_text_field( $value ), 0, 500 ) : $value;
+				// Configuration drift needs stable comparisons, not plaintext.
+				// All scalar leaves are fingerprinted, including secrets hidden
+				// under unfamiliar names, booleans, numeric PINs and DSNs.
+				$out[ $key ] = array(
+					'value_hash' => SPF_Runtime::hash( array( 'type'=>gettype( $value ), 'value'=>$value ) ),
+					'redacted' => true,
+				);
 			} else {
 				return new WP_Error( 'spf_config_value_invalid', __( 'Configuration drift input contains an unsupported value type.', 'sabri-platform-foundation' ), array( 'status'=>400 ) );
 			}

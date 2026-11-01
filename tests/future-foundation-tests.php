@@ -120,6 +120,10 @@ $assert(($nested['provider']['api_token']['redacted']??false)===true,'Nested con
 $secret_variants=$sanitize_config->invoke(null,['provider'=>['db_pass'=>'test-secret-should-not-persist','clientsecret'=>'test-secret-should-not-persist','authorization'=>'test-secret-should-not-persist','access_key'=>'test-secret-should-not-persist','mode'=>'safe']]);
 foreach(['db_pass','clientsecret','authorization','access_key'] as $secret_key){$assert(($secret_variants['provider'][$secret_key]['redacted']??false)===true,'Unrecognized sensitive configuration key: '.$secret_key);}
 $assert(!str_contains(json_encode($secret_variants),'test-secret-should-not-persist'),'Configuration sanitizer persisted a test secret in plaintext.');
+$unknown_secret=$sanitize_config->invoke(null,['provider'=>['ordinary_setting'=>'a-hidden-opaque-value','numeric_value'=>123456]]);
+$assert(($unknown_secret['provider']['ordinary_setting']['redacted']??false)===true && ($unknown_secret['provider']['numeric_value']['redacted']??false)===true,'Unrecognized configuration scalar leaves must always be fingerprinted.');
+$assert(!str_contains(json_encode($unknown_secret),'a-hidden-opaque-value') && !str_contains(json_encode($unknown_secret),'123456'),'Unknown-key configuration secrets leaked through value storage.');
+
 
 
 $train=SPF_Platform_Engineering::plan_release_train([

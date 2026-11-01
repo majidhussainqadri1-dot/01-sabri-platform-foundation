@@ -45,7 +45,7 @@ f41b80cbc4b637709f405d7f837acfe8040f10b5c80618c9db1219fdbedfbdc9  ./includes/cla
 73e023764f7aa421b6b0bfb055c7899a6f1d6476e3df0188f5d8556c4ffd3fb6  ./includes/class-spf-dependency-resolver.php
 c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/class-spf-event-bus.php
 60d6e50938ca9a8c81a1dc764f301214517979c4a2e59703fd0eb9fc91847748  ./includes/class-spf-future-foundation.php
-b78f69b52d95c946e1d24ae675c87e40ba45ce7f781657140fa6c21053b422b8  ./includes/class-spf-governance-control-plane.php
+d17c824d13e0218ec774e07c43f9faaaa5e233352bf86fb222b3270b47b1ccc0  ./includes/class-spf-governance-control-plane.php
 3b7832b51fc735ed323e93cb54e3eeeb0d7e45e9021ee70154b630c396daf8ac  ./includes/class-spf-governance.php
 9cdb0a0038ae0eb30f1c2a8b7aa251ed59903cdfef5f5cbb6e4f9b3593dd9b57  ./includes/class-spf-idempotency.php
 7f5301b99420fcf341359d158c0f59f1a748503c8d66855453cb121ddc492aee  ./includes/class-spf-installer.php
@@ -80,7 +80,7 @@ d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-
 4ac0015a88d62ec98160cbad91b15a1b9fdb15521f4d40851daa8286fbd8685a  ./tests/fourteenth-ten-round-review-tests.php
 2d4b6010e5743f542fd331abe1ac383b1282fdc8b11a250d11a3ce2ed79e4c78  ./tests/fourth-ten-round-review-tests.php
 6fbff3851e1b443bb4076d87c47088ee1190f96492e55273c1d40b8e0f3b30c3  ./tests/fresh-eighty-round-review-tests.php
-a8fda0cb560b7f65e4c8cd23aba0795da5d3e6d318dcf6927181d8909a08f3e0  ./tests/future-foundation-tests.php
+5104318ce51d548ef86040d7543a9976741dd9a8a152707d26c6bcff509c72e9  ./tests/future-foundation-tests.php
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 ae8d008040495796b155be8e79501013452497a89f49a7dee8227a8eb0ac15ca  ./tests/release-handoff-contract-tests.php
 ec149f671dea4948cfa10ed025ed55285d8296722168124b537247b276f83d82  ./tests/schema-tests.php

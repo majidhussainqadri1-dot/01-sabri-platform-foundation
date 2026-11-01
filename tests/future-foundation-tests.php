@@ -56,6 +56,7 @@ $assert($trace['live_deployed']===0,'Unattested caller booleans falsely counted 
 $assert($trace['production_complete']===0,'Unattested caller booleans falsely counted as operational completion.');
 $assert($trace['coded_completion_claim_allowed']===false && $trace['v12_requirement_coverage_complete']===false,'Partial, unverified requirements falsely certified completion.');
 $assert(count(SPF_Governance_Control_Plane::file01_v12_requirement_ids())===43,'Full V12 43-requirement baseline missing.');
+$assert(in_array('F01-CEN-01',SPF_Governance_Control_Plane::file01_v12_requirement_ids(),true) && !in_array('F01-CEN-001',SPF_Governance_Control_Plane::file01_v12_requirement_ids(),true),'Central V12 requirement ID width is not canonical.');
 $assert($trace['duplicate_requirement_ids']===['REQ-1'],'Duplicate requirement IDs not reported.');
 $all_v12_ids=array_map(static fn($id)=>['id'=>$id],SPF_Governance_Control_Plane::file01_v12_requirement_ids());
 $unattested_v12=SPF_Governance_Control_Plane::build_traceability_report($all_v12_ids,[]);

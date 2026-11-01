@@ -64,7 +64,7 @@ bde39484f63d5e0a3aacc6ad4675a200e191a91411a08b38e2bb51a59fae2c42  ./qa/run-tests
 75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 0825957278f279c9677ff550beed2254d3588b20868c4bb0108d5a9c9edaeac9  ./qa/wp-fourteenth-ten-round-smoke.php
-c3af70096bee9c43fab71dbb0db422f8ab651a64a6c49981e43643511128511f  ./qa/wp-future-foundation-smoke.php
+867c17e6151685eed9c75b668a1a15e0e729a055bc04cbb78f988762d7e29517  ./qa/wp-future-foundation-smoke.php
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
 ba8adc9a3b9d6df280a15c91b1566c847ace9a35dabc2359712099ecaf3db957  ./qa/wp-reconciliation-ownership-smoke.php
@@ -80,11 +80,11 @@ d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-
 4ac0015a88d62ec98160cbad91b15a1b9fdb15521f4d40851daa8286fbd8685a  ./tests/fourteenth-ten-round-review-tests.php
 2d4b6010e5743f542fd331abe1ac383b1282fdc8b11a250d11a3ce2ed79e4c78  ./tests/fourth-ten-round-review-tests.php
 6fbff3851e1b443bb4076d87c47088ee1190f96492e55273c1d40b8e0f3b30c3  ./tests/fresh-eighty-round-review-tests.php
-d43361075b062e297854f908b3e19afb40452c4b435da3ff8b4476ad77fb7c2a  ./tests/future-foundation-tests.php
+a8fda0cb560b7f65e4c8cd23aba0795da5d3e6d318dcf6927181d8909a08f3e0  ./tests/future-foundation-tests.php
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 ae8d008040495796b155be8e79501013452497a89f49a7dee8227a8eb0ac15ca  ./tests/release-handoff-contract-tests.php
 ec149f671dea4948cfa10ed025ed55285d8296722168124b537247b276f83d82  ./tests/schema-tests.php
-38560cdf8d4f76e28e5b79e912f2317aa88b327a36fb0045c830a1025079e2a4  ./tests/security-tests.php
+e2cedcaa0520ea17177256c4d2843e332e1dca62c72411d1f5c1e75a17019bf8  ./tests/security-tests.php
 2c5c82b596418ab6410bcc582b3bdfc986f3ba3bbfa0bfabc3701447fcf0850e  ./tests/seventh-ten-round-review-tests.php
 b710cbcaa0f89c0529df7a2ab3e0a4a50a2d815b7a6e968d5d2eac39805d81d9  ./tests/sixth-ten-round-review-tests.php
 f2d035b8f3105fbb61a23501dd92331386590a763f5c0fe3fdabdc1eb60c674a  ./tests/source-quality-tests.php

@@ -288,7 +288,7 @@ final class SPF_Governance_Control_Plane {
 		$ids = array();
 		foreach ( array( 'FR'=>12, 'NFR'=>10, 'CEN'=>3, 'FUT'=>18 ) as $family => $count ) {
 			for ( $i = 1; $i <= $count; $i++ ) {
-				$ids[] = 'F01-' . $family . '-' . sprintf( '%03d', $i );
+				$ids[] = 'F01-' . $family . '-' . sprintf( 'CEN' === $family ? '%02d' : '%03d', $i );
 			}
 		}
 		return $ids;

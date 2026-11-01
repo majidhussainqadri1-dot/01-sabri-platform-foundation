@@ -10,7 +10,7 @@ $assert = static function ( $condition, $message ) use ( &$failures, &$assertion
 
 $status = SPF_Future_Foundation::status();
 $assert( 18 === (int) $status['feature_count'], 'Future Foundation feature count must be 18.' );
-$assert( 18 === (int) $status['coded_count'], 'All Future Foundation features must be coded.' );
+$assert( 18 === (int) ( $status['implementation_present_count'] ?? 0 ) && false === ( $status['coded_completion_verified'] ?? true ), 'Future Foundation entrypoint presence cannot falsely certify per-requirement completion.' );
 $assert( false === $status['ai_autonomous_changes'], 'AI governance advisor must be non-autonomous.' );
 
 $policy = SPF_Governance_Control_Plane::evaluate_policy( 'claim_global_shell', array() );

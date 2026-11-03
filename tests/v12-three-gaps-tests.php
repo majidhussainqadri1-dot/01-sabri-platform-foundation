@@ -33,7 +33,7 @@ $create = static function ($repository, $key, $manifest) use ($commit) {
     $url = 'https://api.github.com/repos/' . $repository . '/contents/' . $path . '?ref=' . $commit;
     $GLOBALS['spf_github_fixtures'][$url] = array(
         'response'=>array('code'=>200),
-        'body'=>json_encode(array('encoding'=>'base64','content'=>base64_encode($json))),
+        'body'=>$json,
     );
     return array('repository'=>$repository,'commit_sha'=>$commit,'path'=>$path,
         'expected_sha256'=>hash('sha256',$json),'module_key'=>$key);

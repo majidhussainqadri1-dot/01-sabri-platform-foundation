@@ -274,7 +274,7 @@ final class SPF_Governance_Control_Plane {
 			}
 			$url = 'https://api.github.com/repos/' . $repo . '/contents/' . $path . '?ref=' . $commit;
 			$response = wp_remote_get( $url, array(
-				'headers'=>array( 'Accept'=>'application/vnd.github+json', 'User-Agent'=>'Sabri-File01-ReadOnly-Audit' ),
+				'headers'=>array( 'Accept'=>'application/vnd.github.raw+json', 'User-Agent'=>'Sabri-File01-ReadOnly-Audit' ),
 				'timeout'=>10, 'redirection'=>0, 'sslverify'=>true, 'reject_unsafe_urls'=>true,
 				'limit_response_size'=>262144,
 			) );
@@ -287,14 +287,10 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'critical', 'source_response_oversized', $key, 'Remote response is outside the bounded envelope.', array() );
 				continue;
 			}
-			$payload = json_decode( $body, true );
-			if ( ! is_array( $payload ) || 'base64' !== ( $payload['encoding'] ?? null )
-				|| ! is_string( $payload['content'] ?? null ) ) {
-				$findings[] = self::finding( 'critical', 'source_encoding_invalid', $key, 'An exact GitHub base64 content object is required.', array() );
-				continue;
-			}
-			$raw = base64_decode( preg_replace( '/\\s+/', '', $payload['content'] ), true );
-			if ( ! is_string( $raw ) || strlen( $raw ) > 131072 || ! hash_equals( $digest, hash( 'sha256', $raw ) ) ) {
+			// GitHub's raw media type gives immutable manifest bytes directly,
+			// avoiding any application-level content decoding or executable data.
+			$raw = $body;
+			if ( strlen( $raw ) > 131072 || ! hash_equals( $digest, hash( 'sha256', $raw ) ) ) {
 				$findings[] = self::finding( 'critical', 'source_digest_mismatch', $key, 'Manifest bytes did not match the independently supplied pinned SHA-256.', array() );
 				continue;
 			}

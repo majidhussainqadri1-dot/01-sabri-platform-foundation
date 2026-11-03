@@ -395,6 +395,131 @@ final class SPF_Governance_Control_Plane {
 		);
 	}
 
+	/**
+	 * Resolve only files that are genuinely under the supplied local repository.
+	 * This scanner is read-only; it does not trust user-supplied boolean evidence.
+	 */
+	public static function verify_v12_source_file( $root, $path, $expected_sha256 ) {
+		if ( ! is_string( $root ) || ! is_string( $path ) || ! is_string( $expected_sha256 )
+			|| ! preg_match( '/^[a-f0-9]{64}$/D', $expected_sha256 )
+			|| ! preg_match( '/^[A-Za-z0-9_.\\/-]+$/D', $path )
+			|| str_contains( $path, '..' ) || str_starts_with( $path, '/' )
+			|| str_contains( $path, '\\\\' ) ) {
+			return false;
+		}
+		$base = realpath( $root );
+		$target = $base ? realpath( $base . DIRECTORY_SEPARATOR . $path ) : false;
+		if ( false === $base || false === $target || ! str_starts_with( $target, $base . DIRECTORY_SEPARATOR )
+			|| ! is_file( $target ) || ! is_readable( $target ) ) {
+			return false;
+		}
+		$actual = hash_file( 'sha256', $target );
+		return is_string( $actual ) && hash_equals( $expected_sha256, $actual );
+	}
+
+	/**
+	 * Automatically scan the canonical 43 IDs, declared implementations and
+	 * on-disk source/test bytes from an exact checked-out tree. This is source
+	 * provenance, NOT independent CI success or production acceptance.
+	 */
+	public static function audit_v12_local_sources( $root, $commit_sha ) {
+		$ids = self::file01_v12_requirement_ids();
+		$empty = array( 'total'=>count( $ids ), 'source_mapped'=>0, 'test_ref_verified_count'=>0,
+			'coded_completion_claim_allowed'=>false, 'ci_result_verified'=>false, 'rows'=>array(),
+			'missing_requirements'=>$ids, 'status'=>'source_unavailable' );
+		if ( ! is_string( $root ) || ! is_dir( $root ) || ! is_string( $commit_sha )
+			|| ! preg_match( '/^[a-f0-9]{40}$/D', $commit_sha ) ) {
+			return $empty;
+		}
+		$trace_path = $root . '/TRACEABILITY.md';
+		$manifest_path = $root . '/SOURCE-CHECKSUMS.sha256';
+		if ( ! is_file( $trace_path ) || ! is_file( $manifest_path ) ) {
+			return $empty;
+		}
+		$trace = file_get_contents( $trace_path );
+		$checksums = file_get_contents( $manifest_path );
+		if ( ! is_string( $trace ) || ! is_string( $checksums ) ) {
+			return $empty;
+		}
+		$hashes = array();
+		foreach ( explode( "\n", $checksums ) as $line ) {
+			if ( preg_match( '/^([a-f0-9]{64})  \\.\\/([A-Za-z0-9_.\\/-]+)$/D', trim( $line ), $m ) ) {
+				if ( isset( $hashes[ $m[2] ] ) ) {
+					return $empty; // A duplicated checksum entry is not independent truth.
+				}
+				$hashes[ $m[2] ] = $m[1];
+			}
+		}
+		if ( ! isset( $hashes['TRACEABILITY.md'] )
+			|| ! self::verify_v12_source_file( $root, 'TRACEABILITY.md', $hashes['TRACEABILITY.md'] ) ) {
+			return $empty;
+		}
+		$declarations = array();
+		foreach ( explode( "\n", $trace ) as $line ) {
+			if ( ! preg_match( '/^\\|\\s*(F01-(?:FR-[0-9]{3}|NFR-[0-9]{3}|CEN-[0-9]{2}|FUT-[0-9]{3}))(?:\\s+[^|]*)?\\s*\\|\\s*([^|]+)\\|\\s*([^|]+)\\|/D', $line, $match ) ) {
+				continue;
+			}
+			if ( isset( $declarations[ $match[1] ] ) ) {
+				return $empty;
+			}
+			$declarations[ $match[1] ] = array( 'implementation'=>trim( $match[2] ), 'test_reference'=>trim( $match[3] ) );
+		}
+		$rows = array();
+		$source_mapped = 0;
+		$tests_found = 0;
+		foreach ( $ids as $id ) {
+			$declaration = $declarations[ $id ] ?? array();
+			$implementation = $declaration['implementation'] ?? '';
+			$source_evidence = array();
+			if ( preg_match_all( '/\\b(SPF_[A-Za-z0-9_]+)(?:::(\\w+))?/', $implementation, $symbols, PREG_SET_ORDER ) ) {
+				foreach ( $symbols as $symbol ) {
+					$class = $symbol[1];
+					$method = $symbol[2] ?? '';
+					$path = 'includes/class-' . strtolower( str_replace( '_', '-', $class ) ) . '.php';
+					if ( ! isset( $hashes[ $path ] ) || ! self::verify_v12_source_file( $root, $path, $hashes[ $path ] ) ) {
+						continue;
+					}
+					$source = file_get_contents( $root . '/' . $path );
+					if ( ! is_string( $source ) || ! str_contains( $source, 'class ' . $class )
+						|| ( '' !== $method && ! preg_match( '/\\bfunction\\s+' . preg_quote( $method, '/' ) . '\\s*\\(/', $source ) ) ) {
+						continue;
+					}
+					$source_evidence[] = array( 'symbol'=>$class . ( '' !== $method ? '::' . $method : '' ),
+						'path'=>$path, 'sha256'=>$hashes[ $path ] );
+				}
+			}
+			$has_source = ! empty( $source_evidence );
+			if ( $has_source ) {
+				$source_mapped++;
+			}
+			$test_refs = array();
+			if ( preg_match_all( '~\\btests/[A-Za-z0-9_-]+\\.php\\b~', $declaration['test_reference'] ?? '', $matches ) ) {
+				foreach ( array_unique( $matches[0] ) as $path ) {
+					if ( isset( $hashes[$path] ) && self::verify_v12_source_file( $root, $path, $hashes[$path] ) ) {
+						$test_refs[] = array( 'path'=>$path, 'sha256'=>$hashes[$path],
+							'assertion_individually_verified'=>false );
+					}
+				}
+			}
+			if ( $test_refs ) {
+				$tests_found++;
+			}
+			$rows[$id] = array( 'source_mapped'=>$has_source, 'source_evidence'=>$source_evidence,
+				'test_files_pinned'=>$test_refs, 'test_result'=>'requires_independent_ci_attestation',
+				'coded_complete_verified'=>false, 'staging_verified'=>false, 'live_verified'=>false );
+		}
+		$missing = array_values( array_diff( $ids, array_keys( $declarations ) ) );
+		$extra = array_values( array_diff( array_keys( $declarations ), $ids ) );
+		return array(
+			'total'=>count($ids), 'declared_count'=>count($declarations), 'source_mapped'=>$source_mapped,
+			'test_ref_verified_count'=>$tests_found, 'missing_requirements'=>$missing,
+			'unexpected_requirements'=>$extra, 'tree_commit_claim'=>$commit_sha,
+			'commit_verified'=>false, 'ci_result_verified'=>false,
+			'coded_completion_claim_allowed'=>false, 'rows'=>$rows,
+			'status'=>empty($missing) && empty($extra) ? 'source_scan_complete_acceptance_pending' : 'requirement_coverage_incomplete',
+		);
+	}
+
 	public static function file01_v12_requirement_ids() {
 		$ids = array();
 		foreach ( array( 'FR'=>12, 'NFR'=>10, 'CEN'=>3, 'FUT'=>18 ) as $family => $count ) {

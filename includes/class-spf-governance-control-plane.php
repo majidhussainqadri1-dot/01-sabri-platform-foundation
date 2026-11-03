@@ -230,6 +230,117 @@ final class SPF_Governance_Control_Plane {
 		return self::lint_architecture( self::runtime_inventory() );
 	}
 
+	/**
+	 * Read-only and pinned cross-repository architecture source collector.
+	 * Inputs are externally selected immutable commits plus independently known
+	 * SHA-256 of each canonical JSON architecture manifest. No branch refs,
+	 * redirect follows, arbitrary hosts, writes, or silent unverified sources.
+	 * This does not certify companion repositories that are not supplied.
+	 */
+	public static function lint_pinned_repository_sources( array $descriptors ) {
+		$findings = array();
+		$modules = array();
+		$routes = array();
+		$shell_owners = array();
+		$provenance = array();
+		$seen = array();
+		$verified = 0;
+		if ( empty( $descriptors ) || count( $descriptors ) > 26 ) {
+			return array( 'pass'=>false, 'source_verified_count'=>0,
+				'findings'=>array( self::finding( 'critical', 'source_count_invalid', 'cross-repository', 'One to 26 explicitly pinned manifest descriptors are required.', array() ) ),
+				'provenance'=>array(), 'source_count'=>count( $descriptors ) );
+		}
+		foreach ( $descriptors as $index => $descriptor ) {
+			$descriptor = is_array( $descriptor ) ? $descriptor : array();
+			$repo = $descriptor['repository'] ?? null;
+			$commit = $descriptor['commit_sha'] ?? null;
+			$path = $descriptor['path'] ?? null;
+			$digest = $descriptor['expected_sha256'] ?? null;
+			$owner = $descriptor['module_key'] ?? null;
+			$key = is_string( $repo ) && is_string( $path ) ? $repo . '/' . $path : 'source-' . (int) $index;
+			if ( ! is_string( $repo ) || ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/D', $repo )
+				|| str_contains( $repo, '..' ) || ! is_string( $commit ) || ! preg_match( '/^[a-f0-9]{40}$/D', $commit )
+				|| ! is_string( $path ) || ! preg_match( '/^(?:[A-Za-z0-9_-]+\\/){0,3}(?:architecture-manifest|manifest)\\.json$/D', $path )
+				|| ! is_string( $digest ) || ! preg_match( '/^[a-f0-9]{64}$/D', $digest )
+				|| ! is_string( $owner ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/D', $owner )
+				|| isset( $seen[$repo] ) ) {
+				$findings[] = self::finding( 'critical', 'source_pin_invalid', $key, 'A unique canonical repository, exact commit, bounded path, owner and independent SHA-256 are mandatory.', array() );
+				continue;
+			}
+			$seen[$repo] = true;
+			if ( ! function_exists( 'wp_remote_get' ) ) {
+				$findings[] = self::finding( 'critical', 'source_fetch_unavailable', $key, 'WordPress HTTP read-only transport is unavailable.', array() );
+				continue;
+			}
+			$url = 'https://api.github.com/repos/' . $repo . '/contents/' . $path . '?ref=' . $commit;
+			$response = wp_remote_get( $url, array(
+				'headers'=>array( 'Accept'=>'application/vnd.github+json', 'User-Agent'=>'Sabri-File01-ReadOnly-Audit' ),
+				'timeout'=>10, 'redirection'=>0, 'sslverify'=>true, 'reject_unsafe_urls'=>true,
+				'limit_response_size'=>262144,
+			) );
+			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+				$findings[] = self::finding( 'critical', 'source_fetch_unverified', $key, 'Pinned manifest HTTP retrieval failed.', array() );
+				continue;
+			}
+			$body = wp_remote_retrieve_body( $response );
+			if ( ! is_string( $body ) || strlen( $body ) > 262144 ) {
+				$findings[] = self::finding( 'critical', 'source_response_oversized', $key, 'Remote response is outside the bounded envelope.', array() );
+				continue;
+			}
+			$payload = json_decode( $body, true );
+			if ( ! is_array( $payload ) || 'base64' !== ( $payload['encoding'] ?? null )
+				|| ! is_string( $payload['content'] ?? null ) ) {
+				$findings[] = self::finding( 'critical', 'source_encoding_invalid', $key, 'An exact GitHub base64 content object is required.', array() );
+				continue;
+			}
+			$raw = base64_decode( preg_replace( '/\\s+/', '', $payload['content'] ), true );
+			if ( ! is_string( $raw ) || strlen( $raw ) > 131072 || ! hash_equals( $digest, hash( 'sha256', $raw ) ) ) {
+				$findings[] = self::finding( 'critical', 'source_digest_mismatch', $key, 'Manifest bytes did not match the independently supplied pinned SHA-256.', array() );
+				continue;
+			}
+			$manifest = json_decode( $raw, true );
+			if ( ! is_array( $manifest ) || ( $manifest['module_key'] ?? null ) !== $owner
+				|| ! is_array( $manifest['canonical_entities'] ?? null )
+				|| ! is_array( $manifest['writes'] ?? null ) || ! is_array( $manifest['routes'] ?? null )
+				|| count( $manifest['canonical_entities'] ) > 128 || count( $manifest['writes'] ) > 128
+				|| count( $manifest['routes'] ) > 128 ) {
+				$findings[] = self::finding( 'critical', 'source_manifest_invalid', $key, 'Pinned content lacks complete, bounded, matching architecture declarations.', array() );
+				continue;
+			}
+			$modules[] = array( 'module_key'=>$owner, 'manifest'=>array(
+				'canonical_entities'=>$manifest['canonical_entities'],
+				'writes'=>$manifest['writes'],
+				'global_shell_owner'=>true === ( $manifest['global_shell_owner'] ?? false ),
+				'application_shell_owner'=>true === ( $manifest['application_shell_owner'] ?? false ),
+			) );
+			foreach ( $manifest['routes'] as $route ) {
+				if ( ! is_array( $route ) || ! is_string( $route['route_path'] ?? null )
+					|| ! is_string( $route['owner_module'] ?? null ) || $route['owner_module'] !== $owner ) {
+					$findings[] = self::finding( 'high', 'source_route_invalid', $key, 'A supplied route does not declare the exact source owner.', array() );
+					continue;
+				}
+				$routes[] = array( 'route_path'=>$route['route_path'], 'owner_module'=>$owner );
+			}
+			if ( true === ( $manifest['global_shell_owner'] ?? false ) || true === ( $manifest['application_shell_owner'] ?? false )
+				|| in_array( 'global-shell', $manifest['canonical_entities'], true )
+				|| in_array( 'application-shell', $manifest['canonical_entities'], true )
+				|| in_array( 'global-navigation', $manifest['canonical_entities'], true ) ) {
+				$shell_owners[] = $owner;
+			}
+			$verified++;
+			$provenance[] = array( 'repository'=>$repo, 'commit_sha'=>$commit, 'path'=>$path,
+				'content_sha256'=>$digest, 'module_key'=>$owner, 'verified_by'=>'exact_commit_and_sha256' );
+		}
+		$lint = self::lint_architecture( array( 'modules'=>$modules, 'routes'=>$routes,
+			'global_shell_owners'=>array_values( array_unique( $shell_owners ) ) ) );
+		$findings = array_merge( $findings, $lint['findings'] );
+		return array( 'pass'=>empty( $findings ) && $verified === count( $descriptors ),
+			'source_verified_count'=>$verified, 'source_count'=>count( $descriptors ),
+			'findings'=>$findings, 'finding_count'=>count( $findings ),
+			'provenance'=>$provenance, 'inventory_hash'=>$lint['inventory_hash'],
+			'read_only'=>true, 'companion_source_coverage_complete'=>false );
+	}
+
 	public static function lint_architecture( array $inventory ) {
 		$findings = array();
 		$owner_claims = array();

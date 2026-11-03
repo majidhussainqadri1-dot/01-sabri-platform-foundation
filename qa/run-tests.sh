@@ -57,3 +57,4 @@ fi
 if find . -type f -not -path './.git/*' -print0 | xargs -0 grep -Il $'\r' | grep .; then echo "CRLF files found" >&2; exit 1; fi
 
 echo 'All source QA PASS'
+php tools/v12-traceability-audit.php

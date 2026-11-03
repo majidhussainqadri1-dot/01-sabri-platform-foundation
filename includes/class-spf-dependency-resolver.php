@@ -12,7 +12,7 @@ final class SPF_Dependency_Resolver {
 		$stack = array();
 		$details = array();
 		$ready = self::walk( $module_key, $visited, $stack, $details );
-		$optional = self::optional_status( $module );
+		$optional = ! empty( $module['manifest_valid'] ) ? self::optional_status( $module ) : array();
 		return array(
 			'module_key'            => $module_key,
 			'ready'                 => $ready,
@@ -45,6 +45,14 @@ final class SPF_Dependency_Resolver {
 		$module = SPF_Registry::get_module( $module_key );
 		if ( ! $module ) {
 			$details[] = array( 'module_key' => $module_key, 'ready' => false, 'code' => 'dependency_manifest_missing' );
+			return false;
+		}
+		if ( ! SPF_Registry::valid_semver( $module['software_version'] ?? null ) || ! SPF_Registry::valid_semver( $module['contract_version'] ?? null ) ) {
+			$details[] = array( 'module_key' => $module_key, 'ready' => false, 'code' => 'module_version_invalid' );
+			return false;
+		}
+		if ( empty( $module['manifest_valid'] ) ) {
+			$details[] = array( 'module_key' => $module_key, 'ready' => false, 'code' => 'module_manifest_invalid' );
 			return false;
 		}
 		if ( in_array( $module['state'], array( 'unregistered','degraded','suspended','retired' ), true ) ) {
@@ -97,11 +105,27 @@ final class SPF_Dependency_Resolver {
 	}
 
 	private static function range_status( array $target, array $dependency ) {
-		if ( version_compare( $target['software_version'], $dependency['minimum_version'], '<' ) ) {
-			return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_below_minimum', 'actual' => $target['software_version'], 'minimum' => $dependency['minimum_version'] );
+		$actual = $target['software_version'] ?? null;
+		$minimum = $dependency['minimum_version'] ?? null;
+		$maximum = $dependency['maximum_version'] ?? '';
+		if ( ! SPF_Registry::valid_semver( $actual ) || ! SPF_Registry::valid_semver( $minimum ) || ( '' !== $maximum && ! SPF_Registry::valid_semver( $maximum ) ) ) {
+			return array( 'module_key' => $dependency['module_key'] ?? '', 'ready' => false, 'code' => 'dependency_version_invalid' );
 		}
-		if ( ! empty( $dependency['maximum_version'] ) && version_compare( $target['software_version'], $dependency['maximum_version'], '>' ) ) {
-			return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_above_maximum', 'actual' => $target['software_version'], 'maximum' => $dependency['maximum_version'] );
+		$minimum_precedence = SPF_Registry::compare_semver( $actual, $minimum );
+		if ( null === $minimum_precedence ) {
+			return array( 'module_key' => $dependency['module_key'] ?? '', 'ready' => false, 'code' => 'dependency_version_invalid' );
+		}
+		if ( $minimum_precedence < 0 ) {
+			return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_below_minimum', 'actual' => $actual, 'minimum' => $minimum );
+		}
+		if ( '' !== $maximum ) {
+			$maximum_precedence = SPF_Registry::compare_semver( $actual, $maximum );
+			if ( null === $maximum_precedence ) {
+				return array( 'module_key' => $dependency['module_key'] ?? '', 'ready' => false, 'code' => 'dependency_version_invalid' );
+			}
+			if ( $maximum_precedence > 0 ) {
+				return array( 'module_key' => $dependency['module_key'], 'ready' => false, 'code' => 'dependency_above_maximum', 'actual' => $actual, 'maximum' => $maximum );
+			}
 		}
 		return true;
 	}

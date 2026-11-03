@@ -27,6 +27,27 @@ final class SPF_Future_Foundation {
 			'F01-FUT-017'=>'Time-Travel Governance & Configuration Snapshots',
 			'F01-FUT-018'=>'AI Governance Copilot — Advisory Only',
 		);
+		// Presence is not a completed code/test/acceptance attestation.
+		$entrypoints = array(
+			1=>array( 'SPF_Governance_Control_Plane','evaluate_policy' ),
+			2=>array( 'SPF_Governance_Control_Plane','simulate_amendment' ),
+			3=>array( 'SPF_Governance_Control_Plane','lint_architecture' ),
+			4=>array( 'SPF_Governance_Control_Plane','build_traceability_report' ),
+			5=>array( 'SPF_Platform_Engineering','service_catalog' ),
+			6=>array( 'SPF_Platform_Engineering','scaffold_module' ),
+			7=>array( 'SPF_Platform_Engineering','contract_compatibility' ),
+			8=>array( 'SPF_Platform_Engineering','register_event_schema' ),
+			9=>array( 'SPF_Platform_Engineering','detect_config_drift' ),
+			10=>array( 'SPF_Platform_Engineering','plan_release_train' ),
+			11=>array( 'SPF_Platform_Engineering','advance_rollout' ),
+			12=>array( 'SPF_Platform_Engineering','evaluate_slo_gate' ),
+			13=>array( 'SPF_Resilience_Lab','digital_twin' ),
+			14=>array( 'SPF_Resilience_Lab','self_heal_plan' ),
+			15=>array( 'SPF_Resilience_Lab','run_chaos' ),
+			16=>array( 'SPF_Platform_Engineering','new_telemetry_context' ),
+			17=>array( 'SPF_Resilience_Lab','capture_snapshot' ),
+			18=>array( 'SPF_Governance_Control_Plane','advisory_copilot' ),
+		);
 		$out = array();
 		foreach ( $names as $id => $name ) {
 			$n = (int) substr( $id, -3 );
@@ -34,7 +55,8 @@ final class SPF_Future_Foundation {
 				'name'     => $name,
 				'priority' => in_array( $n, array(1,2,3,4,7,8,9,10,16), true ) ? 'P0' : ( 18 === $n ? 'P2' : 'P1' ),
 				'owner'    => 'file-01',
-				'status'   => 'coded',
+				'entrypoint' => $entrypoints[ $n ][0] . '::' . $entrypoints[ $n ][1],
+				'status'   => is_callable( $entrypoints[ $n ] ) ? 'implementation_present_unverified' : 'missing_implementation',
 			);
 		}
 		return $out;
@@ -66,7 +88,10 @@ final class SPF_Future_Foundation {
 		return array(
 			'future_foundation_version' => '2.0.0',
 			'feature_count'             => count( $features ),
-			'coded_count'               => count( array_filter( $features, static function ( $f ) { return 'coded' === ( $f['status'] ?? '' ); } ) ),
+			'implementation_present_count' => count( array_filter( $features, static function ( $f ) { return 'implementation_present_unverified' === ( $f['status'] ?? '' ); } ) ),
+			// No independent per-feature test attestation is available in this API.
+			'coded_count' => 0,
+			'coded_completion_verified' => false,
 			'features'                  => $features,
 			'policy_count'              => count( SPF_Governance_Control_Plane::list_policies() ),
 			'event_schema_count'        => count( SPF_Platform_Engineering::list_event_schemas() ),

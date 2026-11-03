@@ -37,7 +37,8 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $future = SPF_Future_Foundation::status();
-$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['implementation_present_count'] ?? 0 ), 'Future Foundation 18 implementation entrypoints are incomplete.' );
+$assert( 0 === (int) ( $future['coded_count'] ?? -1 ) && false === ( $future['coded_completion_verified'] ?? true ), 'An unverified capability catalogue falsely certifies coding completion.' );
 $assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
 
 $unauthorized = SPF_Governance::record_release( [
@@ -192,6 +193,74 @@ add_filter( 'spf_verify_backup_restore_evidence', static function ( $claim, arra
 $purge_plan = SPF_Purge::plan();
 $bad_purge = SPF_Purge::apply( 'PURGE FILE 01 GOVERNANCE DATA', [ 'backup_id'=>'submitted' ], SPF_Purge::plan_hash( $purge_plan ) );
 $assert( is_wp_error( $bad_purge ) && 'spf_purge_backup_evidence_binding_invalid' === $bad_purge->get_error_code(), 'Wrong-plan purge backup evidence was accepted.' );
+
+ // V12 migration truth: a wp_options version string cannot override actual schema.
+$original_schema_option = get_option( SPF_Installer::SCHEMA_OPTION );
+$original_upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
+$migrations_table = SPF_Installer::table( 'migrations' );
+$migration_count_before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" );
+update_option( SPF_Installer::SCHEMA_OPTION, '9.0.0', false );
+$downgrade_result = SPF_Installer::maybe_upgrade();
+$assert( is_wp_error( $downgrade_result ) && 'spf_schema_downgrade_blocked' === $downgrade_result->get_error_code(), 'Newer stored schema was incorrectly accepted by an older File 01 runtime.' );
+$assert( 'downgrade_blocked' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Future-schema downgrade blocker was not reported.' );
+$assert( '9.0.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Downgrade probe silently mutated the schema-version option.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+
+// Operate only in disposable WordPress CI: remove an owned nonunique index,
+// prove "already current" is rejected, and restore the exact index immediately.
+$flags_table = SPF_Installer::table( 'flags' );
+$index_dropped = $wpdb->query( "ALTER TABLE {$flags_table} DROP INDEX expires_at" );
+if ( false === $index_dropped ) {
+	$assert( false, 'CI could not establish the intentionally missing-index fixture.' );
+} else {
+	try {
+		$stale_result = SPF_Installer::maybe_upgrade();
+		$assert( is_wp_error( $stale_result ) && 'spf_schema_integrity_required' === $stale_result->get_error_code(), 'Matching schema-version option bypassed missing-index verification.' );
+		$assert( 'schema_integrity_required' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Incomplete same-version schema was not recorded as a blocker.' );
+		$assert( $original_schema_option === get_option( SPF_Installer::SCHEMA_OPTION ), 'Stale schema probe changed the version option.' );
+	} finally {
+		$index_restored = $wpdb->query( "ALTER TABLE {$flags_table} ADD INDEX expires_at (expires_at)" );
+		$assert( false !== $index_restored && true === SPF_Installer::verify_schema(), 'Disposable missing-index fixture could not be completely restored.' );
+	}
+}
+$assert( $migration_count_before === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" ), 'Schema-parity dry runs created a migration record.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+update_option( 'spf_upgrade_state', $original_upgrade_state, false );
+$assert( true === SPF_Installer::maybe_upgrade(), 'Restored current schema was not accepted after truth checks.' );
+
+// V12 fail-closed regression: on disposable WordPress/MySQL CI only.
+// Every temporary registry corruption is restored before continuing.
+$modules_table = SPF_Installer::table( 'modules' );
+$original_module_row = $wpdb->get_row( $wpdb->prepare( "SELECT manifest_json,software_version FROM {$modules_table} WHERE module_key=%s", 'file-01' ), ARRAY_A );
+$assert( is_array( $original_module_row ), 'Cannot capture a canonical module snapshot before integrity testing.' );
+if ( is_array( $original_module_row ) ) {
+	try {
+		$wpdb->update( $modules_table, array( 'manifest_json'=>'{unparseable' ), array( 'module_key'=>'file-01' ) );
+		$broken_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $broken_manifest['ready'] && 'module_manifest_invalid' === $broken_manifest['code'], 'Corrupt manifest JSON was misread as a dependency-free ready module.' );
+
+		$malformed_manifest = json_decode( $original_module_row['manifest_json'], true );
+		$malformed_manifest['required'] = 'not-an-array';
+		$wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $malformed_manifest ) ), array( 'module_key'=>'file-01' ) );
+		$wrong_dependency_type = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $wrong_dependency_type['ready'] && 'module_manifest_invalid' === $wrong_dependency_type['code'], 'Malformed required-dependency payload was treated as ready.' );
+
+		$malformed_manifest = json_decode( $original_module_row['manifest_json'], true );
+		$malformed_manifest['software_version'] = '9.0.0';
+		$wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $malformed_manifest ) ), array( 'module_key'=>'file-01' ) );
+		$mismatched_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $mismatched_manifest['ready'] && 'module_manifest_invalid' === $mismatched_manifest['code'], 'Manifest/version row identity drift was misread as ready.' );
+
+		$wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>'not-semver' ), array( 'module_key'=>'file-01' ) );
+		$invalid_runtime_version = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $invalid_runtime_version['ready'] && 'module_version_invalid' === $invalid_runtime_version['code'], 'Malformed persisted runtime SemVer was misread as ready.' );
+	} finally {
+		$restored_module = $wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>$original_module_row['software_version'] ), array( 'module_key'=>'file-01' ) );
+		$assert( false !== $restored_module, 'Disposable corrupt-registry fixture could not be restored.' );
+	}
+	$healthy_module = SPF_Dependency_Resolver::readiness( 'file-01' );
+	$assert( true === $healthy_module['ready'], 'Exact restored canonical registry did not recover readiness.' );
+}
 
 $bad_manifest = SPF_Registry::get_module( 'file-01' );
 $bad_manifest['canonical_entities'] = [ 'Not Canonical' ];

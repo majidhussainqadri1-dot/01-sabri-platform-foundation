@@ -2,6 +2,10 @@
 
 This repository implements **File 01-B**, the governance/runtime foundation defined by `SSH-F01-PLAN-2026-v1.0`, the Definitive Master Plan v3.0, the approved Future Foundation v2.0 enhancement set, and later Founder-approved harmonization.
 
+## V12 working baseline (planning, not deployment)
+
+`SSH MASTER 12` is the governing requirements baseline for subsequent File 01 development. This source branch remains software 2.0.1 / schema 1.2.0 / contract 2.0.0; adopting V12 does not prove that every V12 requirement is implemented or that staging/live code matches this repository. Changes follow requirement-to-test traceability and separate live-reality verification.
+
 ## Canonical boundary
 
 File 01 owns the 00–26 governance catalog, module/contract/route registries, dependency readiness, safe activation/upgrade conventions, redacted System Check, release evidence, File 01 privacy lifecycle, legacy reconciliation orchestration, owner-scoped repair, feature-flag governance, event/outbox foundation, and guarded purge governance. It does **not** own membership identity (File 00), global shell/navigation (File 20), Home/News/feed (File 21), Security Center assurance (File 24), public visual/profile experience (File 25), or search/discovery/ranking truth (File 26).

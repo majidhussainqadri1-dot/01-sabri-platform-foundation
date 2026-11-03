@@ -92,8 +92,8 @@ final class SPF_System_Check {
 
 		$upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
 		$schema_current = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
-		$checks[] = self::check( 'schema_version_current', SPF_Registry::valid_semver((string)$schema_current) && version_compare($schema_current,SPF_SCHEMA_VERSION,'>='), sanitize_text_field((string)$schema_current), 'Schema upgrade is pending or blocked.', 'fail' );
-		$checks[] = self::check( 'upgrade_state', !in_array($upgrade_state['status']??'',array('authorization_required','backup_evidence_required','invalid_schema_version','rolled_back','rollback_incomplete'),true), sanitize_key($upgrade_state['status']??'not-required'), 'Schema upgrade requires operator/backup evidence, has invalid stored version evidence, or was rolled back.', 'warning' );
+		$checks[] = self::check( 'schema_version_current', SPF_Registry::valid_semver((string)$schema_current) && 0 === SPF_Registry::compare_semver((string)$schema_current,SPF_SCHEMA_VERSION), sanitize_text_field((string)$schema_current), 'Schema upgrade is pending or blocked.', 'fail' );
+		$checks[] = self::check( 'upgrade_state', !in_array($upgrade_state['status']??'',array('authorization_required','backup_evidence_required','invalid_schema_version','downgrade_blocked','schema_integrity_required','rolled_back','rollback_incomplete'),true), sanitize_key($upgrade_state['status']??'not-required'), 'Schema upgrade requires operator/backup evidence, has invalid stored version evidence, or was rolled back.', 'warning' );
 
 		$latest_release = SPF_Governance::list_releases( 1 );
 		$release_status = $latest_release ? $latest_release[0]['status'] : 'not-recorded';

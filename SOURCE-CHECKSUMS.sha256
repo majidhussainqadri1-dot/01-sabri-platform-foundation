@@ -48,7 +48,7 @@ f41b80cbc4b637709f405d7f837acfe8040f10b5c80618c9db1219fdbedfbdc9  ./includes/cla
 73e023764f7aa421b6b0bfb055c7899a6f1d6476e3df0188f5d8556c4ffd3fb6  ./includes/class-spf-dependency-resolver.php
 c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/class-spf-event-bus.php
 60d6e50938ca9a8c81a1dc764f301214517979c4a2e59703fd0eb9fc91847748  ./includes/class-spf-future-foundation.php
-dbe9982446c67479b8a83022b97ae7331fbb1ab474e17cabb35b3aa0830f7d1f  ./includes/class-spf-governance-control-plane.php
+f28239ca5ed78bfd0181527bef4644ded36c99978e7626ca370824afc5944791  ./includes/class-spf-governance-control-plane.php
 3b7832b51fc735ed323e93cb54e3eeeb0d7e45e9021ee70154b630c396daf8ac  ./includes/class-spf-governance.php
 9cdb0a0038ae0eb30f1c2a8b7aa251ed59903cdfef5f5cbb6e4f9b3593dd9b57  ./includes/class-spf-idempotency.php
 7f5301b99420fcf341359d158c0f59f1a748503c8d66855453cb121ddc492aee  ./includes/class-spf-installer.php
@@ -96,7 +96,7 @@ d1830e1e727993792abee70b1a16f282a7828ef689e7b385d64e37524034b1bc  ./tests/tenth-
 32c441898bed0021564a6e7f175fdf52c6828d14a9dd72932fb83d0435efc376  ./tests/thirteenth-ten-round-review-tests.php
 12115d5c5d5ea131c7ceaa8df4652d5e5df43b2b42dd4d19d456b95d96c26232  ./tests/twelfth-ten-round-review-tests.php
 df79f40cfcf00a42b0d7c169c33e29ba863cf5ada385e8edf144dbd6b525e712  ./tests/unit-tests.php
-28d5a44abbcbe127e5a07c8576b1392ac18aaf56fd8bc3835784776fab513acf  ./tests/v12-three-gaps-tests.php
+3d7b3e96452d42eccd6151c0bacd1f37aa6020e58030926f8b8758f563ae3b6c  ./tests/v12-three-gaps-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
 f2221ce7d0c878f644b4f96ee2b8ecc43d8c9abe45e85a348e3841d033ee533e  ./tools/v12-traceability-audit.php
 46d7d6f98025cd3c0c218a2d1a9290d6b78c6158d87ee887e89336943fba749b  ./uninstall.php

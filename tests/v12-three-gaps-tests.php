@@ -52,6 +52,32 @@ $unpinned = $right; unset($unpinned['commit_sha']);
 $rejected = SPF_Governance_Control_Plane::lint_pinned_repository_sources(array($left,$unpinned));
 $assert($rejected['pass']===false,'G-01: unpinned repository source was accepted.');
 
+// V12 00–26 governance means 27 canonical modules, not 26. This exact-count
+// regression must fail on the former 26-descriptor limit, and must reject 28.
+$complete_canonical_descriptors = array();
+for ($file_index = 0; $file_index <= 26; $file_index++) {
+    $module_key = sprintf('file-%02d', $file_index);
+    $canonical_manifest = $manifest($module_key, $file_index === 20 ? 'global-shell' : 'entity-'.$module_key, '/canonical-'.$module_key);
+    if ($file_index === 20) {
+        $canonical_manifest['global_shell_owner'] = true;
+        $canonical_manifest['application_shell_owner'] = true;
+    }
+    $complete_canonical_descriptors[] = $create(
+        'sabri/canonical-fixture-'.sprintf('%02d',$file_index), $module_key, $canonical_manifest
+    );
+}
+$full_catalog = SPF_Governance_Control_Plane::lint_pinned_repository_sources($complete_canonical_descriptors);
+$assert(is_array($full_catalog) && $full_catalog['pass'] === true
+    && $full_catalog['source_count'] === 27 && $full_catalog['source_verified_count'] === 27
+    && empty($full_catalog['findings']),
+    'F01-FUT-003: the valid full canonical 00–26 (27-module) architecture is incorrectly rejected.');
+$extra_catalog = $complete_canonical_descriptors;
+$extra_catalog[] = $create('sabri/extra-fixture','file-26',$manifest('file-26','unexpected-28','/unexpected-28'));
+$too_many = SPF_Governance_Control_Plane::lint_pinned_repository_sources($extra_catalog);
+$assert(is_array($too_many) && $too_many['pass'] === false
+    && in_array('source_count_invalid',array_column($too_many['findings'],'code'),true),
+    'F01-FUT-003: more than 27 canonical sources did not fail closed.');
+
 $root = dirname(__DIR__);
 $validHash = hash_file('sha256',$root.'/TRACEABILITY.md');
 $assert(SPF_Governance_Control_Plane::verify_v12_source_file($root,'TRACEABILITY.md',$validHash) === true,

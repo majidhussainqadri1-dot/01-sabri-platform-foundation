@@ -245,9 +245,9 @@ final class SPF_Governance_Control_Plane {
 		$provenance = array();
 		$seen = array();
 		$verified = 0;
-		if ( empty( $descriptors ) || count( $descriptors ) > 26 ) {
+		if ( empty( $descriptors ) || count( $descriptors ) > 27 ) {
 			return array( 'pass'=>false, 'source_verified_count'=>0,
-				'findings'=>array( self::finding( 'critical', 'source_count_invalid', 'cross-repository', 'One to 26 explicitly pinned manifest descriptors are required.', array() ) ),
+				'findings'=>array( self::finding( 'critical', 'source_count_invalid', 'cross-repository', 'One to 27 explicitly pinned manifest descriptors are required.', array() ) ),
 				'provenance'=>array(), 'source_count'=>count( $descriptors ) );
 		}
 		foreach ( $descriptors as $index => $descriptor ) {

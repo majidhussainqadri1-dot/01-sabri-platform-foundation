@@ -302,10 +302,10 @@
     },
     {
       "id": "F01-FUT-005",
-      "grade": "S",
-      "evidence_file": "tests/future-foundation-tests.php",
-      "test_probe": "",
-      "unclosed_gate": "Direct service catalogue DTO test",
+      "grade": "R",
+      "evidence_file": "qa/wp-future-foundation-smoke.php",
+      "test_probe": "SPF_Platform_Engineering::service_catalog",
+      "unclosed_gate": "Source and disposable WordPress DTO/count/read-only tests exist; real deployed registry, role-scoped caller interface, performance and operational acceptance remain pending",
       "independent_semantic_verified": false,
       "staging_accepted": false,
       "live_verified": false

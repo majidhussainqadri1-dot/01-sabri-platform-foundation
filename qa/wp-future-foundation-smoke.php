@@ -13,6 +13,30 @@ $assert( 18 === (int) $status['feature_count'], 'Future Foundation feature count
 $assert( 18 === (int) ( $status['implementation_present_count'] ?? 0 ) && false === ( $status['coded_completion_verified'] ?? true ), 'Future Foundation entrypoint presence cannot falsely certify per-requirement completion.' );
 $assert( false === $status['ai_autonomous_changes'], 'AI governance advisor must be non-autonomous.' );
 
+// F01-FUT-005: the developer catalog is a bounded read-only DTO projection.
+$catalog_read_only_before = SPF_Runtime::hash( array(
+    get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
+    get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
+) );
+$service_catalog = SPF_Platform_Engineering::service_catalog();
+$assert( is_array( $service_catalog )
+    && is_array( $service_catalog['modules'] ?? null )
+    && is_array( $service_catalog['contracts'] ?? null )
+    && is_array( $service_catalog['routes'] ?? null )
+    && array_key_exists( 'health', $service_catalog ),
+    'Developer service catalog lacks canonical module/contract/route/health DTOs.' );
+$assert( (int) ( $service_catalog['contract_count'] ?? -1 ) === count( (array) $service_catalog['contracts'] )
+    && (int) ( $service_catalog['route_count'] ?? -1 ) === count( (array) $service_catalog['routes'] ),
+    'Developer service catalog counts disagree with actual bounded DTOs.' );
+$assert( count( (array) $service_catalog['modules'] ) === count( SPF_Registry::list_modules( array( 'limit'=>200 ) ) ),
+    'Developer service catalog omitted or fabricated canonical registered module rows.' );
+$assert( str_starts_with( (string) ( $service_catalog['ownership_note'] ?? '' ), 'Catalog only.' ),
+    'Developer service catalog claims another module canonical ownership.' );
+$assert( $catalog_read_only_before === SPF_Runtime::hash( array(
+    get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
+    get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
+) ), 'Read-only developer catalogue changed event schemas or config baselines.' );
+
 $policy = SPF_Governance_Control_Plane::evaluate_policy( 'claim_global_shell', array() );
 $assert( 'deny' === $policy['decision'], 'Policy-as-Code must deny a global shell ownership claim.' );
 $policies_before_denied_write = get_option( SPF_Governance_Control_Plane::POLICY_OPTION, array() );

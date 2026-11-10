@@ -16,10 +16,17 @@ $report['ci_result_verified'] = false;
 $report['staging_verified'] = false;
 $report['live_verified'] = false;
 $report['coded_completion_claim_allowed'] = false;
+$report['missing_source_symbol_ids'] = array();
+$report['missing_test_file_ids'] = array();
+foreach ( $report['rows'] as $requirement_id => $row ) {
+    if ( empty( $row['source_mapped'] ) ) { $report['missing_source_symbol_ids'][] = $requirement_id; }
+    if ( empty( $row['test_files_pinned'] ) ) { $report['missing_test_file_ids'][] = $requirement_id; }
+}
 $ok = $report['total'] === 43 && count($report['rows']) === 43
     && empty($report['missing_requirements'])
     && empty($report['unexpected_requirements'])
-    && $report['source_mapped'] > 0;
+    && $report['source_mapped'] === 43
+    && $report['test_ref_verified_count'] === 43;
 if (!is_dir($root.'/build')) { mkdir($root.'/build', 0700, true); }
 $encoded = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 if (!is_string($encoded) || file_put_contents($root.'/build/v12-source-evidence.json', $encoded."\n") === false) {
@@ -28,4 +35,8 @@ if (!is_string($encoded) || file_put_contents($root.'/build/v12-source-evidence.
 echo "V12 source scanner: {$report['source_mapped']}/43 source-mapped; "
     . "{$report['test_ref_verified_count']}/43 referenced test files pinned; "
     . "43/43 independently CI-attested = NO; staging/live = UNVERIFIED\n";
-if (!$ok) { fwrite(STDERR, "V12 source declaration or inventory scan incomplete.\n"); exit(1); }
+if (!$ok) {
+    fwrite(STDERR, "V12 source/test-file provenance gap: source=" . implode(',', $report['missing_source_symbol_ids'])
+        . "; tests=" . implode(',', $report['missing_test_file_ids']) . "\n");
+    exit(1);
+}

@@ -291,6 +291,71 @@ $bad_manifest['writes'] = [];
 $bad_manifest_result = SPF_Installer::with_internal_seed( static fn() => SPF_Registry::register_manifest( $bad_manifest ) );
 $assert( is_wp_error( $bad_manifest_result ) && 'spf_invalid_manifest_entity' === $bad_manifest_result->get_error_code(), 'Noncanonical manifest entity was silently normalized.' );
 
+// V12.3 F01-FUT-014: fully disposable, File-01-only self-heal apply/rollback drill.
+// This is a synthetic WordPress/MySQL candidate test, not Hostinger recovery evidence.
+$heal_option = 'spf_future_policy_catalog'; // belongs to SPF_Resilience_Lab::OWNED_OPTIONS.
+$heal_original = get_option( $heal_option, null );
+$heal_recoveries_original = get_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, null );
+$heal_sentinel = 'synthetic-malformed-configuration-v123';
+try {
+    update_option( $heal_option, $heal_sentinel, false );
+    $heal_plan = SPF_Resilience_Lab::self_heal_plan();
+    $heal_targets = array_values( array_filter( (array) ( $heal_plan['actions'] ?? array() ),
+        static fn( $a ) => 'quarantine_malformed_owned_option' === ( $a['action'] ?? '' )
+            && $heal_option === ( $a['option'] ?? '' ) ) );
+    $assert( 'file-01-only' === ( $heal_plan['owner_scope'] ?? '' )
+        && true === ( $heal_plan['dry_run'] ?? false ) && count( $heal_targets ) === 1,
+        'V12.3 FUT-014: dry-run failed to isolate malformed File 01-owned state.' );
+    $heal_wrong_confirmation = SPF_Resilience_Lab::apply_self_heal( 'NOT CONFIRMED', (string) ( $heal_plan['plan_hash'] ?? '' ) );
+    $assert( is_wp_error( $heal_wrong_confirmation )
+        && 'spf_self_heal_confirmation_required' === $heal_wrong_confirmation->get_error_code()
+        && $heal_sentinel === get_option( $heal_option ),
+        'V12.3 FUT-014: apply bypassed typed confirmation or mutated the guarded option.' );
+    $heal_wrong_hash = SPF_Resilience_Lab::apply_self_heal( 'APPLY FILE 01 SELF HEAL', str_repeat( '0', 64 ) );
+    $assert( is_wp_error( $heal_wrong_hash )
+        && 'spf_self_heal_plan_changed' === $heal_wrong_hash->get_error_code()
+        && $heal_sentinel === get_option( $heal_option ),
+        'V12.3 FUT-014: stale plan hash was accepted or mutated File 01 state.' );
+    $heal_apply = SPF_Resilience_Lab::apply_self_heal( 'APPLY FILE 01 SELF HEAL', (string) $heal_plan['plan_hash'] );
+    $heal_id = is_array( $heal_apply ) ? (string) ( $heal_apply['recovery_id'] ?? '' ) : '';
+    $assert( is_array( $heal_apply ) && '' !== $heal_id
+        && 'file-01-only' === ( $heal_apply['owner_scope'] ?? '' )
+        && false === ( $heal_apply['companion_data_modified'] ?? true )
+        && array() === get_option( $heal_option ),
+        'V12.3 FUT-014: authorized File 01 self-heal did not apply with a recovery receipt.' );
+    if ( '' !== $heal_id ) {
+        $heal_without_confirmation = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'NOT CONFIRMED' );
+        $assert( is_wp_error( $heal_without_confirmation )
+            && 'spf_self_heal_rollback_confirmation_required' === $heal_without_confirmation->get_error_code()
+            && array() === get_option( $heal_option ),
+            'V12.3 FUT-014: rollback did not enforce independent typed confirmation.' );
+        update_option( $heal_option, array( 'changed_after_heal'=>true ), false );
+        $heal_stale_rollback = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_wp_error( $heal_stale_rollback )
+            && 'spf_self_heal_recovery_stale' === $heal_stale_rollback->get_error_code()
+            && array( 'changed_after_heal'=>true ) === get_option( $heal_option ),
+            'V12.3 FUT-014: stale rollback overwrote newer owner state.' );
+        update_option( $heal_option, array(), false ); // restore exact immediate post-heal state.
+        $heal_rollback = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_array( $heal_rollback ) && true === ( $heal_rollback['rolled_back'] ?? false )
+            && false === ( $heal_rollback['companion_data_modified'] ?? true )
+            && $heal_sentinel === get_option( $heal_option ),
+            'V12.3 FUT-014: valid rollback failed to restore the original File 01 option.' );
+        $heal_idempotent = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_array( $heal_idempotent ) && true === ( $heal_idempotent['idempotent_replay'] ?? false )
+            && $heal_sentinel === get_option( $heal_option ),
+            'V12.3 FUT-014: rollback replay was not idempotent.' );
+    }
+} finally {
+    if ( null === $heal_original ) { delete_option( $heal_option ); }
+    else { update_option( $heal_option, $heal_original, false ); }
+    if ( null === $heal_recoveries_original ) { delete_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION ); }
+    else { update_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, $heal_recoveries_original, false ); }
+}
+$assert( $heal_original === get_option( $heal_option, null )
+    && $heal_recoveries_original === get_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, null ),
+    'V12.3 FUT-014: disposable self-heal fixture did not restore its prior WordPress option state.' );
+
 if ( $failures ) {
 	fwrite( STDERR, "WordPress runtime tests failed:\n- " . implode( "\n- ", $failures ) . "\n" );
 	exit( 1 );

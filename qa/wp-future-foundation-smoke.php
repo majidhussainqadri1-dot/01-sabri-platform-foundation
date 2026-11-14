@@ -133,6 +133,34 @@ foreach ( $invalid_label_cases as $bad_labels ) {
         'V12.3 telemetry: invalid label map modified the metric buffer.' );
 }
 
+
+/* V12.3 F01-NFR-002 / NFR-006: synthetic credential-looking telemetry labels
+ * must be omitted before persistence and export. These are fake test strings. */
+$synthetic_credential_labels = array(
+    'module'=>'file-01',
+    'password'=>'FAKE-PASSWORD-V123',
+    'api_key'=>'FAKE-APIKEY-V123',
+    'credential'=>'FAKE-CREDENTIAL-V123',
+    'authorization'=>'FAKE-AUTHORIZATION-V123',
+    'cookie'=>'FAKE-COOKIE-V123',
+    'session_id'=>'FAKE-SESSION-V123',
+    'bearer'=>'FAKE-BEARER-V123',
+    'privatekey'=>'FAKE-PRIVATEKEY-V123',
+);
+$credential_metric = SPF_Platform_Engineering::record_metric( 'synthetic_sensitive_label_probe', 1, $synthetic_credential_labels );
+$assert( true === $credential_metric, 'V12.3 telemetry: safe numeric metric record unexpectedly rejected.' );
+$credential_log = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
+$credential_last = end( $credential_log );
+$assert( 'file-01' === ( $credential_last['labels']['module'] ?? '' ),
+    'V12.3 telemetry: safe module provenance was not retained.' );
+foreach ( array( 'password','api_key','credential','authorization','cookie','session_id','bearer','privatekey' ) as $sensitive_key ) {
+    $assert( ! isset( $credential_last['labels'][ $sensitive_key ] ),
+        'V12.3 telemetry: a synthetic sensitive key survived in the option buffer.' );
+}
+$credential_serialized = wp_json_encode( $credential_last );
+$assert( is_string( $credential_serialized ) && ! str_contains( $credential_serialized, 'FAKE-' ),
+    'V12.3 telemetry: synthetic credential text survived serialization/export.' );
+
 $snapshot = SPF_Resilience_Lab::capture_snapshot( 'runtime-smoke' );
 $assert( ! is_wp_error( $snapshot ) && ! empty( $snapshot['id'] ), 'Time-travel snapshot capture failed.' );
 $diff = SPF_Resilience_Lab::diff_snapshot( $snapshot['id'] );

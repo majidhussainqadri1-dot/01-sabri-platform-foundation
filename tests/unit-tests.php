@@ -97,6 +97,37 @@ $assert( is_wp_error( $bad_built ), 'Failed package-checksum evidence accepted.'
 $bad_staged = SPF_Governance::validate_evidence_for_state( 'staged', [ 'staging_environment'=>'x' ] );
 $assert( is_wp_error( $bad_staged ), 'Incomplete staging evidence accepted.' );
 
+
+/* V12.3 / M11 / UX-13 / QA-24: prove that release evidence cannot omit
+ * the two gates already declared by RELEASE-EVIDENCE-TEMPLATE.json.
+ * This fixture is not independently verified Hostinger evidence. */
+$v123_staged = [
+    'staging_environment'=>'synthetic-ci', 'fresh_install'=>true,
+    'upgrade_test'=>true, 'cross_file_contracts'=>'synthetic owner fixtures',
+    'backup_restore_test'=>true, 'rollback_rehearsal'=>true,
+    'browser_accessibility_rtl'=>'synthetic only', 'founder_acceptance_pending'=>'yes',
+];
+$no_staging_freeze = SPF_Governance::validate_evidence_for_state( 'staged', $v123_staged );
+$assert( is_wp_error( $no_staging_freeze ) && 'spf_release_evidence_incomplete' === $no_staging_freeze->get_error_code(),
+    'V12.3: staging passed without staging_reality_freeze.' );
+$v123_staged['staging_reality_freeze'] = [ 'environment'=>'synthetic-ci', 'snapshot_sha256'=>str_repeat( 'a', 64 ) ];
+$assert( true === SPF_Governance::validate_evidence_for_state( 'staged', $v123_staged ),
+    'V12.3: valid synthetic staging freeze evidence was rejected.' );
+$v123_deployed = [
+    'production_change_id'=>'synthetic-ci', 'deployed_package_checksum'=>str_repeat( 'b', 64 ),
+    'smoke_test'=>true, 'monitoring_window'=>'synthetic-ci', 'rollback_ready'=>true,
+];
+$no_parity = SPF_Governance::validate_evidence_for_state( 'deployed', $v123_deployed );
+$assert( is_wp_error( $no_parity ) && 'spf_release_evidence_incomplete' === $no_parity->get_error_code(),
+    'V12.3: deployment passed without an explicit parity result.' );
+$v123_deployed['deployment_parity'] = false;
+$bad_parity = SPF_Governance::validate_evidence_for_state( 'deployed', $v123_deployed );
+$assert( is_wp_error( $bad_parity ) && 'spf_release_evidence_failed' === $bad_parity->get_error_code(),
+    'V12.3: deployment accepted false parity.' );
+$v123_deployed['deployment_parity'] = true;
+$assert( true === SPF_Governance::validate_evidence_for_state( 'deployed', $v123_deployed ),
+    'V12.3: an explicit positive synthetic parity result was rejected.' );
+
 if ( $failures ) {
 	fwrite( STDERR, "Unit tests failed:\n- " . implode( "\n- ", $failures ) . "\n" );
 	exit( 1 );

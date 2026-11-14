@@ -21,7 +21,7 @@ foreach($data['requirements'] as $i=>$r){
  if($g!=='S'&&(!is_string($probe)||$probe===''||!str_contains((string)file_get_contents($root.'/'.$path),$probe)))$fail[]='Missing source probe '.$id;
 }
 if(array_sum($counts)!==43)$fail[]='Count mismatch';
-if($counts!==array('B'=>17,'R'=>21,'N'=>0,'S'=>5))$fail[]='V12.3 unexpected fixture-grade distribution';
+if($counts!==array('B'=>17,'R'=>22,'N'=>0,'S'=>4))$fail[]='V12.3 unexpected fixture-grade distribution';
 if(($data['date']??'')!=='2026-11-14')$fail[]='V12.3 evidence date mismatch';
 if($fail){fwrite(STDERR,"V12 requirement evidence FAIL:\n- ".implode("\n- ",$fail)."\n");exit(1);}
 echo "V12.3 evidence register: 43 cases; B=".$counts['B'].", R=".$counts['R'].", N=".$counts['N'].", S=".$counts['S']."; acceptance remains pending\n";

@@ -1,7 +1,7 @@
 {
   "date": "2026-11-14",
   "source": "Sabri Website Master Plan V12.3 / File 01-B (43 canonical F01 IDs, excluding CF01)",
-  "candidate_evaluated": "3630a104327901dec5efbd361ae7a55779f22b29",
+  "candidate_evaluated": "c28115d2e8951fbc6fe3b853ee6d9c24ec997731",
   "interpretation": {
     "B": "behavioral fixture references (not full proof)",
     "R": "disposable WordPress runtime fixture (not Hostinger)",
@@ -12,10 +12,10 @@
   "requirements": [
     {
       "id": "F01-FR-001",
-      "grade": "S",
+      "grade": "R",
       "evidence_file": "qa/wp-runtime-smoke.php",
-      "test_probe": "",
-      "unclosed_gate": "Founder amendment/supersession chain",
+      "test_probe": "SPF_Governance::record_amendment",
+      "unclosed_gate": "Independent real Founder change-control and supersession chain validation; synthetic WordPress/MySQL authorized fixture is not operational acceptance",
       "independent_semantic_verified": false,
       "staging_accepted": false,
       "live_verified": false
@@ -442,5 +442,5 @@
     }
   ],
   "reference_previous_register": "V12-43-SEMANTIC-EVIDENCE-REGISTER-2026-11-10.json",
-  "evidence_qa_run": "Run #931 (43557554670), 4/4 successful; prior FUT-011 Run #930 4/4 successful"
+  "evidence_qa_run": "Run #938 (43591468569) 4/4 successful: FR-001 synthetic governance amendment authorization, persisted supersession, duplicate-ID guard and fixture teardown; FUT-011 #930 and FUT-014 #931."
 }

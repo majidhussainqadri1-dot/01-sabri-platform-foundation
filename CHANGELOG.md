@@ -1,3 +1,9 @@
+## 2026-11-14 V12.3 FR-001 authorized amendment-chain fixture (repository candidate only)
+
+- Added 7 synthetic WordPress/MySQL assertions and fixed WP-CLI test-scope error observed in Run #937. Exact-case Run #938 passed 4/4.
+- Date-scoped V12.3 grade changed from source-only S to disposable runtime R for FR-001, with no independent semantic/Hostinger/Live acceptance and no change to real Founder governance.
+- File 01 runtime source not modified by this evidence-only change.
+
 ## 2026-11-14 V12.3 telemetry label provenance hardening (Draft PR only)
 
 - Negative runtime Run #935 proved silent normalized label collisions and loss of the 13th label: 3 invalid label maps, 6 rejection/no-write assertions.

@@ -44,7 +44,7 @@ a06d80b0c383ffa976bce2d21ed7277be20ae76785fd9a2fc53937482d8bf96a  ./V12-43-REQUI
 18fd1ed74dfdc8c47b9012d74ac8b738d094441126416defbe0242f705c1242c  ./V12-SOURCE-PINNING-SESSION-2026-11-10.md
 7215e13987a2a2646d229a140299374bb8a560266d71c06a8280e811bef4d3da  ./V12-THREE-GAPS-REMEDIATION-2026-11-03.md
 2c2b362db514306a98ee8219267ffdd43b88d99bdcfbf8956f92fe74fc158599  ./V12.3-43-SEMANTIC-EVIDENCE-REGISTER-2026-11-14.json
-06d77acc080cd9633dedf717bd5f9a1c5c660ef8fcec068e1ae5e5a95c60af64  ./V12.3-FILE01-EVIDENCE-2026-11-14.md
+3242c0c9fd314c3d7076788d362657fe38884b257b18db9928329eef7fde6608  ./V12.3-FILE01-EVIDENCE-2026-11-14.md
 b7a7f72a0bdc496ff87bd9a784c34f4206de49a0894917f0928ec172de9d1bda  ./includes/class-spf-admin.php
 158f626750253c4ecb132a97ee8e7bc8470442f604077a57443dc18de075950a  ./includes/class-spf-audit.php
 f41b80cbc4b637709f405d7f837acfe8040f10b5c80618c9db1219fdbedfbdc9  ./includes/class-spf-authorization.php
@@ -74,7 +74,7 @@ f7e158615d5c6419e525f7b4c374fc09a00be782858d622ea5abbc1bbc5a38d8  ./includes/cla
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
 ba8adc9a3b9d6df280a15c91b1566c847ace9a35dabc2359712099ecaf3db957  ./qa/wp-reconciliation-ownership-smoke.php
-4d584dfac0ea3a97a65afa1f8bd339ee8832d0440c722b7185f953ee8b12f835  ./qa/wp-runtime-smoke.php
+a2af08008c6851a2b4dc80e5fa484a5d8ceef23aac4bd59cfb09788c89ca3ea9  ./qa/wp-runtime-smoke.php
 ecf2a2f89dec47c37fe602941381dc3ada2a39f7c84730979fc12c23841b52b0  ./qa/wp-thirteenth-ten-round-smoke.php
 fad7ab9718869f1ade77bf5f039967accd0fa0f31f760ab5a137b550b0b63c5e  ./readme.txt
 52162ec591535d40d2363e064e2c352ef4f3b61080b730f2eae3d24ae5a84f2a  ./sabri-platform-foundation.php

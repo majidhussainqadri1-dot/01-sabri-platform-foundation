@@ -70,6 +70,7 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 }, 10, 2 );
 
 // F01-FR-001: authorized, disposable amendment registration and supersession chain.
+global $wpdb; // WP-CLI eval-file executes in a method-local scope; use WordPress DB explicitly.
 $amendment_test_table = SPF_Installer::table( 'amendments' );
 $amendment_base_id = 'f01-v123-base-' . bin2hex( random_bytes( 6 ) );
 $amendment_next_id = 'f01-v123-next-' . bin2hex( random_bytes( 6 ) );

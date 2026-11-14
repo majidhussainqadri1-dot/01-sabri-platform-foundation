@@ -1,3 +1,9 @@
+## 2026-11-14 V12.3 telemetry finite-value and canonical-identity rejection (Draft PR only)
+
+- Added five negative telemetry cases and five no-buffer-mutation assertions in disposable WordPress/MySQL testing. Pre-fix Run #933 demonstrated nonfinite/invalid metric acceptance and mutated buffers.
+- Restrict File 01 metric names to existing canonical strings <=80 bytes, and reject non-finite numeric values, NaN, Infinity and overflow input before locks/option writes. The fix does not alter WordPress schema, external ownership, or deploy code.
+- Operational acceptance and exact deployed Hostinger parity remain independent No-Go gates.
+
 ## 2026-11-14 V12.3 requirements-baseline reconciliation (Draft PR only)
 
 - Record the Founder-governing V12.3 plan separately from historic V12 and the old File 01 planning ID. This is source/release-policy traceability only; software/schema/contract constants are unchanged.

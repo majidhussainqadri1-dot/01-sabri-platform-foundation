@@ -522,7 +522,15 @@ final class SPF_Platform_Engineering {
 	}
 
 	public static function record_metric( $name, $value, array $labels = array() ) {
-		$name=sanitize_key($name);if(''===$name||!is_numeric($value)){return false;}$safe_labels=array();foreach(array_slice($labels,0,12,true) as $key=>$label){$key=sanitize_key($key);if(''===$key||preg_match('/(email|phone|token|secret|patient|message|content|document|address|name)/i',$key)){continue;}if(is_scalar($label)){$safe_labels[$key]=substr(sanitize_text_field((string)$label),0,80);}}
+		// Reject non-finite numeric data before option, hash, JSON and telemetry hooks.
+		// Identifiers must already be canonical: silently renaming metric keys
+		// changes SLO provenance and can hide invalid monitoring configuration.
+		if ( ! is_string( $name ) || '' === $name || strlen( $name ) > 80
+			|| $name !== sanitize_key( $name ) || ! is_numeric( $value )
+			|| ! is_finite( (float) $value ) ) {
+			return false;
+		}
+		$safe_labels=array();foreach(array_slice($labels,0,12,true) as $key=>$label){$key=sanitize_key($key);if(''===$key||preg_match('/(email|phone|token|secret|patient|message|content|document|address|name)/i',$key)){continue;}if(is_scalar($label)){$safe_labels[$key]=substr(sanitize_text_field((string)$label),0,80);}}
 		$lock_name='future-metrics';$lock=SPF_Runtime::acquire_lock($lock_name,60);if(is_wp_error($lock)){return $lock;}
 		try{$metrics=get_option(self::METRIC_OPTION,array());$metrics=is_array($metrics)?$metrics:array();$metric=array('name'=>$name,'value'=>(float)$value,'labels'=>$safe_labels,'time'=>SPF_Runtime::now_mysql());$metrics[]=$metric;$expected=array_slice($metrics,-500);update_option(self::METRIC_OPTION,$expected,false);if(SPF_Runtime::hash(get_option(self::METRIC_OPTION,array()))!==SPF_Runtime::hash($expected)){return new WP_Error('spf_metric_persistence_failed',__('The telemetry metric buffer could not be verified after persistence.','sabri-platform-foundation'),array('status'=>409));}do_action('spf_telemetry_metric',$metric);return true;}finally{SPF_Runtime::release_lock($lock_name,$lock);}
 	}

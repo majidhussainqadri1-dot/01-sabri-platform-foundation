@@ -47,6 +47,17 @@ $unauthorized = SPF_Governance::record_release( [
 ] );
 $assert( is_wp_error( $unauthorized ) && 'spf_forbidden' === $unauthorized->get_error_code(), 'Sensitive release action did not fail closed without File 00 claim.' );
 
+// F01-FR-001 V12.3: an untrusted caller cannot authorize a Foundation amendment.
+$amendment_probe_id = 'f01-v123-' . bin2hex( random_bytes( 6 ) );
+$unauthorized_amendment = SPF_Governance::record_amendment( [
+    'amendment_id'=>$amendment_probe_id,
+    'effective_at'=>gmdate( 'Y-m-d H:i:s' ),
+    'decision'=>[ 'scope'=>'synthetic-fixture', 'rule'=>'no-automatic-approval' ],
+    'approver_ref'=>'synthetic-founder-fixture',
+] );
+$assert( is_wp_error( $unauthorized_amendment ) && 'spf_forbidden' === $unauthorized_amendment->get_error_code(),
+    'V12.3 FR-001: unauthorized amendment was approved before File 00 claim.' );
+
 add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $request ) {
 	$founder_actions = [ 'approve_release','deploy_release','approve_amendment','purge','production_cutover' ];
 	$release_actions = [ 'record_release','transition_release','run_reconciliation','run_schema_upgrade' ];
@@ -57,6 +68,42 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 		'institutional_role'=>$role,'plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
+
+// F01-FR-001: authorized, disposable amendment registration and supersession chain.
+$amendment_test_table = SPF_Installer::table( 'amendments' );
+$amendment_base_id = 'f01-v123-base-' . bin2hex( random_bytes( 6 ) );
+$amendment_next_id = 'f01-v123-next-' . bin2hex( random_bytes( 6 ) );
+$amendment_payload = [
+    'amendment_id'=>$amendment_base_id,
+    'effective_at'=>gmdate( 'Y-m-d H:i:s' ),
+    'decision'=>[ 'scope'=>'synthetic-ci-only', 'requirement'=>'F01-FR-001' ],
+    'approver_ref'=>'ci-founder-claim-fixture',
+];
+$malformed_amendment = $amendment_payload;
+$malformed_amendment['decision'] = 'invalid-unstructured-decision';
+$malformed_result = SPF_Governance::record_amendment( $malformed_amendment );
+$assert( is_wp_error( $malformed_result ) && 'spf_invalid_amendment' === $malformed_result->get_error_code(),
+    'V12.3 FR-001: unstructured Founder amendment decision was accepted.' );
+$amendment_recorded = SPF_Governance::record_amendment( $amendment_payload );
+$assert( true === $amendment_recorded, 'V12.3 FR-001: authorized bounded amendment was not stored.' );
+$second_amendment = $amendment_payload;
+$second_amendment['amendment_id'] = $amendment_next_id;
+$second_amendment['supersedes'] = $amendment_base_id;
+$second_amendment['decision'] = [ 'scope'=>'synthetic-ci-only', 'supersession'=>'approved-reference-fixture' ];
+$next_recorded = SPF_Governance::record_amendment( $second_amendment );
+$assert( true === $next_recorded, 'V12.3 FR-001: a subsequent, authorized synthetic amendment was rejected.' );
+$stored_amendment = $wpdb->get_row( $wpdb->prepare( "SELECT amendment_id, supersedes, status FROM {$amendment_test_table} WHERE amendment_id=%s", $amendment_next_id ), ARRAY_A );
+$assert( is_array( $stored_amendment ) && $amendment_next_id === ( $stored_amendment['amendment_id'] ?? '' )
+    && $amendment_base_id === ( $stored_amendment['supersedes'] ?? '' )
+    && 'approved' === ( $stored_amendment['status'] ?? '' ),
+    'V12.3 FR-001: persisted synthetic amendment chain lost identity, supersedes reference, or status.' );
+$duplicate_amendment = SPF_Governance::record_amendment( $amendment_payload );
+$assert( is_wp_error( $duplicate_amendment ) && 'spf_amendment_write_failed' === $duplicate_amendment->get_error_code(),
+    'V12.3 FR-001: duplicate amendment ID was permitted.' );
+$wpdb->delete( $amendment_test_table, [ 'amendment_id'=>$amendment_base_id ], [ '%s' ] );
+$wpdb->delete( $amendment_test_table, [ 'amendment_id'=>$amendment_next_id ], [ '%s' ] );
+$remaining_amendment = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$amendment_test_table} WHERE amendment_id IN (%s,%s)", $amendment_base_id, $amendment_next_id ) );
+$assert( 0 === $remaining_amendment, 'V12.3 FR-001: synthetic amendment rows were not cleaned up.' );
 
 $invalid_initial = SPF_Governance::record_release( [
 	'software_version'=>'2.0.1','schema_version'=>'1.2.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),

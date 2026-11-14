@@ -542,7 +542,10 @@ final class SPF_Platform_Engineering {
 				return false;
 			}
 			// Sensitive label keys remain omitted as before, never exported.
-			if ( preg_match( '/(email|phone|token|secret|patient|message|content|document|address|name)/i', $raw_key ) ) {
+			// Match compact aliases (api_key, db_pass, private_key, session_id).
+			// Never allow credential-bearing label VALUES into persistent metrics.
+			$compact_label_key = str_replace( array( '_', '-' ), '', $raw_key );
+			if ( preg_match( '/(?:email|phone|token|secret|password|passwd|pwd|credential|authorization|authheader|apikey|privatekey|encryptionkey|signingkey|accesskey|clientkey|dbpass|connectionstring|bearer|dsn|cookie|session|nonce|otp|patient|message|content|document|address|name|identity|payment|ssn)/i', $compact_label_key ) ) {
 				continue;
 			}
 			if ( is_scalar( $label ) ) {

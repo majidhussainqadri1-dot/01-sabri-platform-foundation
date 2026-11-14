@@ -1,3 +1,8 @@
+## 2026-11-14 V12.3 File 01 telemetry sensitive-label mitigation (Draft source candidate)
+
+- Pre-fix Run #940 proved eight synthetic credential-labelled values retained in disposable WordPress metric options and serialized data. No real patient or credential material used.
+- Expanded compact-key sensitive-label suppression in the existing bounded telemetry path; preserves prior numeric/name and canonical-label guards. Independent File 24/privacy and Live exporter acceptance still required.
+
 ## 2026-11-14 V12.3 FR-001 authorized amendment-chain fixture (repository candidate only)
 
 - Added 7 synthetic WordPress/MySQL assertions and fixed WP-CLI test-scope error observed in Run #937. Exact-case Run #938 passed 4/4.

@@ -1,3 +1,10 @@
+## 2026-11-14 V12.3 requirements-baseline reconciliation (Draft PR only)
+
+- Record the Founder-governing V12.3 plan separately from historic V12 and the old File 01 planning ID. This is source/release-policy traceability only; software/schema/contract constants are unchanged.
+- Add explicit release-handoff regression assertions for V12.3 source identity and M11/UX-13/QA-24/CEN-REL-001 acceptance boundaries.
+- Add the 43-row evidence ledger with independent semantic, companion, staging and live gates still open. Live read-only access was blocked (disconnected Jetpack and WPVibe HTTP 530), so no production root-cause or resolution is asserted.
+- No executable application-code, database schema, WordPress site, or production deployment change.
+
 # Changelog
 
 ## 2.0.1 — Live-first reconciliation safety patch (2026-08-11)

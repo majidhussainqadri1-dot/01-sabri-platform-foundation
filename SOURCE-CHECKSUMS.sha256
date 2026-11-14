@@ -43,7 +43,7 @@ a06d80b0c383ffa976bce2d21ed7277be20ae76785fd9a2fc53937482d8bf96a  ./V12-43-REQUI
 68c219c3e7348b228e0d048059ba151793807ecd55b140a1d2bbb5d123a7ed43  ./V12-43-SEMANTIC-EVIDENCE-REGISTER-2026-11-10.json
 18fd1ed74dfdc8c47b9012d74ac8b738d094441126416defbe0242f705c1242c  ./V12-SOURCE-PINNING-SESSION-2026-11-10.md
 7215e13987a2a2646d229a140299374bb8a560266d71c06a8280e811bef4d3da  ./V12-THREE-GAPS-REMEDIATION-2026-11-03.md
-9a6d7b3715d2f9c7640b14692053d332924ba43575cb325bd08e769e62f48d69  ./V12.3-FILE01-EVIDENCE-2026-11-14.md
+cd7735a81a0cde32316880f3ab22fcade44583994c51f946d420a8db52615fc5  ./V12.3-FILE01-EVIDENCE-2026-11-14.md
 b7a7f72a0bdc496ff87bd9a784c34f4206de49a0894917f0928ec172de9d1bda  ./includes/class-spf-admin.php
 158f626750253c4ecb132a97ee8e7bc8470442f604077a57443dc18de075950a  ./includes/class-spf-audit.php
 f41b80cbc4b637709f405d7f837acfe8040f10b5c80618c9db1219fdbedfbdc9  ./includes/class-spf-authorization.php
@@ -84,7 +84,7 @@ f241acf8ff89b78aa26b426e1046cbf3a73d3cf8257b212466d6e454fa9e0939  ./tests/eleven
 d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-ten-round-review-tests.php
 4ac0015a88d62ec98160cbad91b15a1b9fdb15521f4d40851daa8286fbd8685a  ./tests/fourteenth-ten-round-review-tests.php
 2d4b6010e5743f542fd331abe1ac383b1282fdc8b11a250d11a3ce2ed79e4c78  ./tests/fourth-ten-round-review-tests.php
-6fbff3851e1b443bb4076d87c47088ee1190f96492e55273c1d40b8e0f3b30c3  ./tests/fresh-eighty-round-review-tests.php
+80bb84d5e29941ee5abbd968c336cd36e5583fe1b76ee9dfe6720235d685f069  ./tests/fresh-eighty-round-review-tests.php
 d3ad720311a2d74abe12a406dff452f0a596abdf457387cbbd9686ef202e0456  ./tests/future-foundation-tests.php
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 320d41143019dcfe8d297562cbef7eed63c18c84fd3bdab01c0a9a294c15fab1  ./tests/release-handoff-contract-tests.php

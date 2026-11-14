@@ -3,7 +3,7 @@
 - Record the Founder-governing V12.3 plan separately from historic V12 and the old File 01 planning ID. This is source/release-policy traceability only; software/schema/contract constants are unchanged.
 - Add explicit release-handoff regression assertions for V12.3 source identity and M11/UX-13/QA-24/CEN-REL-001 acceptance boundaries.
 - Add the 43-row evidence ledger with independent semantic, companion, staging and live gates still open. Live read-only access was blocked (disconnected Jetpack and WPVibe HTTP 530), so no production root-cause or resolution is asserted.
-- No executable application-code, database schema, WordPress site, or production deployment change.
+- A separate follow-up, after negative regression assertions, tightens **source-level release evidence**: staged requires a freeze receipt and deployed requires explicit true parity, matching the pre-existing evidence template. Disposable WordPress fixtures were updated. There is no DB migration, production deployment or File 24 independent attestation. No Live defect resolution is claimed.
 
 # Changelog
 

@@ -80,7 +80,7 @@ $verified = SPF_Governance::transition_release( $rid, 'verified', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>2,'expected_record_version'=>2 ] );
 $assert( is_array( $verified ) && 3 === $verified['sequence_no'], 'built→verified failed.' );
 $staged = SPF_Governance::transition_release( $rid, 'staged', [
-	'staging_environment'=>'disposable-ci','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
+	'staging_environment'=>'disposable-ci','staging_reality_freeze'=>'synthetic CI snapshot, not Hostinger','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
 	'rollback_rehearsal'=>true,'browser_accessibility_rtl'=>'CI does not substitute Hostinger acceptance','founder_acceptance_pending'=>'yes',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>3,'expected_record_version'=>3 ] );
 $assert( is_array( $staged ) && 4 === $staged['sequence_no'], 'verified→staged failed.' );

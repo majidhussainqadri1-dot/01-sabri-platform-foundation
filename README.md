@@ -4,7 +4,7 @@ This repository implements **File 01-B**, the governance/runtime foundation defi
 
 ## V12.3 governing requirements (not deployment)
 
-The founder's **Sabri Website Master Plan V12.3**, dated **13 November 2026**, now governs future File 01 work. The earlier SSH MASTER 12 source and SSH-F01-PLAN-2026-v1.0 remain historical/traceability references, not a superseding active policy. The release boundary is **M11 / UX-13 / QA-24 / CEN-REL-001**: exact deployed reality, migration and rollback, independent File 24 assurance, zero known unresolved active-scope defects, explicit approval, and live re-test. The requirements baseline is not software/schema deployment proof.
+The founder's **Sabri Website Master Plan V12.3**, dated **13 November 2026**, now governs future File 01 work. The earlier SSH MASTER 12 source and SSH-F01-PLAN-2026-v1.0 remain historical/traceability references, not a superseding active policy. The release boundary is **M11 / UX-13 / QA-24 / CEN-REL-001**: exact deployed reality, migration and rollback, independent File 24 assurance, zero known unresolved active-scope defects, explicit approval, and live re-test. The requirements baseline is not software/schema deployment proof. The source release validator now rejects a staged transition without `staging_reality_freeze` and a deployed transition without explicitly true `deployment_parity`; these fields are claim checks, not independent File 24 or Live proof.
 
 The auditable repository-only 43-ID evidence and remaining gates are documented in `V12.3-FILE01-EVIDENCE-2026-11-14.md`. No automatic Founder approval, companion authorization, live deployment or database change follows from this metadata update.
 

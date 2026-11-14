@@ -519,13 +519,17 @@ final class SPF_Governance {
 		if ( ! in_array( $state, self::RELEASE_STATES, true ) ) {
 			return new WP_Error( 'spf_release_state_invalid', __( 'Release evidence was supplied for an unknown lifecycle state.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
 		}
+		// Required parity=false is a failed gate (not a mere missing receipt).
+		if ( 'deployed' === $state && array_key_exists( 'deployment_parity', $evidence ) && true !== $evidence['deployment_parity'] ) {
+			return new WP_Error( 'spf_release_evidence_failed', __( 'A deployed release requires an explicitly positive parity result.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
+		}
 		$requirements = array(
 			'planned' => array( 'scope_reference','owner' ),
 			'built' => array( 'source_commit_verified','package_checksum_verified','reproducible_build','source_manifest','sbom' ),
 			'verified' => array( 'ci_run','test_summary','zero_unresolved_critical_high','security_review' ),
-			'staged' => array( 'staging_environment','fresh_install','upgrade_test','cross_file_contracts','backup_restore_test','rollback_rehearsal','browser_accessibility_rtl','founder_acceptance_pending' ),
+			'staged' => array( 'staging_environment','staging_reality_freeze','fresh_install','upgrade_test','cross_file_contracts','backup_restore_test','rollback_rehearsal','browser_accessibility_rtl','founder_acceptance_pending' ),
 			'approved' => array( 'founder_approval_id','approved_scope','staging_evidence_hash','rollback_window' ),
-			'deployed' => array( 'production_change_id','deployed_package_checksum','smoke_test','monitoring_window','rollback_ready' ),
+			'deployed' => array( 'production_change_id','deployed_package_checksum','deployment_parity','smoke_test','monitoring_window','rollback_ready' ),
 			'rolled_back' => array( 'reason','rollback_execution','post_rollback_verification' ),
 			'superseded' => array( 'superseded_by','reason' ),
 		);
@@ -534,7 +538,7 @@ final class SPF_Governance {
 				return new WP_Error( 'spf_release_evidence_incomplete', sprintf( __( 'Release state %1$s requires meaningful evidence field %2$s.', 'sabri-platform-foundation' ), $state, $field ), array( 'status' => 422 ) );
 			}
 		}
-		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
+		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','deployment_parity','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
 			if ( array_key_exists( $boolean_field, $evidence ) && true !== $evidence[ $boolean_field ] ) {
 				return new WP_Error( 'spf_release_evidence_failed', sprintf( __( 'Release evidence field %s must be true.', 'sabri-platform-foundation' ), $boolean_field ), array( 'status' => 422 ) );
 			}

@@ -100,6 +100,23 @@ $metric_log = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
 $last_metric = end( $metric_log );
 $assert( isset( $last_metric['labels']['module'] ) && ! isset( $last_metric['labels']['patient_name'] ), 'Telemetry stored a sensitive label key.' );
 
+
+/* V12.3 F01-NFR-006 / F01-FUT-016: bounded telemetry must never persist
+ * non-finite data or silently canonicalize an invalid metric identity. */
+$metric_before_invalid = SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) );
+foreach ( array(
+    array( 'invalid_inf', INF ),
+    array( 'invalid_nan', NAN ),
+    array( 'invalid_overflow', '1e309' ),
+    array( 'Invalid Metric', 1.0 ),
+    array( str_repeat( 'm', 300 ), 1.0 ),
+) as $invalid_metric ) {
+    $rejected_metric = SPF_Platform_Engineering::record_metric( $invalid_metric[0], $invalid_metric[1] );
+    $assert( false === $rejected_metric, 'V12.3 telemetry: nonfinite/noncanonical/oversized metric was accepted.' );
+    $assert( $metric_before_invalid === SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) ),
+        'V12.3 telemetry: invalid metric mutated the buffer.' );
+}
+
 $snapshot = SPF_Resilience_Lab::capture_snapshot( 'runtime-smoke' );
 $assert( ! is_wp_error( $snapshot ) && ! empty( $snapshot['id'] ), 'Time-travel snapshot capture failed.' );
 $diff = SPF_Resilience_Lab::diff_snapshot( $snapshot['id'] );

@@ -70,7 +70,7 @@ f7e158615d5c6419e525f7b4c374fc09a00be782858d622ea5abbc1bbc5a38d8  ./includes/cla
 75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 0825957278f279c9677ff550beed2254d3588b20868c4bb0108d5a9c9edaeac9  ./qa/wp-fourteenth-ten-round-smoke.php
-8eb9a1b8287fd2bf6d608a513d3ec952f26a82a5fead098822d74ec64834548b  ./qa/wp-future-foundation-smoke.php
+6b1058f48f1abe3e5a7541f308afa54cc79d9ce08a8985956c92d19383176161  ./qa/wp-future-foundation-smoke.php
 7d30f0316f05acfa232444067131e7f45e10281dddbb8eae1df963c055cfe3ee  ./qa/wp-idempotency-worker.php
 f6cd35376e14bdb5a0223fc26b9e131c1f0f1df33df130e85acad5f707fe442f  ./qa/wp-purge-smoke.php
 ba8adc9a3b9d6df280a15c91b1566c847ace9a35dabc2359712099ecaf3db957  ./qa/wp-reconciliation-ownership-smoke.php

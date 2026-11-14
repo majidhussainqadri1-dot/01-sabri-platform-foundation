@@ -117,6 +117,22 @@ foreach ( array(
         'V12.3 telemetry: invalid metric mutated the buffer.' );
 }
 
+
+/* V12.3 F01-NFR-006: reject label-key collisions, silent canonicalization,
+ * and truncation, because these falsify metric provenance. */
+$metric_label_baseline = SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) );
+$invalid_label_cases = array(
+    array( 'module'=>'file-01', 'Module'=>'file-24' ),
+    array( ' module'=>'file-01' ),
+    array_fill_keys( array_map( static fn($n) => 'label'.$n, range( 1, 13 ) ), 'x' ),
+);
+foreach ( $invalid_label_cases as $bad_labels ) {
+    $label_rejection = SPF_Platform_Engineering::record_metric( 'invalid_label_probe', 1.0, $bad_labels );
+    $assert( false === $label_rejection, 'V12.3 telemetry: a colliding, noncanonical or overflow label map was accepted.' );
+    $assert( $metric_label_baseline === SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) ),
+        'V12.3 telemetry: invalid label map modified the metric buffer.' );
+}
+
 $snapshot = SPF_Resilience_Lab::capture_snapshot( 'runtime-smoke' );
 $assert( ! is_wp_error( $snapshot ) && ! empty( $snapshot['id'] ), 'Time-travel snapshot capture failed.' );
 $diff = SPF_Resilience_Lab::diff_snapshot( $snapshot['id'] );

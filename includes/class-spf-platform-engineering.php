@@ -530,7 +530,25 @@ final class SPF_Platform_Engineering {
 			|| ! is_finite( (float) $value ) ) {
 			return false;
 		}
-		$safe_labels=array();foreach(array_slice($labels,0,12,true) as $key=>$label){$key=sanitize_key($key);if(''===$key||preg_match('/(email|phone|token|secret|patient|message|content|document|address|name)/i',$key)){continue;}if(is_scalar($label)){$safe_labels[$key]=substr(sanitize_text_field((string)$label),0,80);}}
+		// Never discard excess labels or normalize identity labels: both
+		// can conceal the original module/owner provenance of a metric.
+		if ( count( $labels ) > 12 ) {
+			return false;
+		}
+		$safe_labels = array();
+		foreach ( $labels as $raw_key => $label ) {
+			if ( ! is_string( $raw_key ) || '' === $raw_key || strlen( $raw_key ) > 80
+				|| $raw_key !== sanitize_key( $raw_key ) ) {
+				return false;
+			}
+			// Sensitive label keys remain omitted as before, never exported.
+			if ( preg_match( '/(email|phone|token|secret|patient|message|content|document|address|name)/i', $raw_key ) ) {
+				continue;
+			}
+			if ( is_scalar( $label ) ) {
+				$safe_labels[ $raw_key ] = substr( sanitize_text_field( (string) $label ), 0, 80 );
+			}
+		}
 		$lock_name='future-metrics';$lock=SPF_Runtime::acquire_lock($lock_name,60);if(is_wp_error($lock)){return $lock;}
 		try{$metrics=get_option(self::METRIC_OPTION,array());$metrics=is_array($metrics)?$metrics:array();$metric=array('name'=>$name,'value'=>(float)$value,'labels'=>$safe_labels,'time'=>SPF_Runtime::now_mysql());$metrics[]=$metric;$expected=array_slice($metrics,-500);update_option(self::METRIC_OPTION,$expected,false);if(SPF_Runtime::hash(get_option(self::METRIC_OPTION,array()))!==SPF_Runtime::hash($expected)){return new WP_Error('spf_metric_persistence_failed',__('The telemetry metric buffer could not be verified after persistence.','sabri-platform-foundation'),array('status'=>409));}do_action('spf_telemetry_metric',$metric);return true;}finally{SPF_Runtime::release_lock($lock_name,$lock);}
 	}

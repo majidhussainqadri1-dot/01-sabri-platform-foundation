@@ -1,3 +1,9 @@
+## 2026-11-14 V12.3 telemetry label provenance hardening (Draft PR only)
+
+- Negative runtime Run #935 proved silent normalized label collisions and loss of the 13th label: 3 invalid label maps, 6 rejection/no-write assertions.
+- Reject colliding/noncanonical/oversized label keys and >12 entries before telemetry option writes. Sensitive label-key omission remains in force; no privilege, DB, or deployment action.
+- Source-only; operational monitoring, real File 24 assurance and Live acceptance remain pending.
+
 ## 2026-11-14 V12.3 telemetry finite-value and canonical-identity rejection (Draft PR only)
 
 - Added five negative telemetry cases and five no-buffer-mutation assertions in disposable WordPress/MySQL testing. Pre-fix Run #933 demonstrated nonfinite/invalid metric acceptance and mutated buffers.

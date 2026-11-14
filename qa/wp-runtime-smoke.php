@@ -91,6 +91,29 @@ $assert( is_array( $approved ) && 'approved' === $approved['status'], 'Founder-g
 $record = SPF_Governance::get_release( $rid );
 $assert( is_array( $record ) && 5 === count( $record['states'] ), 'Release state history is incomplete.' );
 
+// V12.3 F01-FUT-011: disposable WordPress/MySQL progressive-delivery fail-closed scenarios.
+// No external adapter is installed; no production rollout or File 24 approval is implied.
+$rollout_initial_value = get_option( SPF_Platform_Engineering::ROLLOUT_OPTION, null );
+$invalid_rollout = SPF_Platform_Engineering::create_rollout( $rid, [ 'staging','staging','full' ], [ 'availability'=>99.9 ] );
+$assert( is_wp_error( $invalid_rollout ) && 'spf_rollout_invalid' === $invalid_rollout->get_error_code(),
+    'V12.3: duplicate progressive-delivery ring was accepted.' );
+$rollout_plan = SPF_Platform_Engineering::create_rollout( $rid, [ 'staging','canary','full' ], [ 'availability'=>99.9 ] );
+$assert( is_array( $rollout_plan ) && 'planned' === ( $rollout_plan['status'] ?? '' ) && 0 === (int) ( $rollout_plan['index'] ?? -1 ),
+    'V12.3: authorized bounded rollout plan could not be created.' );
+$without_adapter = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>99.95 ] );
+$assert( is_array( $without_adapter ) && 'advance_pending_adapter' === ( $without_adapter['status'] ?? '' )
+    && 'canary' === ( $without_adapter['next_ring'] ?? '' ) && 0 === (int) ( $without_adapter['index'] ?? -1 ),
+    'V12.3: SLO success falsely advanced the rollout with no independent deployment adapter.' );
+$failed_gate = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>90.0 ] );
+$assert( is_array( $failed_gate ) && 'rollback_required' === ( $failed_gate['status'] ?? '' )
+    && 0 === (int) ( $failed_gate['index'] ?? -1 ),
+    'V12.3: a failed SLO did not stop rollout and demand rollback.' );
+$blocked_again = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>99.95 ] );
+$assert( is_wp_error( $blocked_again ) && 'spf_rollout_rollback_pending' === $blocked_again->get_error_code(),
+    'V12.3: rollback-required rollout advanced again without recovery.' );
+if ( null === $rollout_initial_value ) { delete_option( SPF_Platform_Engineering::ROLLOUT_OPTION ); }
+else { update_option( SPF_Platform_Engineering::ROLLOUT_OPTION, $rollout_initial_value, false ); }
+
 $ungated_flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
 $assert( is_wp_error( $ungated_flag ) && 'spf_evidence_unverified' === $ungated_flag->get_error_code(), 'Feature activation did not fail closed without readiness evidence.' );
 add_filter( 'spf_verify_feature_activation_evidence', static function ( $claim, array $context ) {

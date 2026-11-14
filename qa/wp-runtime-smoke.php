@@ -37,7 +37,8 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $future = SPF_Future_Foundation::status();
-$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['implementation_present_count'] ?? 0 ), 'Future Foundation 18 implementation entrypoints are incomplete.' );
+$assert( 0 === (int) ( $future['coded_count'] ?? -1 ) && false === ( $future['coded_completion_verified'] ?? true ), 'An unverified capability catalogue falsely certifies coding completion.' );
 $assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
 
 $unauthorized = SPF_Governance::record_release( [
@@ -45,6 +46,17 @@ $unauthorized = SPF_Governance::record_release( [
 	'status'=>'planned','evidence'=>[ 'scope_reference'=>'runtime-test','owner'=>'file-01' ],
 ] );
 $assert( is_wp_error( $unauthorized ) && 'spf_forbidden' === $unauthorized->get_error_code(), 'Sensitive release action did not fail closed without File 00 claim.' );
+
+// F01-FR-001 V12.3: an untrusted caller cannot authorize a Foundation amendment.
+$amendment_probe_id = 'f01-v123-' . bin2hex( random_bytes( 6 ) );
+$unauthorized_amendment = SPF_Governance::record_amendment( [
+    'amendment_id'=>$amendment_probe_id,
+    'effective_at'=>gmdate( 'Y-m-d H:i:s' ),
+    'decision'=>[ 'scope'=>'synthetic-fixture', 'rule'=>'no-automatic-approval' ],
+    'approver_ref'=>'synthetic-founder-fixture',
+] );
+$assert( is_wp_error( $unauthorized_amendment ) && 'spf_forbidden' === $unauthorized_amendment->get_error_code(),
+    'V12.3 FR-001: unauthorized amendment was approved before File 00 claim.' );
 
 add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $request ) {
 	$founder_actions = [ 'approve_release','deploy_release','approve_amendment','purge','production_cutover' ];
@@ -56,6 +68,43 @@ add_filter( 'spf_file00_authorization_claim', static function ( $claim, array $r
 		'institutional_role'=>$role,'plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 	];
 }, 10, 2 );
+
+// F01-FR-001: authorized, disposable amendment registration and supersession chain.
+global $wpdb; // WP-CLI eval-file executes in a method-local scope; use WordPress DB explicitly.
+$amendment_test_table = SPF_Installer::table( 'amendments' );
+$amendment_base_id = 'f01-v123-base-' . bin2hex( random_bytes( 6 ) );
+$amendment_next_id = 'f01-v123-next-' . bin2hex( random_bytes( 6 ) );
+$amendment_payload = [
+    'amendment_id'=>$amendment_base_id,
+    'effective_at'=>gmdate( 'Y-m-d H:i:s' ),
+    'decision'=>[ 'scope'=>'synthetic-ci-only', 'requirement'=>'F01-FR-001' ],
+    'approver_ref'=>'ci-founder-claim-fixture',
+];
+$malformed_amendment = $amendment_payload;
+$malformed_amendment['decision'] = 'invalid-unstructured-decision';
+$malformed_result = SPF_Governance::record_amendment( $malformed_amendment );
+$assert( is_wp_error( $malformed_result ) && 'spf_invalid_amendment' === $malformed_result->get_error_code(),
+    'V12.3 FR-001: unstructured Founder amendment decision was accepted.' );
+$amendment_recorded = SPF_Governance::record_amendment( $amendment_payload );
+$assert( true === $amendment_recorded, 'V12.3 FR-001: authorized bounded amendment was not stored.' );
+$second_amendment = $amendment_payload;
+$second_amendment['amendment_id'] = $amendment_next_id;
+$second_amendment['supersedes'] = $amendment_base_id;
+$second_amendment['decision'] = [ 'scope'=>'synthetic-ci-only', 'supersession'=>'approved-reference-fixture' ];
+$next_recorded = SPF_Governance::record_amendment( $second_amendment );
+$assert( true === $next_recorded, 'V12.3 FR-001: a subsequent, authorized synthetic amendment was rejected.' );
+$stored_amendment = $wpdb->get_row( $wpdb->prepare( "SELECT amendment_id, supersedes, status FROM {$amendment_test_table} WHERE amendment_id=%s", $amendment_next_id ), ARRAY_A );
+$assert( is_array( $stored_amendment ) && $amendment_next_id === ( $stored_amendment['amendment_id'] ?? '' )
+    && $amendment_base_id === ( $stored_amendment['supersedes'] ?? '' )
+    && 'approved' === ( $stored_amendment['status'] ?? '' ),
+    'V12.3 FR-001: persisted synthetic amendment chain lost identity, supersedes reference, or status.' );
+$duplicate_amendment = SPF_Governance::record_amendment( $amendment_payload );
+$assert( is_wp_error( $duplicate_amendment ) && 'spf_amendment_write_failed' === $duplicate_amendment->get_error_code(),
+    'V12.3 FR-001: duplicate amendment ID was permitted.' );
+$wpdb->delete( $amendment_test_table, [ 'amendment_id'=>$amendment_base_id ], [ '%s' ] );
+$wpdb->delete( $amendment_test_table, [ 'amendment_id'=>$amendment_next_id ], [ '%s' ] );
+$remaining_amendment = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$amendment_test_table} WHERE amendment_id IN (%s,%s)", $amendment_base_id, $amendment_next_id ) );
+$assert( 0 === $remaining_amendment, 'V12.3 FR-001: synthetic amendment rows were not cleaned up.' );
 
 $invalid_initial = SPF_Governance::record_release( [
 	'software_version'=>'2.0.1','schema_version'=>'1.2.0','commit_sha'=>str_repeat('c',40),'package_name'=>'bad.zip','checksum_sha256'=>str_repeat('d',64),
@@ -79,7 +128,7 @@ $verified = SPF_Governance::transition_release( $rid, 'verified', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>2,'expected_record_version'=>2 ] );
 $assert( is_array( $verified ) && 3 === $verified['sequence_no'], 'built→verified failed.' );
 $staged = SPF_Governance::transition_release( $rid, 'staged', [
-	'staging_environment'=>'disposable-ci','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
+	'staging_environment'=>'disposable-ci','staging_reality_freeze'=>'synthetic CI snapshot, not Hostinger','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
 	'rollback_rehearsal'=>true,'browser_accessibility_rtl'=>'CI does not substitute Hostinger acceptance','founder_acceptance_pending'=>'yes',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>3,'expected_record_version'=>3 ] );
 $assert( is_array( $staged ) && 4 === $staged['sequence_no'], 'verified→staged failed.' );
@@ -89,6 +138,29 @@ $approved = SPF_Governance::transition_release( $rid, 'approved', [
 $assert( is_array( $approved ) && 'approved' === $approved['status'], 'Founder-gated staged→approved failed.' );
 $record = SPF_Governance::get_release( $rid );
 $assert( is_array( $record ) && 5 === count( $record['states'] ), 'Release state history is incomplete.' );
+
+// V12.3 F01-FUT-011: disposable WordPress/MySQL progressive-delivery fail-closed scenarios.
+// No external adapter is installed; no production rollout or File 24 approval is implied.
+$rollout_initial_value = get_option( SPF_Platform_Engineering::ROLLOUT_OPTION, null );
+$invalid_rollout = SPF_Platform_Engineering::create_rollout( $rid, [ 'staging','staging','full' ], [ 'availability'=>99.9 ] );
+$assert( is_wp_error( $invalid_rollout ) && 'spf_rollout_invalid' === $invalid_rollout->get_error_code(),
+    'V12.3: duplicate progressive-delivery ring was accepted.' );
+$rollout_plan = SPF_Platform_Engineering::create_rollout( $rid, [ 'staging','canary','full' ], [ 'availability'=>99.9 ] );
+$assert( is_array( $rollout_plan ) && 'planned' === ( $rollout_plan['status'] ?? '' ) && 0 === (int) ( $rollout_plan['index'] ?? -1 ),
+    'V12.3: authorized bounded rollout plan could not be created.' );
+$without_adapter = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>99.95 ] );
+$assert( is_array( $without_adapter ) && 'advance_pending_adapter' === ( $without_adapter['status'] ?? '' )
+    && 'canary' === ( $without_adapter['next_ring'] ?? '' ) && 0 === (int) ( $without_adapter['index'] ?? -1 ),
+    'V12.3: SLO success falsely advanced the rollout with no independent deployment adapter.' );
+$failed_gate = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>90.0 ] );
+$assert( is_array( $failed_gate ) && 'rollback_required' === ( $failed_gate['status'] ?? '' )
+    && 0 === (int) ( $failed_gate['index'] ?? -1 ),
+    'V12.3: a failed SLO did not stop rollout and demand rollback.' );
+$blocked_again = SPF_Platform_Engineering::advance_rollout( $rid, [ 'availability'=>99.95 ] );
+$assert( is_wp_error( $blocked_again ) && 'spf_rollout_rollback_pending' === $blocked_again->get_error_code(),
+    'V12.3: rollback-required rollout advanced again without recovery.' );
+if ( null === $rollout_initial_value ) { delete_option( SPF_Platform_Engineering::ROLLOUT_OPTION ); }
+else { update_option( SPF_Platform_Engineering::ROLLOUT_OPTION, $rollout_initial_value, false ); }
 
 $ungated_flag = SPF_Governance::set_flag( [ 'owner_module'=>'file-01','flag_key'=>'runtime_probe','environment'=>'all','enabled'=>true,'reason'=>'runtime test' ], [ 'purpose'=>'feature_flag' ] );
 $assert( is_wp_error( $ungated_flag ) && 'spf_evidence_unverified' === $ungated_flag->get_error_code(), 'Feature activation did not fail closed without readiness evidence.' );
@@ -193,11 +265,144 @@ $purge_plan = SPF_Purge::plan();
 $bad_purge = SPF_Purge::apply( 'PURGE FILE 01 GOVERNANCE DATA', [ 'backup_id'=>'submitted' ], SPF_Purge::plan_hash( $purge_plan ) );
 $assert( is_wp_error( $bad_purge ) && 'spf_purge_backup_evidence_binding_invalid' === $bad_purge->get_error_code(), 'Wrong-plan purge backup evidence was accepted.' );
 
+ // V12 migration truth: a wp_options version string cannot override actual schema.
+$original_schema_option = get_option( SPF_Installer::SCHEMA_OPTION );
+$original_upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
+$migrations_table = SPF_Installer::table( 'migrations' );
+$migration_count_before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" );
+update_option( SPF_Installer::SCHEMA_OPTION, '9.0.0', false );
+$downgrade_result = SPF_Installer::maybe_upgrade();
+$assert( is_wp_error( $downgrade_result ) && 'spf_schema_downgrade_blocked' === $downgrade_result->get_error_code(), 'Newer stored schema was incorrectly accepted by an older File 01 runtime.' );
+$assert( 'downgrade_blocked' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Future-schema downgrade blocker was not reported.' );
+$assert( '9.0.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Downgrade probe silently mutated the schema-version option.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+
+// Operate only in disposable WordPress CI: remove an owned nonunique index,
+// prove "already current" is rejected, and restore the exact index immediately.
+$flags_table = SPF_Installer::table( 'flags' );
+$index_dropped = $wpdb->query( "ALTER TABLE {$flags_table} DROP INDEX expires_at" );
+if ( false === $index_dropped ) {
+	$assert( false, 'CI could not establish the intentionally missing-index fixture.' );
+} else {
+	try {
+		$stale_result = SPF_Installer::maybe_upgrade();
+		$assert( is_wp_error( $stale_result ) && 'spf_schema_integrity_required' === $stale_result->get_error_code(), 'Matching schema-version option bypassed missing-index verification.' );
+		$assert( 'schema_integrity_required' === ( get_option( 'spf_upgrade_state' )['status'] ?? '' ), 'Incomplete same-version schema was not recorded as a blocker.' );
+		$assert( $original_schema_option === get_option( SPF_Installer::SCHEMA_OPTION ), 'Stale schema probe changed the version option.' );
+	} finally {
+		$index_restored = $wpdb->query( "ALTER TABLE {$flags_table} ADD INDEX expires_at (expires_at)" );
+		$assert( false !== $index_restored && true === SPF_Installer::verify_schema(), 'Disposable missing-index fixture could not be completely restored.' );
+	}
+}
+$assert( $migration_count_before === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$migrations_table}" ), 'Schema-parity dry runs created a migration record.' );
+update_option( SPF_Installer::SCHEMA_OPTION, $original_schema_option, false );
+update_option( 'spf_upgrade_state', $original_upgrade_state, false );
+$assert( true === SPF_Installer::maybe_upgrade(), 'Restored current schema was not accepted after truth checks.' );
+
+// V12 fail-closed regression: on disposable WordPress/MySQL CI only.
+// Every temporary registry corruption is restored before continuing.
+$modules_table = SPF_Installer::table( 'modules' );
+$original_module_row = $wpdb->get_row( $wpdb->prepare( "SELECT manifest_json,software_version FROM {$modules_table} WHERE module_key=%s", 'file-01' ), ARRAY_A );
+$assert( is_array( $original_module_row ), 'Cannot capture a canonical module snapshot before integrity testing.' );
+if ( is_array( $original_module_row ) ) {
+	try {
+		$wpdb->update( $modules_table, array( 'manifest_json'=>'{unparseable' ), array( 'module_key'=>'file-01' ) );
+		$broken_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $broken_manifest['ready'] && 'module_manifest_invalid' === $broken_manifest['code'], 'Corrupt manifest JSON was misread as a dependency-free ready module.' );
+
+		$malformed_manifest = json_decode( $original_module_row['manifest_json'], true );
+		$malformed_manifest['required'] = 'not-an-array';
+		$wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $malformed_manifest ) ), array( 'module_key'=>'file-01' ) );
+		$wrong_dependency_type = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $wrong_dependency_type['ready'] && 'module_manifest_invalid' === $wrong_dependency_type['code'], 'Malformed required-dependency payload was treated as ready.' );
+
+		$malformed_manifest = json_decode( $original_module_row['manifest_json'], true );
+		$malformed_manifest['software_version'] = '9.0.0';
+		$wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $malformed_manifest ) ), array( 'module_key'=>'file-01' ) );
+		$mismatched_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $mismatched_manifest['ready'] && 'module_manifest_invalid' === $mismatched_manifest['code'], 'Manifest/version row identity drift was misread as ready.' );
+
+		$wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>'not-semver' ), array( 'module_key'=>'file-01' ) );
+		$invalid_runtime_version = SPF_Dependency_Resolver::readiness( 'file-01' );
+		$assert( false === $invalid_runtime_version['ready'] && 'module_version_invalid' === $invalid_runtime_version['code'], 'Malformed persisted runtime SemVer was misread as ready.' );
+	} finally {
+		$restored_module = $wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>$original_module_row['software_version'] ), array( 'module_key'=>'file-01' ) );
+		$assert( false !== $restored_module, 'Disposable corrupt-registry fixture could not be restored.' );
+	}
+	$healthy_module = SPF_Dependency_Resolver::readiness( 'file-01' );
+	$assert( true === $healthy_module['ready'], 'Exact restored canonical registry did not recover readiness.' );
+}
+
 $bad_manifest = SPF_Registry::get_module( 'file-01' );
 $bad_manifest['canonical_entities'] = [ 'Not Canonical' ];
 $bad_manifest['writes'] = [];
 $bad_manifest_result = SPF_Installer::with_internal_seed( static fn() => SPF_Registry::register_manifest( $bad_manifest ) );
 $assert( is_wp_error( $bad_manifest_result ) && 'spf_invalid_manifest_entity' === $bad_manifest_result->get_error_code(), 'Noncanonical manifest entity was silently normalized.' );
+
+// V12.3 F01-FUT-014: fully disposable, File-01-only self-heal apply/rollback drill.
+// This is a synthetic WordPress/MySQL candidate test, not Hostinger recovery evidence.
+$heal_option = 'spf_future_policy_catalog'; // belongs to SPF_Resilience_Lab::OWNED_OPTIONS.
+$heal_original = get_option( $heal_option, null );
+$heal_recoveries_original = get_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, null );
+$heal_sentinel = 'synthetic-malformed-configuration-v123';
+try {
+    update_option( $heal_option, $heal_sentinel, false );
+    $heal_plan = SPF_Resilience_Lab::self_heal_plan();
+    $heal_targets = array_values( array_filter( (array) ( $heal_plan['actions'] ?? array() ),
+        static fn( $a ) => 'quarantine_malformed_owned_option' === ( $a['action'] ?? '' )
+            && $heal_option === ( $a['option'] ?? '' ) ) );
+    $assert( 'file-01-only' === ( $heal_plan['owner_scope'] ?? '' )
+        && true === ( $heal_plan['dry_run'] ?? false ) && count( $heal_targets ) === 1,
+        'V12.3 FUT-014: dry-run failed to isolate malformed File 01-owned state.' );
+    $heal_wrong_confirmation = SPF_Resilience_Lab::apply_self_heal( 'NOT CONFIRMED', (string) ( $heal_plan['plan_hash'] ?? '' ) );
+    $assert( is_wp_error( $heal_wrong_confirmation )
+        && 'spf_self_heal_confirmation_required' === $heal_wrong_confirmation->get_error_code()
+        && $heal_sentinel === get_option( $heal_option ),
+        'V12.3 FUT-014: apply bypassed typed confirmation or mutated the guarded option.' );
+    $heal_wrong_hash = SPF_Resilience_Lab::apply_self_heal( 'APPLY FILE 01 SELF HEAL', str_repeat( '0', 64 ) );
+    $assert( is_wp_error( $heal_wrong_hash )
+        && 'spf_self_heal_plan_changed' === $heal_wrong_hash->get_error_code()
+        && $heal_sentinel === get_option( $heal_option ),
+        'V12.3 FUT-014: stale plan hash was accepted or mutated File 01 state.' );
+    $heal_apply = SPF_Resilience_Lab::apply_self_heal( 'APPLY FILE 01 SELF HEAL', (string) $heal_plan['plan_hash'] );
+    $heal_id = is_array( $heal_apply ) ? (string) ( $heal_apply['recovery_id'] ?? '' ) : '';
+    $assert( is_array( $heal_apply ) && '' !== $heal_id
+        && 'file-01-only' === ( $heal_apply['owner_scope'] ?? '' )
+        && false === ( $heal_apply['companion_data_modified'] ?? true )
+        && array() === get_option( $heal_option ),
+        'V12.3 FUT-014: authorized File 01 self-heal did not apply with a recovery receipt.' );
+    if ( '' !== $heal_id ) {
+        $heal_without_confirmation = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'NOT CONFIRMED' );
+        $assert( is_wp_error( $heal_without_confirmation )
+            && 'spf_self_heal_rollback_confirmation_required' === $heal_without_confirmation->get_error_code()
+            && array() === get_option( $heal_option ),
+            'V12.3 FUT-014: rollback did not enforce independent typed confirmation.' );
+        update_option( $heal_option, array( 'changed_after_heal'=>true ), false );
+        $heal_stale_rollback = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_wp_error( $heal_stale_rollback )
+            && 'spf_self_heal_recovery_stale' === $heal_stale_rollback->get_error_code()
+            && array( 'changed_after_heal'=>true ) === get_option( $heal_option ),
+            'V12.3 FUT-014: stale rollback overwrote newer owner state.' );
+        update_option( $heal_option, array(), false ); // restore exact immediate post-heal state.
+        $heal_rollback = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_array( $heal_rollback ) && true === ( $heal_rollback['rolled_back'] ?? false )
+            && false === ( $heal_rollback['companion_data_modified'] ?? true )
+            && $heal_sentinel === get_option( $heal_option ),
+            'V12.3 FUT-014: valid rollback failed to restore the original File 01 option.' );
+        $heal_idempotent = SPF_Resilience_Lab::rollback_self_heal( $heal_id, 'ROLL BACK FILE 01 SELF HEAL' );
+        $assert( is_array( $heal_idempotent ) && true === ( $heal_idempotent['idempotent_replay'] ?? false )
+            && $heal_sentinel === get_option( $heal_option ),
+            'V12.3 FUT-014: rollback replay was not idempotent.' );
+    }
+} finally {
+    if ( null === $heal_original ) { delete_option( $heal_option ); }
+    else { update_option( $heal_option, $heal_original, false ); }
+    if ( null === $heal_recoveries_original ) { delete_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION ); }
+    else { update_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, $heal_recoveries_original, false ); }
+}
+$assert( $heal_original === get_option( $heal_option, null )
+    && $heal_recoveries_original === get_option( SPF_Resilience_Lab::SELF_HEAL_RECOVERY_OPTION, null ),
+    'V12.3 FUT-014: disposable self-heal fixture did not restore its prior WordPress option state.' );
 
 if ( $failures ) {
 	fwrite( STDERR, "WordPress runtime tests failed:\n- " . implode( "\n- ", $failures ) . "\n" );

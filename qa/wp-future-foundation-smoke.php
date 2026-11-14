@@ -10,8 +10,32 @@ $assert = static function ( $condition, $message ) use ( &$failures, &$assertion
 
 $status = SPF_Future_Foundation::status();
 $assert( 18 === (int) $status['feature_count'], 'Future Foundation feature count must be 18.' );
-$assert( 18 === (int) $status['coded_count'], 'All Future Foundation features must be coded.' );
+$assert( 18 === (int) ( $status['implementation_present_count'] ?? 0 ) && false === ( $status['coded_completion_verified'] ?? true ), 'Future Foundation entrypoint presence cannot falsely certify per-requirement completion.' );
 $assert( false === $status['ai_autonomous_changes'], 'AI governance advisor must be non-autonomous.' );
+
+// F01-FUT-005: the developer catalog is a bounded read-only DTO projection.
+$catalog_read_only_before = SPF_Runtime::hash( array(
+    get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
+    get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
+) );
+$service_catalog = SPF_Platform_Engineering::service_catalog();
+$assert( is_array( $service_catalog )
+    && is_array( $service_catalog['modules'] ?? null )
+    && is_array( $service_catalog['contracts'] ?? null )
+    && is_array( $service_catalog['routes'] ?? null )
+    && array_key_exists( 'health', $service_catalog ),
+    'Developer service catalog lacks canonical module/contract/route/health DTOs.' );
+$assert( (int) ( $service_catalog['contract_count'] ?? -1 ) === count( (array) $service_catalog['contracts'] )
+    && (int) ( $service_catalog['route_count'] ?? -1 ) === count( (array) $service_catalog['routes'] ),
+    'Developer service catalog counts disagree with actual bounded DTOs.' );
+$assert( count( (array) $service_catalog['modules'] ) === count( SPF_Registry::list_modules( array( 'limit'=>200 ) ) ),
+    'Developer service catalog omitted or fabricated canonical registered module rows.' );
+$assert( str_starts_with( (string) ( $service_catalog['ownership_note'] ?? '' ), 'Catalog only.' ),
+    'Developer service catalog claims another module canonical ownership.' );
+$assert( $catalog_read_only_before === SPF_Runtime::hash( array(
+    get_option( SPF_Platform_Engineering::EVENT_SCHEMA_OPTION, array() ),
+    get_option( SPF_Platform_Engineering::CONFIG_BASELINE_OPTION, array() ),
+) ), 'Read-only developer catalogue changed event schemas or config baselines.' );
 
 $policy = SPF_Governance_Control_Plane::evaluate_policy( 'claim_global_shell', array() );
 $assert( 'deny' === $policy['decision'], 'Policy-as-Code must deny a global shell ownership claim.' );
@@ -75,6 +99,67 @@ SPF_Platform_Engineering::record_metric( 'runtime_privacy_label_smoke', 1, array
 $metric_log = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
 $last_metric = end( $metric_log );
 $assert( isset( $last_metric['labels']['module'] ) && ! isset( $last_metric['labels']['patient_name'] ), 'Telemetry stored a sensitive label key.' );
+
+
+/* V12.3 F01-NFR-006 / F01-FUT-016: bounded telemetry must never persist
+ * non-finite data or silently canonicalize an invalid metric identity. */
+$metric_before_invalid = SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) );
+foreach ( array(
+    array( 'invalid_inf', INF ),
+    array( 'invalid_nan', NAN ),
+    array( 'invalid_overflow', '1e309' ),
+    array( 'Invalid Metric', 1.0 ),
+    array( str_repeat( 'm', 300 ), 1.0 ),
+) as $invalid_metric ) {
+    $rejected_metric = SPF_Platform_Engineering::record_metric( $invalid_metric[0], $invalid_metric[1] );
+    $assert( false === $rejected_metric, 'V12.3 telemetry: nonfinite/noncanonical/oversized metric was accepted.' );
+    $assert( $metric_before_invalid === SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) ),
+        'V12.3 telemetry: invalid metric mutated the buffer.' );
+}
+
+
+/* V12.3 F01-NFR-006: reject label-key collisions, silent canonicalization,
+ * and truncation, because these falsify metric provenance. */
+$metric_label_baseline = SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) );
+$invalid_label_cases = array(
+    array( 'module'=>'file-01', 'Module'=>'file-24' ),
+    array( ' module'=>'file-01' ),
+    array_fill_keys( array_map( static fn($n) => 'label'.$n, range( 1, 13 ) ), 'x' ),
+);
+foreach ( $invalid_label_cases as $bad_labels ) {
+    $label_rejection = SPF_Platform_Engineering::record_metric( 'invalid_label_probe', 1.0, $bad_labels );
+    $assert( false === $label_rejection, 'V12.3 telemetry: a colliding, noncanonical or overflow label map was accepted.' );
+    $assert( $metric_label_baseline === SPF_Runtime::hash( get_option( SPF_Platform_Engineering::METRIC_OPTION, array() ) ),
+        'V12.3 telemetry: invalid label map modified the metric buffer.' );
+}
+
+
+/* V12.3 F01-NFR-002 / NFR-006: synthetic credential-looking telemetry labels
+ * must be omitted before persistence and export. These are fake test strings. */
+$synthetic_credential_labels = array(
+    'module'=>'file-01',
+    'password'=>'FAKE-PASSWORD-V123',
+    'api_key'=>'FAKE-APIKEY-V123',
+    'credential'=>'FAKE-CREDENTIAL-V123',
+    'authorization'=>'FAKE-AUTHORIZATION-V123',
+    'cookie'=>'FAKE-COOKIE-V123',
+    'session_id'=>'FAKE-SESSION-V123',
+    'bearer'=>'FAKE-BEARER-V123',
+    'privatekey'=>'FAKE-PRIVATEKEY-V123',
+);
+$credential_metric = SPF_Platform_Engineering::record_metric( 'synthetic_sensitive_label_probe', 1, $synthetic_credential_labels );
+$assert( true === $credential_metric, 'V12.3 telemetry: safe numeric metric record unexpectedly rejected.' );
+$credential_log = get_option( SPF_Platform_Engineering::METRIC_OPTION, array() );
+$credential_last = end( $credential_log );
+$assert( 'file-01' === ( $credential_last['labels']['module'] ?? '' ),
+    'V12.3 telemetry: safe module provenance was not retained.' );
+foreach ( array( 'password','api_key','credential','authorization','cookie','session_id','bearer','privatekey' ) as $sensitive_key ) {
+    $assert( ! isset( $credential_last['labels'][ $sensitive_key ] ),
+        'V12.3 telemetry: a synthetic sensitive key survived in the option buffer.' );
+}
+$credential_serialized = wp_json_encode( $credential_last );
+$assert( is_string( $credential_serialized ) && ! str_contains( $credential_serialized, 'FAKE-' ),
+    'V12.3 telemetry: synthetic credential text survived serialization/export.' );
 
 $snapshot = SPF_Resilience_Lab::capture_snapshot( 'runtime-smoke' );
 $assert( ! is_wp_error( $snapshot ) && ! empty( $snapshot['id'] ), 'Time-travel snapshot capture failed.' );

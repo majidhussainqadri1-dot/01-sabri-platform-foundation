@@ -230,6 +230,113 @@ final class SPF_Governance_Control_Plane {
 		return self::lint_architecture( self::runtime_inventory() );
 	}
 
+	/**
+	 * Read-only and pinned cross-repository architecture source collector.
+	 * Inputs are externally selected immutable commits plus independently known
+	 * SHA-256 of each canonical JSON architecture manifest. No branch refs,
+	 * redirect follows, arbitrary hosts, writes, or silent unverified sources.
+	 * This does not certify companion repositories that are not supplied.
+	 */
+	public static function lint_pinned_repository_sources( array $descriptors ) {
+		$findings = array();
+		$modules = array();
+		$routes = array();
+		$shell_owners = array();
+		$provenance = array();
+		$seen = array();
+		$verified = 0;
+		if ( empty( $descriptors ) || count( $descriptors ) > 27 ) {
+			return array( 'pass'=>false, 'source_verified_count'=>0,
+				'findings'=>array( self::finding( 'critical', 'source_count_invalid', 'cross-repository', 'One to 27 explicitly pinned manifest descriptors are required.', array() ) ),
+				'provenance'=>array(), 'source_count'=>count( $descriptors ) );
+		}
+		foreach ( $descriptors as $index => $descriptor ) {
+			$descriptor = is_array( $descriptor ) ? $descriptor : array();
+			$repo = $descriptor['repository'] ?? null;
+			$commit = $descriptor['commit_sha'] ?? null;
+			$path = $descriptor['path'] ?? null;
+			$digest = $descriptor['expected_sha256'] ?? null;
+			$owner = $descriptor['module_key'] ?? null;
+			$key = is_string( $repo ) && is_string( $path ) ? $repo . '/' . $path : 'source-' . (int) $index;
+			if ( ! is_string( $repo ) || ! preg_match( '/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/D', $repo )
+				|| str_contains( $repo, '..' ) || ! is_string( $commit ) || ! preg_match( '/^[a-f0-9]{40}$/D', $commit )
+				|| ! is_string( $path ) || ! preg_match( '/^(?:[A-Za-z0-9_-]+\\/){0,3}(?:architecture-manifest|manifest)\\.json$/D', $path )
+				|| ! is_string( $digest ) || ! preg_match( '/^[a-f0-9]{64}$/D', $digest )
+				|| ! is_string( $owner ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/D', $owner )
+				|| isset( $seen[$repo] ) ) {
+				$findings[] = self::finding( 'critical', 'source_pin_invalid', $key, 'A unique canonical repository, exact commit, bounded path, owner and independent SHA-256 are mandatory.', array() );
+				continue;
+			}
+			$seen[$repo] = true;
+			if ( ! function_exists( 'wp_remote_get' ) ) {
+				$findings[] = self::finding( 'critical', 'source_fetch_unavailable', $key, 'WordPress HTTP read-only transport is unavailable.', array() );
+				continue;
+			}
+			$url = 'https://api.github.com/repos/' . $repo . '/contents/' . $path . '?ref=' . $commit;
+			$response = wp_remote_get( $url, array(
+				'headers'=>array( 'Accept'=>'application/vnd.github.raw+json', 'User-Agent'=>'Sabri-File01-ReadOnly-Audit' ),
+				'timeout'=>10, 'redirection'=>0, 'sslverify'=>true, 'reject_unsafe_urls'=>true,
+				'limit_response_size'=>262144,
+			) );
+			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+				$findings[] = self::finding( 'critical', 'source_fetch_unverified', $key, 'Pinned manifest HTTP retrieval failed.', array() );
+				continue;
+			}
+			$body = wp_remote_retrieve_body( $response );
+			if ( ! is_string( $body ) || strlen( $body ) > 262144 ) {
+				$findings[] = self::finding( 'critical', 'source_response_oversized', $key, 'Remote response is outside the bounded envelope.', array() );
+				continue;
+			}
+			// GitHub's raw media type gives immutable manifest bytes directly,
+			// avoiding any application-level content decoding or executable data.
+			$raw = $body;
+			if ( strlen( $raw ) > 131072 || ! hash_equals( $digest, hash( 'sha256', $raw ) ) ) {
+				$findings[] = self::finding( 'critical', 'source_digest_mismatch', $key, 'Manifest bytes did not match the independently supplied pinned SHA-256.', array() );
+				continue;
+			}
+			$manifest = json_decode( $raw, true );
+			if ( ! is_array( $manifest ) || ( $manifest['module_key'] ?? null ) !== $owner
+				|| ! is_array( $manifest['canonical_entities'] ?? null )
+				|| ! is_array( $manifest['writes'] ?? null ) || ! is_array( $manifest['routes'] ?? null )
+				|| count( $manifest['canonical_entities'] ) > 128 || count( $manifest['writes'] ) > 128
+				|| count( $manifest['routes'] ) > 128 ) {
+				$findings[] = self::finding( 'critical', 'source_manifest_invalid', $key, 'Pinned content lacks complete, bounded, matching architecture declarations.', array() );
+				continue;
+			}
+			$modules[] = array( 'module_key'=>$owner, 'manifest'=>array(
+				'canonical_entities'=>$manifest['canonical_entities'],
+				'writes'=>$manifest['writes'],
+				'global_shell_owner'=>true === ( $manifest['global_shell_owner'] ?? false ),
+				'application_shell_owner'=>true === ( $manifest['application_shell_owner'] ?? false ),
+			) );
+			foreach ( $manifest['routes'] as $route ) {
+				if ( ! is_array( $route ) || ! is_string( $route['route_path'] ?? null )
+					|| ! is_string( $route['owner_module'] ?? null ) || $route['owner_module'] !== $owner ) {
+					$findings[] = self::finding( 'high', 'source_route_invalid', $key, 'A supplied route does not declare the exact source owner.', array() );
+					continue;
+				}
+				$routes[] = array( 'route_path'=>$route['route_path'], 'owner_module'=>$owner );
+			}
+			if ( true === ( $manifest['global_shell_owner'] ?? false ) || true === ( $manifest['application_shell_owner'] ?? false )
+				|| in_array( 'global-shell', $manifest['canonical_entities'], true )
+				|| in_array( 'application-shell', $manifest['canonical_entities'], true )
+				|| in_array( 'global-navigation', $manifest['canonical_entities'], true ) ) {
+				$shell_owners[] = $owner;
+			}
+			$verified++;
+			$provenance[] = array( 'repository'=>$repo, 'commit_sha'=>$commit, 'path'=>$path,
+				'content_sha256'=>$digest, 'module_key'=>$owner, 'verified_by'=>'exact_commit_and_sha256' );
+		}
+		$lint = self::lint_architecture( array( 'modules'=>$modules, 'routes'=>$routes,
+			'global_shell_owners'=>array_values( array_unique( $shell_owners ) ) ) );
+		$findings = array_merge( $findings, $lint['findings'] );
+		return array( 'pass'=>empty( $findings ) && $verified === count( $descriptors ),
+			'source_verified_count'=>$verified, 'source_count'=>count( $descriptors ),
+			'findings'=>$findings, 'finding_count'=>count( $findings ),
+			'provenance'=>$provenance, 'inventory_hash'=>$lint['inventory_hash'],
+			'read_only'=>true, 'companion_source_coverage_complete'=>false );
+	}
+
 	public static function lint_architecture( array $inventory ) {
 		$findings = array();
 		$owner_claims = array();
@@ -265,8 +372,9 @@ final class SPF_Governance_Control_Plane {
 		}
 		foreach ( $route_claims as $path => $owners ) {
 			$owners = array_values( array_unique( array_filter( $owners ) ) );
-			if ( count( $owners ) > 1 ) {
-				$findings[] = self::finding( 'high', 'duplicate_route_owner', $path, 'One canonical route is claimed by multiple owners.', array( 'owners' => $owners ) );
+			if ( count( $route_claims[ $path ] ) > 1 ) {
+				$code = count( $owners ) > 1 ? 'duplicate_route_owner' : 'duplicate_route_declaration';
+				$findings[] = self::finding( 'high', $code, $path, 'The canonical route has multiple declarations; every route path must be unique.', array( 'owners' => $owners, 'declaration_count' => count( $route_claims[ $path ] ) ) );
 			}
 		}
 		$known_shell_owners = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) ) );
@@ -283,6 +391,146 @@ final class SPF_Governance_Control_Plane {
 		);
 	}
 
+	/**
+	 * Resolve only files that are genuinely under the supplied local repository.
+	 * This scanner is read-only; it does not trust user-supplied boolean evidence.
+	 */
+	public static function verify_v12_source_file( $root, $path, $expected_sha256 ) {
+		if ( ! is_string( $root ) || ! is_string( $path ) || ! is_string( $expected_sha256 )
+			|| ! preg_match( '/^[a-f0-9]{64}$/D', $expected_sha256 )
+			|| ! preg_match( '/^[A-Za-z0-9_.\\/-]+$/D', $path )
+			|| str_contains( $path, '..' ) || str_starts_with( $path, '/' )
+			|| str_contains( $path, '\\\\' ) ) {
+			return false;
+		}
+		$base = realpath( $root );
+		$target = $base ? realpath( $base . DIRECTORY_SEPARATOR . $path ) : false;
+		if ( false === $base || false === $target || ! str_starts_with( $target, $base . DIRECTORY_SEPARATOR )
+			|| ! is_file( $target ) || ! is_readable( $target ) ) {
+			return false;
+		}
+		$actual = hash_file( 'sha256', $target );
+		return is_string( $actual ) && hash_equals( $expected_sha256, $actual );
+	}
+
+	/**
+	 * Automatically scan the canonical 43 IDs, declared implementations and
+	 * on-disk source/test bytes from an exact checked-out tree. This is source
+	 * provenance, NOT independent CI success or production acceptance.
+	 */
+	public static function audit_v12_local_sources( $root, $commit_sha ) {
+		$ids = self::file01_v12_requirement_ids();
+		$empty = array( 'total'=>count( $ids ), 'source_mapped'=>0, 'test_ref_verified_count'=>0,
+			'coded_completion_claim_allowed'=>false, 'ci_result_verified'=>false, 'rows'=>array(),
+			'missing_requirements'=>$ids, 'status'=>'source_unavailable' );
+		if ( ! is_string( $root ) || ! is_dir( $root ) || ! is_string( $commit_sha )
+			|| ! preg_match( '/^[a-f0-9]{40}$/D', $commit_sha ) ) {
+			return $empty;
+		}
+		$trace_path = $root . '/TRACEABILITY.md';
+		$manifest_path = $root . '/SOURCE-CHECKSUMS.sha256';
+		if ( ! is_file( $trace_path ) || ! is_file( $manifest_path ) ) {
+			return $empty;
+		}
+		$trace = file_get_contents( $trace_path );
+		$checksums = file_get_contents( $manifest_path );
+		if ( ! is_string( $trace ) || ! is_string( $checksums ) ) {
+			return $empty;
+		}
+		$hashes = array();
+		foreach ( explode( "\n", $checksums ) as $line ) {
+			if ( preg_match( '/^([a-f0-9]{64})  \\.\\/([A-Za-z0-9_.\\/-]+)$/D', trim( $line ), $m ) ) {
+				if ( isset( $hashes[ $m[2] ] ) ) {
+					return $empty; // A duplicated checksum entry is not independent truth.
+				}
+				$hashes[ $m[2] ] = $m[1];
+			}
+		}
+		if ( ! isset( $hashes['TRACEABILITY.md'] )
+			|| ! self::verify_v12_source_file( $root, 'TRACEABILITY.md', $hashes['TRACEABILITY.md'] ) ) {
+			return $empty;
+		}
+		$declarations = array();
+		foreach ( explode( "\n", $trace ) as $line ) {
+			if ( ! preg_match( '/^\\|\\s*(F01-(?:FR-[0-9]{3}|NFR-[0-9]{3}|CEN-[0-9]{2}|FUT-[0-9]{3}))(?:\\s+[^|]*)?\\s*\\|\\s*([^|]+)\\|\\s*([^|]+)\\|/D', $line, $match ) ) {
+				continue;
+			}
+			if ( isset( $declarations[ $match[1] ] ) ) {
+				return $empty;
+			}
+			$declarations[ $match[1] ] = array( 'implementation'=>trim( $match[2] ), 'test_reference'=>trim( $match[3] ) );
+		}
+		$rows = array();
+		$source_mapped = 0;
+		$tests_found = 0;
+		foreach ( $ids as $id ) {
+			$declaration = $declarations[ $id ] ?? array();
+			$implementation = $declaration['implementation'] ?? '';
+			$source_evidence = array();
+			if ( preg_match_all( '/\\b(SPF_[A-Za-z0-9_]+)(?:::(\\w+))?/', $implementation, $symbols, PREG_SET_ORDER ) ) {
+				foreach ( $symbols as $symbol ) {
+					$class = $symbol[1];
+					$method = $symbol[2] ?? '';
+					$path = 'includes/class-' . strtolower( str_replace( '_', '-', $class ) ) . '.php';
+					if ( ! isset( $hashes[ $path ] ) || ! self::verify_v12_source_file( $root, $path, $hashes[ $path ] ) ) {
+						continue;
+					}
+					$source = file_get_contents( $root . '/' . $path );
+					if ( ! is_string( $source ) || ! str_contains( $source, 'class ' . $class )
+						|| ( '' !== $method && ! preg_match( '/\\bfunction\\s+' . preg_quote( $method, '/' ) . '\\s*\\(/', $source ) ) ) {
+						continue;
+					}
+					$source_evidence[] = array( 'symbol'=>$class . ( '' !== $method ? '::' . $method : '' ),
+						'path'=>$path, 'sha256'=>$hashes[ $path ] );
+				}
+			}
+			$has_source = ! empty( $source_evidence );
+			if ( $has_source ) {
+				$source_mapped++;
+			}
+			$test_refs = array();
+			if ( preg_match_all( '~\\btests/[A-Za-z0-9_-]+\\.php\\b~', $declaration['test_reference'] ?? '', $matches ) ) {
+				foreach ( array_unique( $matches[0] ) as $path ) {
+					if ( isset( $hashes[$path] ) && self::verify_v12_source_file( $root, $path, $hashes[$path] ) ) {
+						$test_refs[] = array( 'path'=>$path, 'sha256'=>$hashes[$path],
+							'assertion_individually_verified'=>false );
+					}
+				}
+			}
+			if ( $test_refs ) {
+				$tests_found++;
+			}
+			$rows[$id] = array( 'source_mapped'=>$has_source, 'source_evidence'=>$source_evidence,
+				'test_files_pinned'=>$test_refs, 'test_result'=>'requires_independent_ci_attestation',
+				'coded_complete_verified'=>false, 'staging_verified'=>false, 'live_verified'=>false );
+		}
+		$missing = array_values( array_diff( $ids, array_keys( $declarations ) ) );
+		$extra = array_values( array_diff( array_keys( $declarations ), $ids ) );
+		return array(
+			'total'=>count($ids), 'declared_count'=>count($declarations), 'source_mapped'=>$source_mapped,
+			'test_ref_verified_count'=>$tests_found, 'missing_requirements'=>$missing,
+			'unexpected_requirements'=>$extra, 'tree_commit_claim'=>$commit_sha,
+			'commit_verified'=>false, 'ci_result_verified'=>false,
+			'coded_completion_claim_allowed'=>false, 'rows'=>$rows,
+			'status'=>empty($missing) && empty($extra) ? 'source_scan_complete_acceptance_pending' : 'requirement_coverage_incomplete',
+		);
+	}
+
+	public static function file01_v12_requirement_ids() {
+		$ids = array();
+		foreach ( array( 'FR'=>12, 'NFR'=>10, 'CEN'=>3, 'FUT'=>18 ) as $family => $count ) {
+			for ( $i = 1; $i <= $count; $i++ ) {
+				$ids[] = 'F01-' . $family . '-' . sprintf( 'CEN' === $family ? '%02d' : '%03d', $i );
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * Evidence is supplied by callers; raw booleans are NOT verification.
+	 * The only way to label a row coded_complete is for a separate verifier
+	 * to attest its bound evidence through the explicit integration hook.
+	 */
 	public static function build_traceability_report( array $requirements, array $evidence ) {
 		$rows = array();
 		$missing = array();
@@ -301,29 +549,46 @@ final class SPF_Governance_Control_Plane {
 				continue;
 			}
 			$seen[ $id ] = true;
-			$item = (array) ( $evidence[ $id ] ?? array() );
+			$item = is_array( $evidence[ $id ] ?? null ) ? $evidence[ $id ] : array();
+			$proof = is_array( $item['proof'] ?? null ) ? $item['proof'] : array();
+			$refs = array( 'design_ref','code_ref','test_ref','test_run' );
+			$proof_structured = true;
+			foreach ( $refs as $field ) {
+				$proof_structured = $proof_structured && is_string( $proof[ $field ] ?? null ) && '' !== trim( $proof[ $field ] ) && strlen( $proof[ $field ] ) <= 500;
+			}
+			$proof_structured = $proof_structured && is_string( $proof['commit_sha'] ?? null )
+				&& 1 === preg_match( '/^[a-f0-9]{40}$/D', (string) ( $proof['commit_sha'] ?? '' ) )
+				&& 'passed' === ( $proof['test_result'] ?? null );
+			$declared = true === ( $item['design'] ?? false ) && true === ( $item['code'] ?? false ) && true === ( $item['test'] ?? false );
+			$verified = $declared && $proof_structured
+				&& true === apply_filters( 'spf_verify_traceability_requirement_evidence', false, $id, $proof );
 			$status = array(
 				'requirement' => $id,
-				'design'      => true === ( $item['design'] ?? false ),
-				'code'        => true === ( $item['code'] ?? false ),
-				'test'        => true === ( $item['test'] ?? false ),
-				'package'     => true === ( $item['package'] ?? false ),
-				'staging'     => true === ( $item['staging'] ?? false ),
-				'approval'    => true === ( $item['approval'] ?? false ),
-				'live'        => true === ( $item['live'] ?? false ) || true === ( $item['deployed'] ?? false ),
+				'design' => true === ( $item['design'] ?? false ),
+				'code' => true === ( $item['code'] ?? false ),
+				'test' => true === ( $item['test'] ?? false ),
+				'evidence_registered' => $proof_structured,
+				'evidence_verified' => $verified,
+				'package' => true === ( $item['package'] ?? false ),
+				'staging' => true === ( $item['staging'] ?? false ),
+				'approval' => true === ( $item['approval'] ?? false ),
+				'live' => true === ( $item['live'] ?? false ) || true === ( $item['deployed'] ?? false ),
 				'operational' => true === ( $item['operational'] ?? false ),
 			);
-			$status['coded_complete'] = $status['design'] && $status['code'] && $status['test'];
-			$status['packaged_complete'] = $status['coded_complete'] && $status['package'];
+			$status['coded_complete'] = $verified;
+			$status['packaged_complete'] = $verified && $status['package'];
 			$status['staging_complete'] = $status['packaged_complete'] && $status['staging'];
 			$status['release_ready'] = $status['staging_complete'] && $status['approval'];
 			$status['live_deployed'] = $status['release_ready'] && $status['live'];
 			$status['production_complete'] = $status['live_deployed'] && $status['operational'];
 			$rows[] = $status;
-			if ( ! $status['coded_complete'] ) {
+			if ( ! $verified ) {
 				$missing[] = $id;
 			}
 		}
+		$expected = self::file01_v12_requirement_ids();
+		$coverage_complete = empty( array_diff( $expected, array_keys( $seen ) ) )
+			&& empty( array_diff( array_keys( $seen ), $expected ) ) && count( $seen ) === count( $expected );
 		$unexpected_evidence_ids = array_values( array_diff( array_map( 'strval', array_keys( $evidence ) ), array_keys( $seen ) ) );
 		sort( $unexpected_evidence_ids, SORT_STRING );
 		$total = count( $rows );
@@ -332,24 +597,25 @@ final class SPF_Governance_Control_Plane {
 		$live = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['live_deployed'] ); } ) );
 		$production = count( array_filter( $rows, static function ( $row ) { return ! empty( $row['production_complete'] ); } ) );
 		$report_valid = empty( $duplicate_ids ) && empty( $invalid_requirement_entries ) && empty( $unexpected_evidence_ids );
-		$claimable_coded_complete = $report_valid && $total > 0 && $coded === $total;
+		$claimable_coded_complete = $report_valid && $coverage_complete && $coded === count( $expected );
 		return array(
-			'report_valid'            => $report_valid,
+			'report_valid' => $report_valid,
+			'v12_requirement_coverage_complete' => $coverage_complete,
 			'coded_completion_claim_allowed' => $claimable_coded_complete,
-			'total'                   => $total,
-			'coded_complete'          => $coded,
-			'release_ready'           => $release_ready,
-			'live_deployed'           => $live,
-			'production_complete'     => $production,
-			'coded_percentage'        => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
-			'release_ready_percentage'=> $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
-			'live_percentage'         => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
-			'production_percentage'   => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
-			'missing_coded_evidence'  => $missing,
-			'duplicate_requirement_ids'=> array_values( array_unique( $duplicate_ids ) ),
-			'invalid_requirement_entries'=> $invalid_requirement_entries,
+			'total' => $total,
+			'coded_complete' => $coded,
+			'release_ready' => $release_ready,
+			'live_deployed' => $live,
+			'production_complete' => $production,
+			'coded_percentage' => $total ? round( ( $coded / $total ) * 100, 2 ) : 0,
+			'release_ready_percentage' => $total ? round( ( $release_ready / $total ) * 100, 2 ) : 0,
+			'live_percentage' => $total ? round( ( $live / $total ) * 100, 2 ) : 0,
+			'production_percentage' => $total ? round( ( $production / $total ) * 100, 2 ) : 0,
+			'missing_coded_evidence' => $missing,
+			'duplicate_requirement_ids' => array_values( array_unique( $duplicate_ids ) ),
+			'invalid_requirement_entries' => $invalid_requirement_entries,
 			'unexpected_evidence_ids' => $unexpected_evidence_ids,
-			'rows'                    => $rows,
+			'rows' => $rows,
 		);
 	}
 

@@ -8,6 +8,9 @@ while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -ty
 
 php tests/unit-tests.php
 php tests/future-foundation-tests.php
+php tests/v12-three-gaps-tests.php
+php tests/v12-semantic-evidence-register-tests.php
+php tests/v123-evidence-register-tests.php
 php tests/third-ten-round-review-tests.php
 php tests/fourth-ten-round-review-tests.php
 php tests/fifth-ten-round-review-tests.php
@@ -56,3 +59,4 @@ fi
 if find . -type f -not -path './.git/*' -print0 | xargs -0 grep -Il $'\r' | grep .; then echo "CRLF files found" >&2; exit 1; fi
 
 echo 'All source QA PASS'
+php tools/v12-traceability-audit.php

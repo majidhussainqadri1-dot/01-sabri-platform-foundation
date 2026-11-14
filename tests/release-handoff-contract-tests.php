@@ -14,6 +14,7 @@ $traceability = file_get_contents( $root . '/TRACEABILITY.md' );
 $runtime_notes = file_get_contents( $root . '/RUNTIME-QA-NOTES.md' );
 $sbom = json_decode( file_get_contents( $root . '/SBOM.cdx.json' ), true );
 $evidence = json_decode( file_get_contents( $root . '/RELEASE-EVIDENCE-TEMPLATE.json' ), true );
+$dependency_manifest = json_decode( file_get_contents( $root . '/DEPENDENCY-MANIFEST.json' ), true );
 
 $value = static function ( string $name ) use ( $plugin ): string {
 	if ( ! preg_match( "/define\\(\\s*'" . preg_quote( $name, '/' ) . "'\\s*,\\s*'([^']+)'\\s*\\)/", $plugin, $match ) ) {
@@ -38,6 +39,16 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 	}
 };
 
+$assert( is_array( $dependency_manifest ), 'Dependency manifest is not valid JSON.' );
+$assert( ( $dependency_manifest['module_key'] ?? null ) === 'file-01', 'Dependency manifest belongs to the wrong module.' );
+$assert( ( $dependency_manifest['software_version'] ?? null ) === $software, 'Dependency manifest software version is stale relative to runtime software.' );
+$assert( ( $dependency_manifest['schema_version'] ?? null ) === $schema, 'Dependency manifest schema version is stale.' );
+$assert( ( $dependency_manifest['contract_version'] ?? null ) === $contract, 'Dependency manifest contract version is stale.' );
+$assert( in_array( 'SSH MASTER 12 (approved working requirements baseline; not a claim of completed deployment)', (array) ( $dependency_manifest['governing_sources'] ?? array() ), true ), 'V12 working-baseline marker is missing from dependency manifest.' );
+$assert( in_array( 'Sabri Website Master Plan V12.3 (2026-11-13; governing requirements; repository/staging/live remain separately evidenced)', (array) ( $dependency_manifest['governing_sources'] ?? array() ), true ), 'V12.3 requirements baseline marker is missing from dependency manifest.' );
+$assert( str_contains( $readme, '## V12.3 governing requirements (not deployment)' ), 'README omits V12.3 governing baseline.' );
+$assert( str_contains( $readme, 'M11 / UX-13 / QA-24 / CEN-REL-001' ), 'README omits V12.3 release acceptance gates.' );
+$assert( str_contains( $readme, 'V12.3-FILE01-EVIDENCE-2026-11-14.md' ), 'README omits V12.3 evidence ledger.' );
 $assert( str_contains( $staging, "# Hostinger Staging Acceptance — File 01 {$software}" ), 'Staging acceptance title is stale relative to runtime software version.' );
 $assert( str_contains( $staging, "Database/schema version: `{$schema}`" ), 'Staging acceptance schema identity is stale.' );
 $assert( str_contains( $staging, "Contract version: `{$contract}`" ), 'Staging acceptance contract identity is stale.' );

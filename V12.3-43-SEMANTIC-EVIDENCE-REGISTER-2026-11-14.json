@@ -1,0 +1,446 @@
+{
+  "date": "2026-11-14",
+  "source": "Sabri Website Master Plan V12.3 / File 01-B (43 canonical F01 IDs, excluding CF01)",
+  "candidate_evaluated": "c28115d2e8951fbc6fe3b853ee6d9c24ec997731",
+  "interpretation": {
+    "B": "behavioral fixture references (not full proof)",
+    "R": "disposable WordPress runtime fixture (not Hostinger)",
+    "N": "limited negative/plan fixture",
+    "S": "structural/source evidence only"
+  },
+  "acceptance": "All 43 independently unaccepted; no live parity",
+  "requirements": [
+    {
+      "id": "F01-FR-001",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Governance::record_amendment",
+      "unclosed_gate": "Independent real Founder change-control and supersession chain validation; synthetic WordPress/MySQL authorized fixture is not operational acceptance",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-002",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Registry::register_manifest",
+      "unclosed_gate": "Real module API owner manifests",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-003",
+      "grade": "B",
+      "evidence_file": "tests/unit-tests.php",
+      "test_probe": "dependency_below_minimum",
+      "unclosed_gate": "Companion dependency cycles",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-004",
+      "grade": "B",
+      "evidence_file": "tests/fourteenth-ten-round-review-tests.php",
+      "test_probe": "spf_invalid_route",
+      "unclosed_gate": "Real File20 route/page collision",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-005",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Installer::maybe_upgrade",
+      "unclosed_gate": "Hostinger crash compensation",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-006",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_System_Check::run",
+      "unclosed_gate": "Real mail/storage/cache/cron evidence",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-007",
+      "grade": "R",
+      "evidence_file": "qa/wp-cross-file-reconciliation-smoke.php",
+      "test_probe": "SPF_Reconciler::rollback",
+      "unclosed_gate": "Current File20/21 deployed receipts",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-008",
+      "grade": "B",
+      "evidence_file": "tests/fourteenth-ten-round-review-tests.php",
+      "test_probe": "spf_invalid_contract_acknowledgement",
+      "unclosed_gate": "Consumer ACK and deprecation window",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-009",
+      "grade": "R",
+      "evidence_file": "qa/wp-cross-file-reconciliation-smoke.php",
+      "test_probe": "SPF_Repair::plan",
+      "unclosed_gate": "Actual operator repair approval",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-010",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Governance::transition_release",
+      "unclosed_gate": "Independent release/approval evidence",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-011",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Governance::set_flag",
+      "unclosed_gate": "Real expiration/kill switch test",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FR-012",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Purge::apply",
+      "unclosed_gate": "File24 plus backup restore assurance",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-001",
+      "grade": "B",
+      "evidence_file": "tests/unit-tests.php",
+      "test_probe": "SPF_Authorization::validate_claim",
+      "unclosed_gate": "Full field/object IDOR matrix",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-002",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Privacy::erase_personal_data",
+      "unclosed_gate": "Real lawful basis/holds/retention",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-003",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Event_Bus::publish",
+      "unclosed_gate": "Outage/dead letter/consumer replay",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-004",
+      "grade": "S",
+      "evidence_file": "tests/schema-tests.php",
+      "test_probe": "",
+      "unclosed_gate": "Measured p75/p95 and soak test",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-005",
+      "grade": "S",
+      "evidence_file": "tests/source-quality-tests.php",
+      "test_probe": "",
+      "unclosed_gate": "Keyboard/focus/zoom/RTL/screen reader",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-006",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_System_Check::run",
+      "unclosed_gate": "Real alert exporter/File24 ownership",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-007",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Installer::maybe_upgrade",
+      "unclosed_gate": "Hostinger schema migration rehearsal",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-008",
+      "grade": "R",
+      "evidence_file": "qa/wp-cross-file-reconciliation-smoke.php",
+      "test_probe": "SPF_Repair::plan",
+      "unclosed_gate": "Real runbook/cache/queue operator drill",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-009",
+      "grade": "S",
+      "evidence_file": ".github/workflows/corrective-qa.yml",
+      "test_probe": "",
+      "unclosed_gate": "WordPress7.0.1/actual PHP provider parity",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-NFR-010",
+      "grade": "S",
+      "evidence_file": "tests/source-quality-tests.php",
+      "test_probe": "",
+      "unclosed_gate": "Urdu/Arabic/RTL/timezone/currency",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-CEN-01",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Installer::canonical_module_catalog",
+      "unclosed_gate": "27 real owner manifests",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-CEN-02",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Event_Bus::publish",
+      "unclosed_gate": "Real producer/consumer privacy",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-CEN-03",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Governance::set_flag",
+      "unclosed_gate": "Real migration/health gate proof",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-001",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Governance_Control_Plane::evaluate_policy",
+      "unclosed_gate": "Founder/File00 authorization",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-002",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Governance_Control_Plane::simulate_amendment",
+      "unclosed_gate": "Real owner impact fixtures",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-003",
+      "grade": "B",
+      "evidence_file": "tests/v12-three-gaps-tests.php",
+      "test_probe": "source_verified_count",
+      "unclosed_gate": "Approved repository architecture manifests",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-004",
+      "grade": "B",
+      "evidence_file": "tests/v12-three-gaps-tests.php",
+      "test_probe": "audit_v12_local_sources",
+      "unclosed_gate": "Independent per-case CI attestation",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-005",
+      "grade": "R",
+      "evidence_file": "qa/wp-future-foundation-smoke.php",
+      "test_probe": "SPF_Platform_Engineering::service_catalog",
+      "unclosed_gate": "Source and disposable WordPress DTO/count/read-only tests exist; real deployed registry, role-scoped caller interface, performance and operational acceptance remain pending",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-006",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::scaffold_module",
+      "unclosed_gate": "Generated module complete CI",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-007",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::contract_compatibility",
+      "unclosed_gate": "Real consumer schemas",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-008",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::validate_event_fixture",
+      "unclosed_gate": "Real owner-event replay",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-009",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::detect_config_drift",
+      "unclosed_gate": "Redacted live/staging config",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-010",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::plan_release_train",
+      "unclosed_gate": "Actual 27-module release graph",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-011",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Platform_Engineering::advance_rollout",
+      "unclosed_gate": "Independent deployed adapter and Founder/File24 approved rollout on real Staging and Live",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-012",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Platform_Engineering::evaluate_slo_gate",
+      "unclosed_gate": "Real SLO metric objectives",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-013",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Resilience_Lab::digital_twin",
+      "unclosed_gate": "Current source architecture graph",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-014",
+      "grade": "R",
+      "evidence_file": "qa/wp-runtime-smoke.php",
+      "test_probe": "SPF_Resilience_Lab::apply_self_heal",
+      "unclosed_gate": "Real Staging owner-scoped apply/rollback and independently attested recovery safety",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-015",
+      "grade": "B",
+      "evidence_file": "tests/v12-three-gaps-tests.php",
+      "test_probe": "SPF_Resilience_Lab::verify_chaos_receipt",
+      "unclosed_gate": "Independent fault/recovery observer",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-016",
+      "grade": "R",
+      "evidence_file": "qa/wp-future-foundation-smoke.php",
+      "test_probe": "SPF_Platform_Engineering::record_metric",
+      "unclosed_gate": "Real OpenTelemetry exporter",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-017",
+      "grade": "R",
+      "evidence_file": "qa/wp-future-foundation-smoke.php",
+      "test_probe": "SPF_Resilience_Lab::restore_snapshot",
+      "unclosed_gate": "Hostinger backup/restore drill",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    },
+    {
+      "id": "F01-FUT-018",
+      "grade": "B",
+      "evidence_file": "tests/future-foundation-tests.php",
+      "test_probe": "SPF_Governance_Control_Plane::advisory_copilot",
+      "unclosed_gate": "External provider/no autonomy proof",
+      "independent_semantic_verified": false,
+      "staging_accepted": false,
+      "live_verified": false
+    }
+  ],
+  "reference_previous_register": "V12-43-SEMANTIC-EVIDENCE-REGISTER-2026-11-10.json",
+  "evidence_qa_run": "Run #938 (43591468569) 4/4 successful: FR-001 synthetic governance amendment authorization, persisted supersession, duplicate-ID guard and fixture teardown; FUT-011 #930 and FUT-014 #931."
+}

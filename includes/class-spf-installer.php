@@ -122,7 +122,21 @@ final class SPF_Installer {
 			update_option( 'spf_upgrade_state', array( 'status'=>'invalid_schema_version', 'stored_version'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
 			return new WP_Error( 'spf_schema_version_invalid', __( 'The stored File 01 schema version is malformed; schema upgrade is blocked pending reconciliation.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
 		}
-		if ( version_compare( $current, SPF_SCHEMA_VERSION, '>=' ) ) {
+		$schema_precedence = SPF_Registry::compare_semver( (string) $current, SPF_SCHEMA_VERSION );
+		if ( $schema_precedence > 0 ) {
+			// The database claims a newer schema than this source knows. Never
+			// silently treat a repository/runtime downgrade as an accepted upgrade.
+			update_option( 'spf_upgrade_state', array( 'status'=>'downgrade_blocked', 'from'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
+			return new WP_Error( 'spf_schema_downgrade_blocked', __( 'Stored File 01 schema is newer than this runtime; verify deployed code and migration parity before continuing.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+		}
+		if ( 0 === $schema_precedence ) {
+			// wp_options is not schema evidence: columns, indexes and engines
+			// must be independently verified before reporting "up to date".
+			$verified = self::verify_schema();
+			if ( is_wp_error( $verified ) ) {
+				update_option( 'spf_upgrade_state', array( 'status'=>'schema_integrity_required', 'from'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'verification_code'=>$verified->get_error_code(), 'checked_at'=>SPF_Runtime::now_mysql() ), false );
+				return new WP_Error( 'spf_schema_integrity_required', __( 'File 01 schema version matches, but actual database schema verification failed; operator investigation is required.', 'sabri-platform-foundation' ), array( 'status'=>409, 'verification_code'=>$verified->get_error_code() ) );
+			}
 			return true;
 		}
 		if ( ! SPF_Authorization::can( 'run_schema_upgrade', array( 'module_key' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION ), array( 'purpose' => 'schema_upgrade' ) ) ) {
@@ -637,7 +651,7 @@ final class SPF_Installer {
 			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
 			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),
 			'source'           => 'SSH-F01-PLAN-2026-v1.0',
-			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0' ),
+			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0', 'Sabri-Website-Master-Plan-v12.docx (requirements baseline; release approval remains separate)' ),
 		);
 	}
 

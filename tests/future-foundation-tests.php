@@ -224,6 +224,24 @@ $assert(false === $train_wrong_type_required['valid']
     && in_array('required_dependencies_invalid',array_column($train_wrong_type_required['manifest_errors'],'code'),true),
     'F01-FUT-010: scalar required dependency declaration silently coerced to array.');
 
+// F01-FUT-010: a declared required edge must itself include an explicit,
+// owner-approved minimum version. Legacy shorthand can be diagnosed but must
+// never be certified as a deployable dependency contract.
+$train_unversioned_edge=SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>[['module_key'=>'file-01']]],
+]);
+$assert(false===$train_unversioned_edge['valid']
+ && in_array('dependency_minimum_missing',array_column($train_unversioned_edge['manifest_errors'],'code'),true),
+ 'F01-FUT-010: declared dependency without minimum version accepted.');
+$train_legacy_shorthand=SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>['file-01']],
+]);
+$assert(false===$train_legacy_shorthand['valid']
+ && in_array('dependency_declaration_invalid',array_column($train_legacy_shorthand['manifest_errors'],'code'),true),
+ 'F01-FUT-010: legacy scalar dependency approved without versioned declaration.');
+
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
 $bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'banana','required'=>[]]]);

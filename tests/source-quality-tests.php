@@ -56,4 +56,14 @@ $assert( ! preg_match( '/update_option\s*\(\s*[\'"]spf_founder_user_id[\'"]\s*,\
 $assert( ! preg_match( '/wp_insert_post\s*\(/', $runtime ), 'File 01 silently creates public pages/posts.' );
 $assert( ! preg_match( '/get_posts\s*\(/', $runtime ), 'File 01 owns a feed/post query.' );
 
+// F01-NFR-009: CI must independently exercise the governing WordPress
+// 7.0.1 baseline and the latest core, not silently use latest alone.
+$wf = $files['.github/workflows/corrective-qa.yml'] ?? '';
+$assert(str_contains($wf, "wp_version: ['7.0.1', 'current']"),
+    'F01-NFR-009: WordPress 7.0.1/latest baseline matrix missing in runtime QA.');
+$assert(str_contains($wf, 'wp core download --path=/tmp/wp --force --version=7.0.1'),
+    'F01-NFR-009: exact WordPress 7.0.1 is not installed in the pinned CI lane.');
+$assert(str_contains($wf, 'wp core version --path=/tmp/wp'),
+    'F01-NFR-009: CI did not capture the actually installed WordPress version.');
+
 if($failures){fwrite(STDERR,"Source-quality tests failed:\n- ".implode("\n- ",$failures)."\n");exit(1);} echo "Source-quality assertions: {$assertions}/{$assertions} PASS\n";

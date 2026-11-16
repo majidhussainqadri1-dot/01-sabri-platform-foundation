@@ -244,6 +244,7 @@ final class SPF_Governance_Control_Plane {
 		$shell_owners = array();
 		$provenance = array();
 		$seen = array();
+		$seen_owners = array();
 		$verified = 0;
 		if ( empty( $descriptors ) || count( $descriptors ) > 27 ) {
 			return array( 'pass'=>false, 'source_verified_count'=>0,
@@ -267,7 +268,17 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'critical', 'source_pin_invalid', $key, 'A unique canonical repository, exact commit, bounded path, owner and independent SHA-256 are mandatory.', array() );
 				continue;
 			}
+			// A module may be sourced from exactly one canonical repository.
+			// Reusing an owner key across distinct pinned repositories must
+			// fail closed even if their entity and route claims do not overlap.
+			if ( isset( $seen_owners[ $owner ] ) ) {
+				$findings[] = self::finding( 'critical', 'source_owner_duplicate', $key,
+					'Two pinned repositories claim the same canonical module identity.',
+					array( 'module_key'=>$owner, 'first_repository'=>$seen_owners[ $owner ] ) );
+				continue;
+			}
 			$seen[$repo] = true;
+			$seen_owners[$owner] = $repo;
 			if ( ! function_exists( 'wp_remote_get' ) ) {
 				$findings[] = self::finding( 'critical', 'source_fetch_unavailable', $key, 'WordPress HTTP read-only transport is unavailable.', array() );
 				continue;
@@ -340,9 +351,19 @@ final class SPF_Governance_Control_Plane {
 	public static function lint_architecture( array $inventory ) {
 		$findings = array();
 		$owner_claims = array();
+		$module_identities = array();
 		$route_claims = array();
 		foreach ( (array) ( $inventory['modules'] ?? array() ) as $module ) {
 			$key = sanitize_key( $module['module_key'] ?? '' );
+			// Every canonical module identity has a single source owner, even
+			// when the duplicate declarations happen to expose distinct entities.
+			if ( '' !== $key ) {
+				if ( isset( $module_identities[ $key ] ) ) {
+					$findings[] = self::finding( 'critical', 'duplicate_module_identity', $key,
+						'Multiple architecture records claim the same canonical module identity.', array() );
+				}
+				$module_identities[ $key ] = true;
+			}
 			$manifest = (array) ( $module['manifest'] ?? $module );
 			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
 				$entity = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );

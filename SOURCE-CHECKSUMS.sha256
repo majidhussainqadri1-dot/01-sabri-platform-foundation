@@ -20,7 +20,7 @@ e04ecb420a5a14c76dc57f144b1a9658e28e9f1a6d843ce2f471ac6d7a28cf48  ./includes/cla
 c0134d0a05a0cb856a424a25e403116c5281ab0069975525c433ab3b487417cc  ./includes/class-spf-dependency-resolver.php
 c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/class-spf-event-bus.php
 60d6e50938ca9a8c81a1dc764f301214517979c4a2e59703fd0eb9fc91847748  ./includes/class-spf-future-foundation.php
-bdcd56e16c6b7f3a24edb25cbe4662c7c87e815aa67251705110c4676f86b937  ./includes/class-spf-governance-control-plane.php
+ac72a588b7a98033c69d8a8cd1808075138bac02da8adeeaba5c747dc2610cf5  ./includes/class-spf-governance-control-plane.php
 9e407e1f1811fb6e6cf530d6bc1b0ca43059f8920b7662196c0272582a0b1632  ./includes/class-spf-governance.php
 9cdb0a0038ae0eb30f1c2a8b7aa251ed59903cdfef5f5cbb6e4f9b3593dd9b57  ./includes/class-spf-idempotency.php
 a6112058cc8c8beb1a2cd496e72ba1cfbe6b4622340b21f2ab0c8db76cedef05  ./includes/class-spf-installer.php
@@ -124,3 +124,4 @@ ceeca81385063d98ba354cf05cd4ab189388d14a315e8751b3bc3c9b60a39ea1  ./V12.3-SHELL-
 73e3099dff3a06a3d66e67a121f455fefd78aebde3e81718a5fcc478901f489f  ./V12.3-FILE01-CUMULATIVE-SOURCE-REVIEW-2026-11-16.md
 d4e28a9b0ed7d3eca91324003d20d90be38ed79f9c3b7ef4dfb9bb13c859f9fb  ./V12.3-WORDPRESS-701-CI-BASELINE-2026-11-16.md
 23d58bb6d2a50ec0fd375d45b22b6a7d87f04c9e65870a9713f6b849866da731  ./V12.3-FILE01-SECOND-SESSION-ACCEPTANCE-HANDOFF-2026-11-16.md
+3ddf2f46052b0039d4feb479bc8f3522519efb354d7de2f2ec515a5b9ec84483  ./V12.3-WRITE-OWNER-DECLARATION-2026-11-16.md

@@ -379,8 +379,15 @@ final class SPF_Governance_Control_Plane {
 				}
 			}
 			foreach ( (array) ( $manifest['writes'] ?? array() ) as $write ) {
-				$target = sanitize_key( is_array( $write ) ? ( $write['owner_module'] ?? '' ) : '' );
-				if ( $target && $target !== $key ) {
+				$target = is_array( $write ) ? ( $write['owner_module'] ?? null ) : null;
+				// A malformed write declaration is not evidence of zero foreign writes.
+				// Require an explicit canonical owner before comparing ownership.
+				if ( ! is_string( $target ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/D', $target ) ) {
+					$findings[] = self::finding( 'critical', 'invalid_write_owner_declaration', $key,
+						'Every canonical write declaration requires an exact, structured owner module.', array() );
+					continue;
+				}
+				if ( $target !== $key ) {
 					$findings[] = self::finding( 'high', 'foreign_direct_write', $key, 'Manifest declares a write to another canonical owner.', array( 'target' => $target ) );
 				}
 			}

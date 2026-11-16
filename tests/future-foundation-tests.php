@@ -35,6 +35,31 @@ foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_own
 $same_owner_route=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[],'routes'=>[['route_path'=>'/same','owner_module'=>'file-20'],['route_path'=>'/same','owner_module'=>'file-20']],'global_shell_owners'=>['file-20']]);
 $assert($same_owner_route['pass']===false && in_array('duplicate_route_declaration',array_column($same_owner_route['findings'],'code'),true),'Duplicate same-owner route was silently accepted.');
 
+// F01-FUT-003 hidden shell-owner claim: a caller-provided summary cannot
+// suppress a competing canonical module's explicit shell ownership flag.
+$hidden_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[
+  ['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true],
+  ['module_key'=>'file-21','canonical_entities'=>['editorial-news'],'global_shell_owner'=>true],
+ ],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$hidden_shell_claim['pass']
+ && in_array('shell_owner_violation',array_column($hidden_shell_claim['findings'],'code'),true),
+ 'F01-FUT-003: embedded competing shell owner flag bypassed architecture linter.');
+$hidden_app_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[
+  ['module_key'=>'file-20','canonical_entities'=>['global-shell']],
+  ['module_key'=>'file-25','canonical_entities'=>['visual-tokens'],'application_shell_owner'=>true],
+ ],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$hidden_app_shell_claim['pass']
+ && in_array('shell_owner_violation',array_column($hidden_app_shell_claim['findings'],'code'),true),
+ 'F01-FUT-003: embedded application shell owner flag bypassed architecture linter.');
+
+
+
 
 $normalize_manifest=new ReflectionMethod(SPF_Registry::class,'normalize_manifest');$normalize_manifest->setAccessible(true);
 $architecture_manifest=$normalize_manifest->invoke(null,[

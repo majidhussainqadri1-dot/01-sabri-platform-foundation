@@ -103,6 +103,20 @@ $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/s
 $compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]);
 $assert($compat['breaking_change']===true,'Contract breaking changes missed.');
 $assert($compat['major_bump_ok']===true,'Major bump rejected for breaking change.');
+// F01-FUT-007: absent or malformed schemas are unknown evidence, not proof
+// that two independent contract versions are compatible.
+$compat_missing_schema=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0'],['contract_version'=>'1.0.1']);
+$assert(false===$compat_missing_schema['compatible']
+ && in_array('contract_schema_missing',array_column($compat_missing_schema['issues'],'code'),true),
+ 'F01-FUT-007: missing old/new contract schema falsely passed compatibility.');
+$compat_scalar_schema=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0','schema'=>'not-an-object'],
+ ['contract_version'=>'1.0.1','schema'=>['id'=>['type'=>'string','required'=>true]]]);
+$assert(false===$compat_scalar_schema['compatible']
+ && in_array('contract_schema_invalid',array_column($compat_scalar_schema['issues'],'code'),true),
+ 'F01-FUT-007: scalar contract schema was silently coerced and accepted.');
+
 $regressed=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'string','required'=>true]]],['contract_version'=>'1.9.9','schema'=>['id'=>['type'=>'string','required'=>true]]]);
 $assert($regressed['compatible']===false && $regressed['version_monotonic']===false,'Contract version regression was accepted as compatible.');
 $normalize_dependencies=new ReflectionMethod(SPF_Registry::class,'normalize_dependencies');$normalize_dependencies->setAccessible(true);

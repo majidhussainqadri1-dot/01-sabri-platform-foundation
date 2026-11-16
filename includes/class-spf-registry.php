@@ -789,6 +789,11 @@ final class SPF_Registry {
 		$manifest = json_decode( $row['manifest_json'], true );
 		$manifest_valid = is_array( $manifest )
 			&& ( $manifest['module_key'] ?? null ) === $row['module_key']
+			&& ( $manifest['owner_file'] ?? null ) === $row['owner_file']
+			&& ( $manifest['owner_name'] ?? null ) === $row['owner_name']
+			&& ( $manifest['slug'] ?? null ) === $row['slug']
+			&& ( $manifest['namespace_prefix'] ?? null ) === $row['namespace_prefix']
+			&& ( $manifest['state'] ?? null ) === $row['state']
 			&& ( $manifest['software_version'] ?? null ) === $row['software_version']
 			&& ( $manifest['contract_version'] ?? null ) === $row['contract_version']
 			&& is_array( $manifest['required'] ?? null )

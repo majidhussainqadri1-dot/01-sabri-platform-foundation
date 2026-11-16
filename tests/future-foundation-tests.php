@@ -26,14 +26,66 @@ $assert($impact['risk_band']==='high','High amendment impact not high risk.');
 $assert(in_array('rollback',$impact['required_test_gates'],true),'Rollback gate omitted.');
 
 $lint=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[
- ['module_key'=>'file-a','canonical_entities'=>['profile']],
- ['module_key'=>'file-b','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-a']]],
-],'routes'=>[['route_path'=>'/same','owner_module'=>'file-a'],['route_path'=>'/same','owner_module'=>'file-b']],'global_shell_owners'=>['file-20','file-x']]);
+ ['module_key'=>'file-21','canonical_entities'=>['profile']],
+ ['module_key'=>'file-22','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-21']]],
+],'routes'=>[['route_path'=>'/same','owner_module'=>'file-21'],['route_path'=>'/same','owner_module'=>'file-22']],'global_shell_owners'=>['file-20','file-x']]);
 $codes=array_column($lint['findings'],'code');
 $assert($lint['pass']===false,'Architecture linter missed conflicts.');
 foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}
 $same_owner_route=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[],'routes'=>[['route_path'=>'/same','owner_module'=>'file-20'],['route_path'=>'/same','owner_module'=>'file-20']],'global_shell_owners'=>['file-20']]);
 $assert($same_owner_route['pass']===false && in_array('duplicate_route_declaration',array_column($same_owner_route['findings'],'code'),true),'Duplicate same-owner route was silently accepted.');
+
+// F01-FUT-003 hidden shell-owner claim: a caller-provided summary cannot
+// suppress a competing canonical module's explicit shell ownership flag.
+// F01-FUT-003 acceptance-side invariant: File20 can prove its own sole
+// shell ownership without trusting a stale or omitted summary list.
+$sole_declared_shell=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>[],
+]);
+$assert(true===$sole_declared_shell['pass'],
+ 'F01-FUT-003: legitimate self-declared File20 shell owner rejected.');
+// F01-FUT-003: incomplete or wrongly typed canonical write declarations
+// cannot silently vanish from the ownership-audit results.
+$missing_write_owner=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],
+   'writes'=>[['operation'=>'create']],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$missing_write_owner['pass']
+ && in_array('invalid_write_owner_declaration',array_column($missing_write_owner['findings'],'code'),true),
+ 'F01-FUT-003: missing write owner was silently treated as a clean architecture.');
+$scalar_write_owner=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],
+   'writes'=>['file-21'],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$scalar_write_owner['pass']
+ && in_array('invalid_write_owner_declaration',array_column($scalar_write_owner['findings'],'code'),true),
+ 'F01-FUT-003: scalar write declaration bypassed canonical write ownership checks.');
+
+$hidden_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[
+  ['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true],
+  ['module_key'=>'file-21','canonical_entities'=>['editorial-news'],'global_shell_owner'=>true],
+ ],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$hidden_shell_claim['pass']
+ && in_array('shell_owner_violation',array_column($hidden_shell_claim['findings'],'code'),true),
+ 'F01-FUT-003: embedded competing shell owner flag bypassed architecture linter.');
+$hidden_app_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[
+  ['module_key'=>'file-20','canonical_entities'=>['global-shell']],
+  ['module_key'=>'file-25','canonical_entities'=>['visual-tokens'],'application_shell_owner'=>true],
+ ],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$hidden_app_shell_claim['pass']
+ && in_array('shell_owner_violation',array_column($hidden_app_shell_claim['findings'],'code'),true),
+ 'F01-FUT-003: embedded application shell owner flag bypassed architecture linter.');
+
+
 
 
 $normalize_manifest=new ReflectionMethod(SPF_Registry::class,'normalize_manifest');$normalize_manifest->setAccessible(true);
@@ -78,6 +130,28 @@ $assert(str_contains($scaffold['files']['.github/workflows/qa.yml'],'php tests/s
 $compat=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'1.2.0','schema'=>['id'=>['type'=>'string','required'=>true],'note'=>['type'=>'string','required'=>false]]],['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'integer','required'=>true],'new'=>['type'=>'string','required'=>true]]]);
 $assert($compat['breaking_change']===true,'Contract breaking changes missed.');
 $assert($compat['major_bump_ok']===true,'Major bump rejected for breaking change.');
+// F01-FUT-007: absent or malformed schemas are unknown evidence, not proof
+// that two independent contract versions are compatible.
+// F01-FUT-007 acceptance-side invariant: deliberately empty schemas are
+// trustworthy when explicitly declared; only absent/malformed input fails.
+$empty_explicit_schemas=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0','schema'=>[]],
+ ['contract_version'=>'1.0.1','schema'=>[]]);
+$assert(true===$empty_explicit_schemas['compatible']
+ && false===$empty_explicit_schemas['breaking_change'],
+ 'F01-FUT-007: valid explicitly empty contract schemas were rejected.');
+$compat_missing_schema=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0'],['contract_version'=>'1.0.1']);
+$assert(false===$compat_missing_schema['compatible']
+ && in_array('contract_schema_missing',array_column($compat_missing_schema['issues'],'code'),true),
+ 'F01-FUT-007: missing old/new contract schema falsely passed compatibility.');
+$compat_scalar_schema=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0','schema'=>'not-an-object'],
+ ['contract_version'=>'1.0.1','schema'=>['id'=>['type'=>'string','required'=>true]]]);
+$assert(false===$compat_scalar_schema['compatible']
+ && in_array('contract_schema_invalid',array_column($compat_scalar_schema['issues'],'code'),true),
+ 'F01-FUT-007: scalar contract schema was silently coerced and accepted.');
+
 $regressed=SPF_Platform_Engineering::contract_compatibility(['contract_version'=>'2.0.0','schema'=>['id'=>['type'=>'string','required'=>true]]],['contract_version'=>'1.9.9','schema'=>['id'=>['type'=>'string','required'=>true]]]);
 $assert($regressed['compatible']===false && $regressed['version_monotonic']===false,'Contract version regression was accepted as compatible.');
 $normalize_dependencies=new ReflectionMethod(SPF_Registry::class,'normalize_dependencies');$normalize_dependencies->setAccessible(true);
@@ -167,6 +241,41 @@ $duplicate_dep_case = SPF_Platform_Engineering::plan_release_train([
  ['module_key'=>'file-20','software_version'=>'1.0.0','required'=>[['module_key'=>'file-01','minimum_version'=>'1.0.0'],['module_key'=>'file-01','minimum_version'=>'1.0.0']]],
 ]);
 $assert( false === $duplicate_dep_case['valid'] && in_array( 'duplicate_dependency', array_column( $duplicate_dep_case['manifest_errors'], 'code' ), true ), 'Release train silently accepted duplicate required dependency declarations.' );
+
+// F01-FUT-010 fail-closed manifest parsing: silently defaulting a missing or
+// wrong-typed "required" field to [] fabricates a dependency-free release train.
+$train_missing_required = SPF_Platform_Engineering::plan_release_train([
+    ['module_key'=>'file-01','software_version'=>'2.0.1','required'=>[]],
+    ['module_key'=>'file-20','software_version'=>'1.4.17'],
+]);
+$assert(false === $train_missing_required['valid']
+    && in_array('required_dependencies_missing',array_column($train_missing_required['manifest_errors'],'code'),true),
+    'F01-FUT-010: missing required dependency declaration accepted as empty.');
+$train_wrong_type_required = SPF_Platform_Engineering::plan_release_train([
+    ['module_key'=>'file-01','software_version'=>'2.0.1','required'=>[]],
+    ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>'file-01'],
+]);
+$assert(false === $train_wrong_type_required['valid']
+    && in_array('required_dependencies_invalid',array_column($train_wrong_type_required['manifest_errors'],'code'),true),
+    'F01-FUT-010: scalar required dependency declaration silently coerced to array.');
+
+// F01-FUT-010: a declared required edge must itself include an explicit,
+// owner-approved minimum version. Legacy shorthand can be diagnosed but must
+// never be certified as a deployable dependency contract.
+$train_unversioned_edge=SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>[['module_key'=>'file-01']]],
+]);
+$assert(false===$train_unversioned_edge['valid']
+ && in_array('dependency_minimum_missing',array_column($train_unversioned_edge['manifest_errors'],'code'),true),
+ 'F01-FUT-010: declared dependency without minimum version accepted.');
+$train_legacy_shorthand=SPF_Platform_Engineering::plan_release_train([
+ ['module_key'=>'file-01','software_version'=>'1.0.0','required'=>[]],
+ ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>['file-01']],
+]);
+$assert(false===$train_legacy_shorthand['valid']
+ && in_array('dependency_declaration_invalid',array_column($train_legacy_shorthand['manifest_errors'],'code'),true),
+ 'F01-FUT-010: legacy scalar dependency approved without versioned declaration.');
 
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');

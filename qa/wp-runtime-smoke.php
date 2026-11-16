@@ -31,6 +31,20 @@ $assert( ! $role->has_cap( SPF_Authorization::CAP_PURGE ), 'Administrator improp
 $modules = SPF_Registry::list_modules( [ 'limit'=>100 ] );
 $assert( 1 === count( $modules ) && 'file-01' === $modules[0]['module_key'], 'File 01 seeded placeholder module manifests.' );
 $assert( 27 === count( SPF_Installer::canonical_module_catalog() ), 'Canonical file catalog is incomplete.' );
+
+// F01-FR-001 V12.3: runtime registry metadata must not contradict the active
+// requirements baseline declared in the same exact source package.
+$foundation_source_list = (array) ( SPF_Installer::file01_manifest()['governing_sources'] ?? array() );
+$declares_v123_governing = (bool) array_filter(
+    $foundation_source_list,
+    static fn( $source ) => is_string( $source )
+        && str_contains( $source, 'Sabri Website Master Plan V12.3' )
+);
+$assert( $declares_v123_governing,
+    'F01-FR-001: runtime module manifest still omits governing V12.3 requirements baseline.' );
+$assert( count( $foundation_source_list ) >= 4,
+    'F01-FR-001: historical source lineage was unexpectedly discarded.' );
+
 $assert( 5 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Built-in contract count mismatch.' );
 $assert( 2 === count( SPF_Registry::list_routes() ), 'Foundation route count mismatch.' );
 $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Founder option remains.' );
@@ -322,6 +336,24 @@ if ( is_array( $original_module_row ) ) {
 		$mismatched_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
 		$assert( false === $mismatched_manifest['ready'] && 'module_manifest_invalid' === $mismatched_manifest['code'], 'Manifest/version row identity drift was misread as ready.' );
 
+
+        // Owner identity and operational-state drift must fail closed too.
+        // Both are stored alongside manifest_json and cannot be trusted from
+        // a record that contradicts its own canonical registry columns.
+        $drifted_owner = json_decode( $original_module_row['manifest_json'], true );
+        $drifted_owner['owner_file'] = '20';
+        $wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $drifted_owner ) ), array( 'module_key'=>'file-01' ) );
+        $owner_mismatch = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $assert( false === $owner_mismatch['ready'] && 'module_manifest_invalid' === $owner_mismatch['code'],
+            'F01-FR-002: manifest owner_file drift was wrongly treated as ready.' );
+
+        $drifted_state = json_decode( $original_module_row['manifest_json'], true );
+        $drifted_state['state'] = 'suspended';
+        $wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $drifted_state ) ), array( 'module_key'=>'file-01' ) );
+        $state_mismatch = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $assert( false === $state_mismatch['ready'] && 'module_manifest_invalid' === $state_mismatch['code'],
+            'F01-FR-002: manifest/row state drift was wrongly treated as ready.' );
+
 		$wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>'not-semver' ), array( 'module_key'=>'file-01' ) );
 		$invalid_runtime_version = SPF_Dependency_Resolver::readiness( 'file-01' );
 		$assert( false === $invalid_runtime_version['ready'] && 'module_version_invalid' === $invalid_runtime_version['code'], 'Malformed persisted runtime SemVer was misread as ready.' );
@@ -331,6 +363,45 @@ if ( is_array( $original_module_row ) ) {
 	}
 	$healthy_module = SPF_Dependency_Resolver::readiness( 'file-01' );
 	$assert( true === $healthy_module['ready'], 'Exact restored canonical registry did not recover readiness.' );
+}
+
+// F01-FR-003: an optional companion with invalid persisted manifest must
+// never appear available. Entire fixture runs only in disposable WP/MySQL CI.
+$optional_owner_key = 'file-20';
+$assert( ! SPF_Registry::get_module( $optional_owner_key ), 'Optional integrity probe cannot replace a real File 20 owner.' );
+$synthetic_owner = SPF_Installer::file01_manifest();
+$synthetic_owner['module_key'] = $optional_owner_key;
+$synthetic_owner['owner_file'] = '20';
+$synthetic_owner['owner_name'] = 'CI Only: Synthetic Shell Provider';
+$synthetic_owner['slug'] = 'ci-file20-optional';
+$synthetic_owner['namespace_prefix'] = 'CI_FILE20_';
+$synthetic_owner['software_version'] = '1.4.17';
+$synthetic_owner['contract_version'] = '1.0.0';
+$synthetic_owner['optional'] = array();
+$synthetic_owner['routes'] = array();
+$synthetic_owner['canonical_entities'] = array('global-shell');
+$synthetic_owner['global_shell_owner'] = true;
+$synthetic_owner['application_shell_owner'] = true;
+$synthetic_registration = SPF_Installer::with_internal_seed(
+    static fn() => SPF_Registry::register_manifest( $synthetic_owner, array('purpose'=>'ci_optional_integrity_fixture') )
+);
+$assert( ! is_wp_error( $synthetic_registration ), 'Cannot create isolated optional dependency fixture.' );
+if ( ! is_wp_error( $synthetic_registration ) ) {
+    try {
+        $normal_optional = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $normal_file20 = array_column( $normal_optional['optional_dependencies'], null, 'module_key' )['file-20'] ?? array();
+        $assert( true === ( $normal_file20['available'] ?? false ), 'Healthy synthetic File20 should be optional-available.' );
+        $wpdb->update( $modules_table, array('manifest_json'=>'{invalid-json'), array('module_key'=>$optional_owner_key) );
+        $corrupt_optional = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $corrupt_file20 = array_column( $corrupt_optional['optional_dependencies'], null, 'module_key' )['file-20'] ?? array();
+        $assert( true === ( $corrupt_optional['ready'] ?? false ), 'Optional dependency corruption should not make the foundation core unavailable.' );
+        $assert( false === ( $corrupt_file20['available'] ?? true )
+            && 'optional_manifest_invalid' === ( $corrupt_file20['code'] ?? '' ),
+            'F01-FR-003: malformed optional owner manifest was advertised as available.' );
+    } finally {
+        $wpdb->delete( $modules_table, array('module_key'=>$optional_owner_key) );
+        $assert( ! SPF_Registry::get_module( $optional_owner_key ), 'Disposable File20 test owner was not removed.' );
+    }
 }
 
 $bad_manifest = SPF_Registry::get_module( 'file-01' );

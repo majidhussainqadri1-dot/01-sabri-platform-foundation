@@ -119,7 +119,19 @@ final class SPF_Platform_Engineering {
 	}
 
 	public static function contract_compatibility( array $old, array $new ) {
-		$issues=array();$old_schema=(array)($old['schema']??array());$new_schema=(array)($new['schema']??array());foreach($old_schema as $field=>$definition){$definition=(array)$definition;if(!array_key_exists($field,$new_schema)){$issues[]=array('severity'=>'breaking','code'=>'field_removed','field'=>$field);continue;}$new_definition=(array)$new_schema[$field];if(($definition['type']??'')!==($new_definition['type']??'')){$issues[]=array('severity'=>'breaking','code'=>'type_changed','field'=>$field);}if(empty($definition['required'])&&!empty($new_definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'optional_became_required','field'=>$field);}}foreach($new_schema as $field=>$definition){if(!array_key_exists($field,$old_schema)&&!empty($definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'new_required_field','field'=>$field);}}
+		$issues=array();
+		// Missing or malformed schema is not positive compatibility evidence.
+		// An explicitly declared empty array remains a valid empty contract.
+		if(!array_key_exists('schema',$old)||!array_key_exists('schema',$new)){
+			$issues[]=array('severity'=>'breaking','code'=>'contract_schema_missing');
+		}
+		if((array_key_exists('schema',$old)&&!is_array($old['schema']))
+			||(array_key_exists('schema',$new)&&!is_array($new['schema']))){
+			$issues[]=array('severity'=>'breaking','code'=>'contract_schema_invalid');
+		}
+		$old_schema=is_array($old['schema']??null)?$old['schema']:array();
+		$new_schema=is_array($new['schema']??null)?$new['schema']:array();
+		foreach($old_schema as $field=>$definition){$definition=(array)$definition;if(!array_key_exists($field,$new_schema)){$issues[]=array('severity'=>'breaking','code'=>'field_removed','field'=>$field);continue;}$new_definition=(array)$new_schema[$field];if(($definition['type']??'')!==($new_definition['type']??'')){$issues[]=array('severity'=>'breaking','code'=>'type_changed','field'=>$field);}if(empty($definition['required'])&&!empty($new_definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'optional_became_required','field'=>$field);}}foreach($new_schema as $field=>$definition){if(!array_key_exists($field,$old_schema)&&!empty($definition['required'])){$issues[]=array('severity'=>'breaking','code'=>'new_required_field','field'=>$field);}}
 		$old_version=sanitize_text_field($old['contract_version']??'0.0.0');$new_version=sanitize_text_field($new['contract_version']??'0.0.0');$version_valid=SPF_Registry::valid_semver($old_version)&&SPF_Registry::valid_semver($new_version);if(!$version_valid){$issues[]=array('severity'=>'breaking','code'=>'contract_version_invalid');}elseif(SPF_Registry::compare_semver($new_version,$old_version)<0){$issues[]=array('severity'=>'breaking','code'=>'contract_version_regressed','old_version'=>$old_version,'new_version'=>$new_version);}$breaking=(bool)array_filter($issues,static function($issue){return 'breaking'===($issue['severity']??'');});$old_major=explode('.', $old_version, 2)[0];$new_major=explode('.', $new_version, 2)[0];$major_bumped=$version_valid&&SPF_Registry::compare_semver($new_major.'.0.0',$old_major.'.0.0')>0;
 		return array('compatible'=>!$breaking,'breaking_change'=>$breaking,'major_bump_ok'=>!$breaking||$major_bumped,'version_valid'=>$version_valid,'version_monotonic'=>$version_valid&&SPF_Registry::compare_semver($new_version,$old_version)>=0,'issues'=>$issues,'old_hash'=>SPF_Runtime::hash($old_schema),'new_hash'=>SPF_Runtime::hash($new_schema));
 	}
@@ -289,8 +301,24 @@ final class SPF_Platform_Engineering {
 			$raw_key=$manifest['module_key']??''; $key=is_string($raw_key)?sanitize_key($raw_key):'';
 			if($raw_key!==$key||!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$key)){$manifest_errors[]=array('index'=>$index,'code'=>'module_key_invalid','value'=>$key);continue;}
 			if(isset($seen[$key])){$manifest_errors[]=array('module_key'=>$key,'code'=>'duplicate_module_key');continue;} $seen[$key]=true;
+			// The planner may not invent a dependency-free source manifest.
+			// Required edges must be explicitly declared as an array, even
+			// when the owning module intentionally has no prerequisites.
+			if(!array_key_exists('required',$manifest)){
+				$manifest_errors[]=array('module_key'=>$key,'code'=>'required_dependencies_missing');continue;
+			}
+			if(!is_array($manifest['required'])){
+				$manifest_errors[]=array('module_key'=>$key,'code'=>'required_dependencies_invalid');continue;
+			}
 			$version=sanitize_text_field($manifest['software_version']??''); if(!SPF_Registry::valid_semver($version)){$manifest_errors[]=array('module_key'=>$key,'code'=>'software_version_invalid','value'=>$version);} $versions[$key]=$version; $dependencies[$key]=array(); $ranges[$key]=array();
 			foreach((array)($manifest['required']??array()) as $dependency){
+				// Retain graph diagnostics for legacy entries, but never
+				// certify an unversioned or nonstructured dependency edge.
+				if(!is_array($dependency)){
+					$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_declaration_invalid');
+				}elseif(!array_key_exists('minimum_version',$dependency)){
+					$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_minimum_missing');
+				}
 				if(is_array($dependency)){$raw_dep_key=$dependency['module_key']??'';$minimum=sanitize_text_field($dependency['minimum_version']??'0.0.0');$maximum=sanitize_text_field($dependency['maximum_version']??'');}else{$raw_dep_key=$dependency;$minimum='0.0.0';$maximum='';}$dep_key=is_string($raw_dep_key)?sanitize_key($raw_dep_key):'';
 				if($raw_dep_key!==$dep_key||!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$dep_key)){$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_key_invalid','value'=>$dep_key);continue;}
 				if($dep_key===$key){$manifest_errors[]=array('module_key'=>$key,'dependency'=>$dep_key,'code'=>'self_dependency');}

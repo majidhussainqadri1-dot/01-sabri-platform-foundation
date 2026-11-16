@@ -244,6 +244,7 @@ final class SPF_Governance_Control_Plane {
 		$shell_owners = array();
 		$provenance = array();
 		$seen = array();
+		$seen_owners = array();
 		$verified = 0;
 		if ( empty( $descriptors ) || count( $descriptors ) > 27 ) {
 			return array( 'pass'=>false, 'source_verified_count'=>0,
@@ -267,7 +268,17 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'critical', 'source_pin_invalid', $key, 'A unique canonical repository, exact commit, bounded path, owner and independent SHA-256 are mandatory.', array() );
 				continue;
 			}
+			// A module may be sourced from exactly one canonical repository.
+			// Reusing an owner key across distinct pinned repositories must
+			// fail closed even if their entity and route claims do not overlap.
+			if ( isset( $seen_owners[ $owner ] ) ) {
+				$findings[] = self::finding( 'critical', 'source_owner_duplicate', $key,
+					'Two pinned repositories claim the same canonical module identity.',
+					array( 'module_key'=>$owner, 'first_repository'=>$seen_owners[ $owner ] ) );
+				continue;
+			}
 			$seen[$repo] = true;
+			$seen_owners[$owner] = $repo;
 			if ( ! function_exists( 'wp_remote_get' ) ) {
 				$findings[] = self::finding( 'critical', 'source_fetch_unavailable', $key, 'WordPress HTTP read-only transport is unavailable.', array() );
 				continue;
@@ -340,19 +351,43 @@ final class SPF_Governance_Control_Plane {
 	public static function lint_architecture( array $inventory ) {
 		$findings = array();
 		$owner_claims = array();
+		$module_identities = array();
+		$declared_shell_owners = array();
 		$route_claims = array();
 		foreach ( (array) ( $inventory['modules'] ?? array() ) as $module ) {
 			$key = sanitize_key( $module['module_key'] ?? '' );
+			// Every canonical module identity has a single source owner, even
+			// when the duplicate declarations happen to expose distinct entities.
+			if ( '' !== $key ) {
+				if ( isset( $module_identities[ $key ] ) ) {
+					$findings[] = self::finding( 'critical', 'duplicate_module_identity', $key,
+						'Multiple architecture records claim the same canonical module identity.', array() );
+				}
+				$module_identities[ $key ] = true;
+			}
 			$manifest = (array) ( $module['manifest'] ?? $module );
+			if ( true === ( $manifest['global_shell_owner'] ?? false ) || true === ( $manifest['application_shell_owner'] ?? false ) ) {
+				$declared_shell_owners[] = $key;
+			}
 			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
 				$entity = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
 				if ( $entity ) {
 					$owner_claims[ $entity ][] = $key;
+					if ( in_array( $entity, array( 'global-shell', 'application-shell', 'global-navigation' ), true ) ) {
+						$declared_shell_owners[] = $key;
+					}
 				}
 			}
 			foreach ( (array) ( $manifest['writes'] ?? array() ) as $write ) {
-				$target = sanitize_key( is_array( $write ) ? ( $write['owner_module'] ?? '' ) : '' );
-				if ( $target && $target !== $key ) {
+				$target = is_array( $write ) ? ( $write['owner_module'] ?? null ) : null;
+				// A malformed write declaration is not evidence of zero foreign writes.
+				// Require an explicit canonical owner before comparing ownership.
+				if ( ! is_string( $target ) || ! preg_match( '/^file-(?:0[0-9]|1[0-9]|2[0-6])$/D', $target ) ) {
+					$findings[] = self::finding( 'critical', 'invalid_write_owner_declaration', $key,
+						'Every canonical write declaration requires an exact, structured owner module.', array() );
+					continue;
+				}
+				if ( $target !== $key ) {
 					$findings[] = self::finding( 'high', 'foreign_direct_write', $key, 'Manifest declares a write to another canonical owner.', array( 'target' => $target ) );
 				}
 			}
@@ -377,7 +412,12 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'high', $code, $path, 'The canonical route has multiple declarations; every route path must be unique.', array( 'owners' => $owners, 'declaration_count' => count( $route_claims[ $path ] ) ) );
 			}
 		}
-		$known_shell_owners = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) ) );
+		// The summary is not authoritative over individual owner declarations.
+		// Check BOTH: a stale caller-owned summary may hide a competing shell.
+		$known_shell_owners = array_values( array_unique( array_filter( array_merge(
+			array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ),
+			$declared_shell_owners
+		) ) ) );
 		if ( empty( $known_shell_owners ) ) {
 			$findings[] = self::finding( 'critical', 'shell_owner_missing', 'global-shell', 'The canonical File 20 application-shell owner is not present in runtime inventory.', array( 'owners' => array() ) );
 		} elseif ( count( $known_shell_owners ) > 1 || 'file-20' !== $known_shell_owners[0] ) {

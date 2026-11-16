@@ -51,6 +51,22 @@ $valid_claim = [
 	'purpose'=>'release_evidence','institutional_role'=>'release_operator','plugin'=>'file-01','contract'=>SPF_CONTRACT_VERSION,'suspended'=>false,'revoked'=>false,
 ];
 $assert( SPF_Authorization::validate_claim( $valid_claim, 7, 'record_release', SPF_Authorization::CAP_RELEASE, [ 'object_id'=>'1.2.0' ], [ 'purpose'=>'release_evidence' ] ), 'Valid structured File 00 claim rejected.' );
+
+// F01-NFR-001 / File00 compatibility: SemVer build metadata never lowers
+// precedence. Valid 1.0.0+build must meet a stable 1.0.0 claim floor.
+$metadata_claim = $valid_claim;
+$metadata_claim['claim_version'] = '1.0.0+build.2';
+$assert( SPF_Registry::valid_semver( $metadata_claim['claim_version'] ),
+    'F01-NFR-001: metadata-bearing claim version was not valid SemVer.' );
+$assert( SPF_Authorization::validate_claim( $metadata_claim, 7, 'record_release',
+    SPF_Authorization::CAP_RELEASE, [ 'object_id'=>'1.2.0' ], [ 'purpose'=>'release_evidence' ] ),
+    'F01-NFR-001: valid claim 1.0.0+build.2 incorrectly rejected below stable 1.0.0.' );
+$pre_stable_claim = $valid_claim;
+$pre_stable_claim['claim_version'] = '1.0.0-alpha.1';
+$assert( ! SPF_Authorization::validate_claim( $pre_stable_claim, 7, 'record_release',
+    SPF_Authorization::CAP_RELEASE, [ 'object_id'=>'1.2.0' ], [ 'purpose'=>'release_evidence' ] ),
+    'F01-NFR-001: prerelease claim below 1.0.0 was admitted.' );
+
 $invalid = $valid_claim; $invalid['institutional_role']='administrator';
 $assert( ! SPF_Authorization::validate_claim( $invalid, 7, 'record_release', SPF_Authorization::CAP_RELEASE, [ 'object_id'=>'1.2.0' ], [ 'purpose'=>'release_evidence' ] ), 'Administrator improperly accepted as Release Operator.' );
 $invalid = $valid_claim; $invalid['expires_at']=time()-1;

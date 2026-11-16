@@ -352,6 +352,7 @@ final class SPF_Governance_Control_Plane {
 		$findings = array();
 		$owner_claims = array();
 		$module_identities = array();
+		$declared_shell_owners = array();
 		$route_claims = array();
 		foreach ( (array) ( $inventory['modules'] ?? array() ) as $module ) {
 			$key = sanitize_key( $module['module_key'] ?? '' );
@@ -365,10 +366,16 @@ final class SPF_Governance_Control_Plane {
 				$module_identities[ $key ] = true;
 			}
 			$manifest = (array) ( $module['manifest'] ?? $module );
+			if ( true === ( $manifest['global_shell_owner'] ?? false ) || true === ( $manifest['application_shell_owner'] ?? false ) ) {
+				$declared_shell_owners[] = $key;
+			}
 			foreach ( (array) ( $manifest['canonical_entities'] ?? array() ) as $entity ) {
 				$entity = sanitize_key( is_array( $entity ) ? ( $entity['key'] ?? '' ) : $entity );
 				if ( $entity ) {
 					$owner_claims[ $entity ][] = $key;
+					if ( in_array( $entity, array( 'global-shell', 'application-shell', 'global-navigation' ), true ) ) {
+						$declared_shell_owners[] = $key;
+					}
 				}
 			}
 			foreach ( (array) ( $manifest['writes'] ?? array() ) as $write ) {
@@ -398,7 +405,12 @@ final class SPF_Governance_Control_Plane {
 				$findings[] = self::finding( 'high', $code, $path, 'The canonical route has multiple declarations; every route path must be unique.', array( 'owners' => $owners, 'declaration_count' => count( $route_claims[ $path ] ) ) );
 			}
 		}
-		$known_shell_owners = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ) ) ) );
+		// The summary is not authoritative over individual owner declarations.
+		// Check BOTH: a stale caller-owned summary may hide a competing shell.
+		$known_shell_owners = array_values( array_unique( array_filter( array_merge(
+			array_map( 'sanitize_key', (array) ( $inventory['global_shell_owners'] ?? array() ) ),
+			$declared_shell_owners
+		) ) ) );
 		if ( empty( $known_shell_owners ) ) {
 			$findings[] = self::finding( 'critical', 'shell_owner_missing', 'global-shell', 'The canonical File 20 application-shell owner is not present in runtime inventory.', array( 'owners' => array() ) );
 		} elseif ( count( $known_shell_owners ) > 1 || 'file-20' !== $known_shell_owners[0] ) {

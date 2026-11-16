@@ -52,6 +52,30 @@ $unpinned = $right; unset($unpinned['commit_sha']);
 $rejected = SPF_Governance_Control_Plane::lint_pinned_repository_sources(array($left,$unpinned));
 $assert($rejected['pass']===false,'G-01: unpinned repository source was accepted.');
 
+
+ // F01-FUT-003 ownership integrity: distinct repositories cannot both claim
+ // the same canonical module, even with disjoint entities/routes.
+ $fixture_owner_a = $create('sabri/21-owner-a','file-21',$manifest('file-21','articles-a','/articles-a'));
+ $fixture_owner_b = $create('sabri/21-owner-b','file-21',$manifest('file-21','articles-b','/articles-b'));
+ $file20_shell = $create('sabri/20-auth-shell','file-20',$manifest('file-20','global-shell','/shell'));
+ $duplicate_pinned_owner = SPF_Governance_Control_Plane::lint_pinned_repository_sources(
+     array($file20_shell,$fixture_owner_a,$fixture_owner_b)
+ );
+ $assert($duplicate_pinned_owner['pass']===false
+     && in_array('source_owner_duplicate',array_column($duplicate_pinned_owner['findings'],'code'),true),
+     'F01-FUT-003: two pinned repositories claiming the same module were accepted.');
+ $duplicate_runtime_owner = SPF_Governance_Control_Plane::lint_architecture(array(
+     'modules'=>array(
+         array('module_key'=>'file-20','canonical_entities'=>array('global-shell')),
+         array('module_key'=>'file-21','canonical_entities'=>array()),
+         array('module_key'=>'file-21','canonical_entities'=>array()),
+     ),
+     'routes'=>array(), 'global_shell_owners'=>array('file-20')
+ ));
+ $assert($duplicate_runtime_owner['pass']===false
+     && in_array('duplicate_module_identity',array_column($duplicate_runtime_owner['findings'],'code'),true),
+     'F01-FUT-003: duplicate runtime module identity bypassed owner-conflict detection.');
+ 
 // V12 00–26 governance means 27 canonical modules, not 26. This exact-count
 // regression must fail on the former 26-descriptor limit, and must reject 28.
 $complete_canonical_descriptors = array();

@@ -100,7 +100,7 @@ d1830e1e727993792abee70b1a16f282a7828ef689e7b385d64e37524034b1bc  ./tests/tenth-
 12115d5c5d5ea131c7ceaa8df4652d5e5df43b2b42dd4d19d456b95d96c26232  ./tests/twelfth-ten-round-review-tests.php
 d14a8fe778bf3a8b78c48203d3715fd983a0f42bd07fa25ac6a2b476e20f6400  ./tests/unit-tests.php
 df032e55564248619b13435f4e79d533e9eadbc39b2081a2a8ff87d916db146b  ./tests/v12-semantic-evidence-register-tests.php
-3d7b3e96452d42eccd6151c0bacd1f37aa6020e58030926f8b8758f563ae3b6c  ./tests/v12-three-gaps-tests.php
+2c758e347d563eebf867c58b4ecf666f485186bd4c2ba153068e382d2439c35e  ./tests/v12-three-gaps-tests.php
 ab0f2d125ec09503305677fbd5385358492d8d68ce9e30d7d6df071e7a8b8947  ./tests/v123-evidence-register-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
 f2221ce7d0c878f644b4f96ee2b8ecc43d8c9abe45e85a348e3841d033ee533e  ./tools/v12-traceability-audit.php

@@ -92,6 +92,14 @@ final class SPF_Dependency_Resolver {
 				$result[] = array( 'module_key'=>$dependency['module_key'], 'available'=>false, 'code'=>'optional_manifest_missing', 'fail_mode'=>$dependency['fail_mode']??'' );
 				continue;
 			}
+			// Never advertise a companion as available if its persisted
+			// canonical owner/contract manifest is malformed or identity-drifted.
+			// Optional failure does not make the core File 01 registry unavailable.
+			if ( empty( $target['manifest_valid'] ) ) {
+				$result[] = array( 'module_key'=>$dependency['module_key'], 'available'=>false,
+					'code'=>'optional_manifest_invalid', 'fail_mode'=>$dependency['fail_mode']??'' );
+				continue;
+			}
 			$range = self::range_status( $target, $dependency );
 			if ( true !== $range ) {
 				$result[] = array_merge( $range, array( 'available'=>false, 'state'=>$target['state'], 'fail_mode'=>$dependency['fail_mode']??'' ) );

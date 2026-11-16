@@ -17,7 +17,7 @@ f85b12550c1ab265ef5860881f3f871104723bac27db1e2e8b17cd6177ac2c46  ./FUTURE-FOUND
 b7a7f72a0bdc496ff87bd9a784c34f4206de49a0894917f0928ec172de9d1bda  ./includes/class-spf-admin.php
 158f626750253c4ecb132a97ee8e7bc8470442f604077a57443dc18de075950a  ./includes/class-spf-audit.php
 f41b80cbc4b637709f405d7f837acfe8040f10b5c80618c9db1219fdbedfbdc9  ./includes/class-spf-authorization.php
-73e023764f7aa421b6b0bfb055c7899a6f1d6476e3df0188f5d8556c4ffd3fb6  ./includes/class-spf-dependency-resolver.php
+c0134d0a05a0cb856a424a25e403116c5281ab0069975525c433ab3b487417cc  ./includes/class-spf-dependency-resolver.php
 c569243b839404c913b9208d489f963cdda9fb4452d11aec984b50dd71c9506a  ./includes/class-spf-event-bus.php
 60d6e50938ca9a8c81a1dc764f301214517979c4a2e59703fd0eb9fc91847748  ./includes/class-spf-future-foundation.php
 9dee97ef2262a60fc6e90da00b7f8a0c15b5ddd8be92882de4e6a092f7367a2d  ./includes/class-spf-governance-control-plane.php
@@ -106,3 +106,4 @@ a06d80b0c383ffa976bce2d21ed7277be20ae76785fd9a2fc53937482d8bf96a  ./V12-43-REQUI
 19fbd34fd4173d12b91fe8019eb1b309756332ba9d222345d503798086bdcca4  ./V12.3-43-SEMANTIC-EVIDENCE-REGISTER-2026-11-14.json
 cb12d79f14911e3256fa7e360204620430e7f63aedbe9c1187a6446437222593  ./V12.3-DUPLICATE-MODULE-OWNER-AUDIT-2026-11-16.md
 8cb336ecaca2b1ec29e385702cc17d128eb70c089996482e9062710817ca4d4e  ./V12.3-FILE01-EVIDENCE-2026-11-14.md
+987d13baf15a6ed2ef6cadcffb778401f87e88c83c653471adda1017514af826  ./V12.3-OPTIONAL-MANIFEST-INTEGRITY-2026-11-16.md

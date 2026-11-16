@@ -31,6 +31,20 @@ $assert( ! $role->has_cap( SPF_Authorization::CAP_PURGE ), 'Administrator improp
 $modules = SPF_Registry::list_modules( [ 'limit'=>100 ] );
 $assert( 1 === count( $modules ) && 'file-01' === $modules[0]['module_key'], 'File 01 seeded placeholder module manifests.' );
 $assert( 27 === count( SPF_Installer::canonical_module_catalog() ), 'Canonical file catalog is incomplete.' );
+
+// F01-FR-001 V12.3: runtime registry metadata must not contradict the active
+// requirements baseline declared in the same exact source package.
+$foundation_source_list = (array) ( SPF_Installer::file01_manifest()['governing_sources'] ?? array() );
+$declares_v123_governing = (bool) array_filter(
+    $foundation_source_list,
+    static fn( $source ) => is_string( $source )
+        && str_contains( $source, 'Sabri Website Master Plan V12.3' )
+);
+$assert( $declares_v123_governing,
+    'F01-FR-001: runtime module manifest still omits governing V12.3 requirements baseline.' );
+$assert( count( $foundation_source_list ) >= 4,
+    'F01-FR-001: historical source lineage was unexpectedly discarded.' );
+
 $assert( 5 === count( SPF_Registry::list_contracts( [ 'limit'=>100 ] ) ), 'Built-in contract count mismatch.' );
 $assert( 2 === count( SPF_Registry::list_routes() ), 'Foundation route count mismatch.' );
 $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Founder option remains.' );

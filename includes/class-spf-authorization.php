@@ -145,7 +145,10 @@ final class SPF_Authorization {
 		if ( ! is_bool( $claim['allowed'] ) || true !== $claim['allowed'] ) {
 			return false;
 		}
-		if ( ! SPF_Registry::valid_semver( (string) $claim['claim_version'] ) || version_compare( (string) $claim['claim_version'], '1.0.0', '<' ) ) {
+		// SemVer build metadata never changes precedence: PHP version_compare()
+		// incorrectly treats 1.0.0+build.2 as older than stable 1.0.0.
+		$claim_precedence = SPF_Registry::compare_semver( (string) $claim['claim_version'], '1.0.0' );
+		if ( null === $claim_precedence || $claim_precedence < 0 ) {
 			return false;
 		}
 		$claim_id = trim( (string) $claim['claim_id'] );

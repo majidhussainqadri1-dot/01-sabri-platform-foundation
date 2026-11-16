@@ -37,6 +37,14 @@ $assert($same_owner_route['pass']===false && in_array('duplicate_route_declarati
 
 // F01-FUT-003 hidden shell-owner claim: a caller-provided summary cannot
 // suppress a competing canonical module's explicit shell ownership flag.
+// F01-FUT-003 acceptance-side invariant: File20 can prove its own sole
+// shell ownership without trusting a stale or omitted summary list.
+$sole_declared_shell=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>[],
+]);
+$assert(true===$sole_declared_shell['pass'],
+ 'F01-FUT-003: legitimate self-declared File20 shell owner rejected.');
 $hidden_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
  'modules'=>[
   ['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true],
@@ -105,6 +113,14 @@ $assert($compat['breaking_change']===true,'Contract breaking changes missed.');
 $assert($compat['major_bump_ok']===true,'Major bump rejected for breaking change.');
 // F01-FUT-007: absent or malformed schemas are unknown evidence, not proof
 // that two independent contract versions are compatible.
+// F01-FUT-007 acceptance-side invariant: deliberately empty schemas are
+// trustworthy when explicitly declared; only absent/malformed input fails.
+$empty_explicit_schemas=SPF_Platform_Engineering::contract_compatibility(
+ ['contract_version'=>'1.0.0','schema'=>[]],
+ ['contract_version'=>'1.0.1','schema'=>[]]);
+$assert(true===$empty_explicit_schemas['compatible']
+ && false===$empty_explicit_schemas['breaking_change'],
+ 'F01-FUT-007: valid explicitly empty contract schemas were rejected.');
 $compat_missing_schema=SPF_Platform_Engineering::contract_compatibility(
  ['contract_version'=>'1.0.0'],['contract_version'=>'1.0.1']);
 $assert(false===$compat_missing_schema['compatible']

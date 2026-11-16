@@ -168,6 +168,23 @@ $duplicate_dep_case = SPF_Platform_Engineering::plan_release_train([
 ]);
 $assert( false === $duplicate_dep_case['valid'] && in_array( 'duplicate_dependency', array_column( $duplicate_dep_case['manifest_errors'], 'code' ), true ), 'Release train silently accepted duplicate required dependency declarations.' );
 
+// F01-FUT-010 fail-closed manifest parsing: silently defaulting a missing or
+// wrong-typed "required" field to [] fabricates a dependency-free release train.
+$train_missing_required = SPF_Platform_Engineering::plan_release_train([
+    ['module_key'=>'file-01','software_version'=>'2.0.1','required'=>[]],
+    ['module_key'=>'file-20','software_version'=>'1.4.17'],
+]);
+$assert(false === $train_missing_required['valid']
+    && in_array('required_dependencies_missing',array_column($train_missing_required['manifest_errors'],'code'),true),
+    'F01-FUT-010: missing required dependency declaration accepted as empty.');
+$train_wrong_type_required = SPF_Platform_Engineering::plan_release_train([
+    ['module_key'=>'file-01','software_version'=>'2.0.1','required'=>[]],
+    ['module_key'=>'file-20','software_version'=>'1.4.17','required'=>'file-01'],
+]);
+$assert(false === $train_wrong_type_required['valid']
+    && in_array('required_dependencies_invalid',array_column($train_wrong_type_required['manifest_errors'],'code'),true),
+    'F01-FUT-010: scalar required dependency declaration silently coerced to array.');
+
 $assert($train['valid']===true,'Valid release train rejected.');
 $assert(array_search('file-01',$train['order'],true)<array_search('file-20',$train['order'],true),'Release train dependency order wrong.');
 $bad_version=SPF_Platform_Engineering::plan_release_train([['module_key'=>'file-02','software_version'=>'banana','required'=>[]]]);

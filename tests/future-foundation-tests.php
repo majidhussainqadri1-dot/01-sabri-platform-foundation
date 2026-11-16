@@ -26,9 +26,9 @@ $assert($impact['risk_band']==='high','High amendment impact not high risk.');
 $assert(in_array('rollback',$impact['required_test_gates'],true),'Rollback gate omitted.');
 
 $lint=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[
- ['module_key'=>'file-a','canonical_entities'=>['profile']],
- ['module_key'=>'file-b','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-a']]],
-],'routes'=>[['route_path'=>'/same','owner_module'=>'file-a'],['route_path'=>'/same','owner_module'=>'file-b']],'global_shell_owners'=>['file-20','file-x']]);
+ ['module_key'=>'file-21','canonical_entities'=>['profile']],
+ ['module_key'=>'file-22','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-21']]],
+],'routes'=>[['route_path'=>'/same','owner_module'=>'file-21'],['route_path'=>'/same','owner_module'=>'file-22']],'global_shell_owners'=>['file-20','file-x']]);
 $codes=array_column($lint['findings'],'code');
 $assert($lint['pass']===false,'Architecture linter missed conflicts.');
 foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}

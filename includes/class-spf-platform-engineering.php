@@ -312,6 +312,13 @@ final class SPF_Platform_Engineering {
 			}
 			$version=sanitize_text_field($manifest['software_version']??''); if(!SPF_Registry::valid_semver($version)){$manifest_errors[]=array('module_key'=>$key,'code'=>'software_version_invalid','value'=>$version);} $versions[$key]=$version; $dependencies[$key]=array(); $ranges[$key]=array();
 			foreach((array)($manifest['required']??array()) as $dependency){
+				// Retain graph diagnostics for legacy entries, but never
+				// certify an unversioned or nonstructured dependency edge.
+				if(!is_array($dependency)){
+					$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_declaration_invalid');
+				}elseif(!array_key_exists('minimum_version',$dependency)){
+					$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_minimum_missing');
+				}
 				if(is_array($dependency)){$raw_dep_key=$dependency['module_key']??'';$minimum=sanitize_text_field($dependency['minimum_version']??'0.0.0');$maximum=sanitize_text_field($dependency['maximum_version']??'');}else{$raw_dep_key=$dependency;$minimum='0.0.0';$maximum='';}$dep_key=is_string($raw_dep_key)?sanitize_key($raw_dep_key):'';
 				if($raw_dep_key!==$dep_key||!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$dep_key)){$manifest_errors[]=array('module_key'=>$key,'code'=>'dependency_key_invalid','value'=>$dep_key);continue;}
 				if($dep_key===$key){$manifest_errors[]=array('module_key'=>$key,'dependency'=>$dep_key,'code'=>'self_dependency');}

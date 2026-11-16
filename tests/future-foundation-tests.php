@@ -45,6 +45,25 @@ $sole_declared_shell=SPF_Governance_Control_Plane::lint_architecture([
 ]);
 $assert(true===$sole_declared_shell['pass'],
  'F01-FUT-003: legitimate self-declared File20 shell owner rejected.');
+// F01-FUT-003: incomplete or wrongly typed canonical write declarations
+// cannot silently vanish from the ownership-audit results.
+$missing_write_owner=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],
+   'writes'=>[['operation'=>'create']],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$missing_write_owner['pass']
+ && in_array('invalid_write_owner_declaration',array_column($missing_write_owner['findings'],'code'),true),
+ 'F01-FUT-003: missing write owner was silently treated as a clean architecture.');
+$scalar_write_owner=SPF_Governance_Control_Plane::lint_architecture([
+ 'modules'=>[['module_key'=>'file-20','canonical_entities'=>['global-shell'],
+   'writes'=>['file-21'],'global_shell_owner'=>true]],
+ 'routes'=>[], 'global_shell_owners'=>['file-20'],
+]);
+$assert(false===$scalar_write_owner['pass']
+ && in_array('invalid_write_owner_declaration',array_column($scalar_write_owner['findings'],'code'),true),
+ 'F01-FUT-003: scalar write declaration bypassed canonical write ownership checks.');
+
 $hidden_shell_claim=SPF_Governance_Control_Plane::lint_architecture([
  'modules'=>[
   ['module_key'=>'file-20','canonical_entities'=>['global-shell'],'global_shell_owner'=>true],

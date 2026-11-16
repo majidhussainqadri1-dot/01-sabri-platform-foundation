@@ -11,6 +11,7 @@ php tests/future-foundation-tests.php
 php tests/v12-three-gaps-tests.php
 php tests/v12-semantic-evidence-register-tests.php
 php tests/v123-evidence-register-tests.php
+php tests/v123-20261116-evidence-register-tests.php
 php tests/third-ten-round-review-tests.php
 php tests/fourth-ten-round-review-tests.php
 php tests/fifth-ten-round-review-tests.php

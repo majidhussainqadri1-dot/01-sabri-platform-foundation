@@ -333,6 +333,45 @@ if ( is_array( $original_module_row ) ) {
 	$assert( true === $healthy_module['ready'], 'Exact restored canonical registry did not recover readiness.' );
 }
 
+// F01-FR-003: an optional companion with invalid persisted manifest must
+// never appear available. Entire fixture runs only in disposable WP/MySQL CI.
+$optional_owner_key = 'file-20';
+$assert( ! SPF_Registry::get_module( $optional_owner_key ), 'Optional integrity probe cannot replace a real File 20 owner.' );
+$synthetic_owner = SPF_Installer::file01_manifest();
+$synthetic_owner['module_key'] = $optional_owner_key;
+$synthetic_owner['owner_file'] = '20';
+$synthetic_owner['owner_name'] = 'CI Only: Synthetic Shell Provider';
+$synthetic_owner['slug'] = 'ci-file20-optional';
+$synthetic_owner['namespace_prefix'] = 'CI_FILE20_';
+$synthetic_owner['software_version'] = '1.4.17';
+$synthetic_owner['contract_version'] = '1.0.0';
+$synthetic_owner['optional'] = array();
+$synthetic_owner['routes'] = array();
+$synthetic_owner['canonical_entities'] = array('global-shell');
+$synthetic_owner['global_shell_owner'] = true;
+$synthetic_owner['application_shell_owner'] = true;
+$synthetic_registration = SPF_Installer::with_internal_seed(
+    static fn() => SPF_Registry::register_manifest( $synthetic_owner, array('purpose'=>'ci_optional_integrity_fixture') )
+);
+$assert( ! is_wp_error( $synthetic_registration ), 'Cannot create isolated optional dependency fixture.' );
+if ( ! is_wp_error( $synthetic_registration ) ) {
+    try {
+        $normal_optional = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $normal_file20 = array_column( $normal_optional['optional_dependencies'], null, 'module_key' )['file-20'] ?? array();
+        $assert( true === ( $normal_file20['available'] ?? false ), 'Healthy synthetic File20 should be optional-available.' );
+        $wpdb->update( $modules_table, array('manifest_json'=>'{invalid-json'), array('module_key'=>$optional_owner_key) );
+        $corrupt_optional = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $corrupt_file20 = array_column( $corrupt_optional['optional_dependencies'], null, 'module_key' )['file-20'] ?? array();
+        $assert( true === ( $corrupt_optional['ready'] ?? false ), 'Optional dependency corruption should not make the foundation core unavailable.' );
+        $assert( false === ( $corrupt_file20['available'] ?? true )
+            && 'optional_manifest_invalid' === ( $corrupt_file20['code'] ?? '' ),
+            'F01-FR-003: malformed optional owner manifest was advertised as available.' );
+    } finally {
+        $wpdb->delete( $modules_table, array('module_key'=>$optional_owner_key) );
+        $assert( ! SPF_Registry::get_module( $optional_owner_key ), 'Disposable File20 test owner was not removed.' );
+    }
+}
+
 $bad_manifest = SPF_Registry::get_module( 'file-01' );
 $bad_manifest['canonical_entities'] = [ 'Not Canonical' ];
 $bad_manifest['writes'] = [];

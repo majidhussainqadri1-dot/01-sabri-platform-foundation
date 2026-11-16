@@ -289,6 +289,15 @@ final class SPF_Platform_Engineering {
 			$raw_key=$manifest['module_key']??''; $key=is_string($raw_key)?sanitize_key($raw_key):'';
 			if($raw_key!==$key||!preg_match('/^file-(?:0[0-9]|1[0-9]|2[0-6])$/',$key)){$manifest_errors[]=array('index'=>$index,'code'=>'module_key_invalid','value'=>$key);continue;}
 			if(isset($seen[$key])){$manifest_errors[]=array('module_key'=>$key,'code'=>'duplicate_module_key');continue;} $seen[$key]=true;
+			// The planner may not invent a dependency-free source manifest.
+			// Required edges must be explicitly declared as an array, even
+			// when the owning module intentionally has no prerequisites.
+			if(!array_key_exists('required',$manifest)){
+				$manifest_errors[]=array('module_key'=>$key,'code'=>'required_dependencies_missing');continue;
+			}
+			if(!is_array($manifest['required'])){
+				$manifest_errors[]=array('module_key'=>$key,'code'=>'required_dependencies_invalid');continue;
+			}
 			$version=sanitize_text_field($manifest['software_version']??''); if(!SPF_Registry::valid_semver($version)){$manifest_errors[]=array('module_key'=>$key,'code'=>'software_version_invalid','value'=>$version);} $versions[$key]=$version; $dependencies[$key]=array(); $ranges[$key]=array();
 			foreach((array)($manifest['required']??array()) as $dependency){
 				if(is_array($dependency)){$raw_dep_key=$dependency['module_key']??'';$minimum=sanitize_text_field($dependency['minimum_version']??'0.0.0');$maximum=sanitize_text_field($dependency['maximum_version']??'');}else{$raw_dep_key=$dependency;$minimum='0.0.0';$maximum='';}$dep_key=is_string($raw_dep_key)?sanitize_key($raw_dep_key):'';

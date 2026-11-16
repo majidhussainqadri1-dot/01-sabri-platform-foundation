@@ -322,6 +322,24 @@ if ( is_array( $original_module_row ) ) {
 		$mismatched_manifest = SPF_Dependency_Resolver::readiness( 'file-01' );
 		$assert( false === $mismatched_manifest['ready'] && 'module_manifest_invalid' === $mismatched_manifest['code'], 'Manifest/version row identity drift was misread as ready.' );
 
+
+        // Owner identity and operational-state drift must fail closed too.
+        // Both are stored alongside manifest_json and cannot be trusted from
+        // a record that contradicts its own canonical registry columns.
+        $drifted_owner = json_decode( $original_module_row['manifest_json'], true );
+        $drifted_owner['owner_file'] = '20';
+        $wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $drifted_owner ) ), array( 'module_key'=>'file-01' ) );
+        $owner_mismatch = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $assert( false === $owner_mismatch['ready'] && 'module_manifest_invalid' === $owner_mismatch['code'],
+            'F01-FR-002: manifest owner_file drift was wrongly treated as ready.' );
+
+        $drifted_state = json_decode( $original_module_row['manifest_json'], true );
+        $drifted_state['state'] = 'suspended';
+        $wpdb->update( $modules_table, array( 'manifest_json'=>wp_json_encode( $drifted_state ) ), array( 'module_key'=>'file-01' ) );
+        $state_mismatch = SPF_Dependency_Resolver::readiness( 'file-01' );
+        $assert( false === $state_mismatch['ready'] && 'module_manifest_invalid' === $state_mismatch['code'],
+            'F01-FR-002: manifest/row state drift was wrongly treated as ready.' );
+
 		$wpdb->update( $modules_table, array( 'manifest_json'=>$original_module_row['manifest_json'], 'software_version'=>'not-semver' ), array( 'module_key'=>'file-01' ) );
 		$invalid_runtime_version = SPF_Dependency_Resolver::readiness( 'file-01' );
 		$assert( false === $invalid_runtime_version['ready'] && 'module_version_invalid' === $invalid_runtime_version['code'], 'Malformed persisted runtime SemVer was misread as ready.' );

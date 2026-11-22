@@ -9,6 +9,7 @@ while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -ty
 php tests/unit-tests.php
 php tests/file01-live-parity-regression.php
 php tests/file01-crossfile-contract-regressions.php
+php tests/file01-crossfile-matrix-tests.php
 php tests/v12-three-gaps-tests.php
 php tools/v12-traceability-audit.php
 php tests/future-foundation-tests.php

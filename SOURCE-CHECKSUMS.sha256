@@ -85,7 +85,7 @@ eca0a4ac3b22623164666bdba47bcf7e7bd69a5b26552c798021ee1cc3e6d359  ./tests/fresh-
 9996f4ea0c48c015aca9e625c825fb2a7071bacbe3019d14496aed4b39107712  ./tests/live-reconciliation-regression-tests.php
 851e37cd940e34a23b13535ca66b5968c90357f7e1a07cc1625d02bf5c455abc  ./tests/release-handoff-contract-tests.php
 cfcec889006e4d099e5ba0e3b407518f90bc3cd84226b822306cea5bd4bcfd12  ./tests/schema-tests.php
-38560cdf8d4f76e28e5b79e912f2317aa88b327a36fb0045c830a1025079e2a4  ./tests/security-tests.php
+b9d1884c54b739e559cadc31b59c087cce0b89931da340fbff1766dbe4ecac8e  ./tests/security-tests.php
 2c5c82b596418ab6410bcc582b3bdfc986f3ba3bbfa0bfabc3701447fcf0850e  ./tests/seventh-ten-round-review-tests.php
 b710cbcaa0f89c0529df7a2ab3e0a4a50a2d815b7a6e968d5d2eac39805d81d9  ./tests/sixth-ten-round-review-tests.php
 f2d035b8f3105fbb61a23501dd92331386590a763f5c0fe3fdabdc1eb60c674a  ./tests/source-quality-tests.php

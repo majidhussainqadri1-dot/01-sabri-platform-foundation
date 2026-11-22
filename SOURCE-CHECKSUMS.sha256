@@ -72,7 +72,7 @@ d4ddaa5203eef9bdc109ea1b60be5d2c94ad2bcc91d243eb1cb6146704b5fa4f  ./TENTH-FRESH-
 1d7f1bc67a1d18d12fccf22a809eef9e8ba975f0fd82d1a5704aa0df26c061bf  ./tests/bootstrap-minimal.php
 d60c99e3ec839ad92a4b6cefa1cd901e8b77b62c6a4b261976d3b5d52129f60b  ./tests/contract-tests.php
 6b97d63aff30c987f5dc820cf8d6a49bf2f6364bd506642088212448f184cc9f  ./tests/eighth-ten-round-review-tests.php
-f241acf8ff89b78aa26b426e1046cbf3a73d3cf8257b212466d6e454fa9e0939  ./tests/eleventh-ten-round-review-tests.php
+d84d373bac6252736d01a9c8270d2acfe0a4d78afc8248207ec5c5ae49e0c589  ./tests/eleventh-ten-round-review-tests.php
 d19d240bbaec0229555fda8f0d105808aa9c691bd72f02cba60abf2d1d7bbaff  ./tests/event-payload-privacy.php
 d2db041f1f1487f3bb7013cd344fce2f707b5d6e8ef32c08c2dd30e03d8f781f  ./tests/fifth-ten-round-review-tests.php
 1ad8ec2f79843f9b43a80812a043c7355beba29a82ba50ee08786c2f369de305  ./tests/file01-crossfile-contract-regressions.php

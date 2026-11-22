@@ -41,6 +41,8 @@ php tests/security-tests.php
 php tests/contract-tests.php
 
 printf 'Source checksum manifest\n'
+php tools/validate-source-checksums.php --self-test
+php tools/validate-source-checksums.php
 sha256sum --check SOURCE-CHECKSUMS.sha256
 printf 'Closed-world source inventory\n'
 actual_inventory="$(mktemp)"

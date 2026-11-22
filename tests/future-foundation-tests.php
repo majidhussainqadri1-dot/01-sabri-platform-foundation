@@ -7,7 +7,7 @@ $assert=static function(bool $c,string $m)use(&$assertions,&$failures):void{$ass
 $features=SPF_Future_Foundation::feature_catalog();
 $assert(count($features)===18,'18 enhancements missing.');
 $assert(isset($features['F01-FUT-001'],$features['F01-FUT-018']),'Stable future IDs incomplete.');
-$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='coded'))===18,'Not all future enhancements coded.');
+$assert(count(array_filter($features,static fn($f)=>($f['status']??'')==='implementation_present_unverified'))===18,'Declared future implementations must not be presented as independently coded-and-tested.');
 
 $policies=SPF_Governance_Control_Plane::default_policies();
 $assert(SPF_Governance_Control_Plane::evaluate_policy('claim_global_shell',[],$policies)['decision']==='deny','Duplicate shell not denied.');
@@ -25,9 +25,9 @@ $assert($impact['risk_band']==='high','High amendment impact not high risk.');
 $assert(in_array('rollback',$impact['required_test_gates'],true),'Rollback gate omitted.');
 
 $lint=SPF_Governance_Control_Plane::lint_architecture(['modules'=>[
- ['module_key'=>'file-a','canonical_entities'=>['profile']],
- ['module_key'=>'file-b','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-a']]],
-],'routes'=>[['route_path'=>'/same','owner_module'=>'file-a'],['route_path'=>'/same','owner_module'=>'file-b']],'global_shell_owners'=>['file-20','file-x']]);
+ ['module_key'=>'file-01','canonical_entities'=>['profile']],
+ ['module_key'=>'file-20','canonical_entities'=>['profile'],'writes'=>[['owner_module'=>'file-01']]],
+],'routes'=>[['route_path'=>'/same','owner_module'=>'file-01'],['route_path'=>'/same','owner_module'=>'file-20']],'global_shell_owners'=>['file-20','file-25']]);
 $codes=array_column($lint['findings'],'code');
 $assert($lint['pass']===false,'Architecture linter missed conflicts.');
 foreach(['duplicate_canonical_owner','foreign_direct_write','duplicate_route_owner','shell_owner_violation'] as $code){$assert(in_array($code,$codes,true),'Missing linter code '.$code);}
@@ -46,11 +46,12 @@ $trace=SPF_Governance_Control_Plane::build_traceability_report([['id'=>'REQ-1'],
  'REQ-2'=>['design'=>true,'code'=>true,'test'=>true,'package'=>true,'staging'=>true,'approval'=>true,'live'=>true,'operational'=>true],
 ]);
 $assert($trace['total']===2,'Duplicate requirement IDs inflated trace total.');
-$assert($trace['coded_complete']===2,'Trace coded count wrong.');
-$assert($trace['release_ready']===2,'Trace release-ready count wrong.');
-$assert($trace['live_deployed']===1,'Trace live count wrong.');
-$assert($trace['production_complete']===1,'Trace operational completion truth wrong.');
+$assert($trace['coded_complete']===0,'Unverified trace evidence was counted as coded.');
+$assert($trace['release_ready']===0,'Unverified trace evidence was counted as release-ready.');
+$assert($trace['live_deployed']===0,'Unverified trace evidence was counted as live-deployed.');
+$assert($trace['production_complete']===0,'Unverified trace evidence was counted as production-complete.');
 $assert($trace['duplicate_requirement_ids']===['REQ-1'],'Duplicate requirement IDs not reported.');
+$assert($trace['coded_completion_claim_allowed']===false && $trace['v12_requirement_coverage_complete']===false,'Unverified or incomplete V12 coverage was allowed to claim coded completion.');
 
 $scaffold=SPF_Platform_Engineering::scaffold_module(['module_key'=>'file-26','owner_file'=>'26','owner_name'=>'Example Module','slug'=>'example-module','prefix'=>'EXM','required'=>[['module_key'=>'file-01','minimum_version'=>'2.0.0']]]);
 $assert(!is_wp_error($scaffold),'Structured golden-path dependency rejected.');
@@ -160,7 +161,7 @@ $assert(str_contains($gov_source,"'future-policy-catalog'"),'Policy catalog conc
 $assert(str_contains($eng_source,"'future-event-schema-registry'") && str_contains($eng_source,"'future-config-baselines'"),'Future registries lack concurrency locks.');
 $assert(str_contains($eng_source,"'contracts'=>\$contract_catalog") && str_contains($eng_source,"'routes'=>\$route_catalog"),'Developer service catalog omits contract/route summaries.');
 $dependency_manifest=json_decode(file_get_contents(dirname(__DIR__).'/DEPENDENCY-MANIFEST.json'),true);
-$assert(($dependency_manifest['software_version']??'')==='2.0.0'&&($dependency_manifest['contract_version']??'')==='2.0.0','Dependency manifest version identity drift remains.');
+$assert(($dependency_manifest['software_version']??'')==='2.0.1'&&($dependency_manifest['contract_version']??'')==='2.0.0','Dependency manifest version identity drift remains.');
 $installer_source=file_get_contents(dirname(__DIR__).'/includes/class-spf-installer.php');
 $assert(str_contains($installer_source,"'policy_as_code'")&&str_contains($installer_source,"'ai_governance_advisory'"),'File 01 v2 manifest omits Future Foundation capabilities.');
 $assert(str_contains($installer_source,"'25'=>'Sabri Unified Global Visual Experience and Design System'")&&str_contains($installer_source,"'26'=>'Search, Discovery and Ranking'"),'Canonical module catalog is stale against the latest central plan.');

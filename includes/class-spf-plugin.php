@@ -140,8 +140,27 @@ final class SPF_Plugin {
 			'health' => $health,
 			'health_hash' => is_array( $health ) ? SPF_Runtime::hash( $health ) : '',
 		);
-		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, $operational_context );
-		$operational = self::validate_operational_claim( $operational_claim, $operational_context );
+		// A historical immutable release record is NOT proof that this exact
+		// active source/package is deployed. Never inherit a prior version's
+		// CI, staging or deployment claims across an upgrade or rollback.
+		$release_current = is_array( $latest_release ) && ! empty( $latest_release )
+			&& hash_equals( SPF_VERSION, (string) ( $latest_release['software_version'] ?? '' ) )
+			&& hash_equals( SPF_SCHEMA_VERSION, (string) $schema )
+			&& hash_equals( (string) $schema, (string) ( $latest_release['schema_version'] ?? '' ) )
+			&& hash_equals( SPF_VERSION, (string) get_option( SPF_Installer::VERSION_OPTION, '' ) );
+		$parity_context = array(
+			'release_id' => (string) ( $latest_release['release_id'] ?? '' ),
+			'package_checksum' => (string) ( $latest_release['checksum_sha256'] ?? '' ),
+			'source_commit' => (string) ( $latest_release['commit_sha'] ?? '' ),
+			'software_version' => SPF_VERSION,
+			'schema_version' => (string) $schema,
+			'release_status' => $release_status,
+		);
+		$parity_claim = $release_current && 'deployed' === $release_status
+			? apply_filters( 'spf_deployed_artifact_parity_evidence', null, $parity_context ) : null;
+		$live_verified = $release_current && self::validate_deployment_parity_claim( $parity_claim, $parity_context );
+		$operational_claim = $live_verified ? apply_filters( 'spf_operational_acceptance_status', null, $operational_context ) : null;
+		$operational = $live_verified && self::validate_operational_claim( $operational_claim, $operational_context );
 		return array(
 			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
 			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),
@@ -153,14 +172,51 @@ final class SPF_Plugin {
 			'completion_statuses'=>array(
 				'specified'=>true,
 				'coded'=>true,
-				'packaged'=>in_array($release_status,array('built','verified','staged','approved','deployed'),true),
-				'automated_qa_green'=>in_array($release_status,array('verified','staged','approved','deployed'),true),
-				'staging_accepted'=>in_array($release_status,array('approved','deployed'),true),
-				'live_deployed'=>'deployed'===$release_status,
+				'packaged'=>$release_current && in_array($release_status,array('built','verified','staged','approved','deployed'),true),
+				'automated_qa_green'=>$release_current && in_array($release_status,array('verified','staged','approved','deployed'),true),
+				'staging_accepted'=>$release_current && in_array($release_status,array('approved','deployed'),true),
+				'release_record_says_deployed'=>'deployed'===$release_status,
+				'live_deployed'=>$live_verified,
 				'operational'=>$operational,
 			),
 			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
+	}
+
+	/**
+	 * Verify fresh, independently observed installed-package parity. A stored
+	 * release transition or a previous source commit cannot satisfy this gate.
+	 */
+	private static function validate_deployment_parity_claim( $claim, array $context ) {
+		if ( 'deployed' !== ( $context['release_status'] ?? '' ) || ! is_array( $claim ) || true !== ( $claim['verified'] ?? false ) ) {
+			return false;
+		}
+		$checksum = strtolower( (string) ( $context['package_checksum'] ?? '' ) );
+		$source = strtolower( (string) ( $context['source_commit'] ?? '' ) );
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $checksum ) || ! preg_match( '/^[a-f0-9]{40,64}$/', $source ) ) {
+			return false;
+		}
+		$identity = array(
+			'release_id' => (string) ( $context['release_id'] ?? '' ),
+			'package_checksum' => $checksum,
+			'source_commit' => $source,
+			'software_version' => (string) ( $context['software_version'] ?? '' ),
+			'schema_version' => (string) ( $context['schema_version'] ?? '' ),
+		);
+		foreach ( $identity as $key => $expected ) {
+			$actual = (string) ( $claim[ $key ] ?? '' );
+			if ( '' === $expected || ! hash_equals( $expected, in_array( $key, array( 'package_checksum','source_commit' ), true ) ? strtolower( $actual ) : $actual ) ) {
+				return false;
+			}
+		}
+		if ( 'production' !== ( $claim['environment'] ?? '' ) || '' === trim( (string) ( $claim['verifier'] ?? '' ) ) ) {
+			return false;
+		}
+		$observed = strtotime( (string) ( $claim['observed_at'] ?? '' ) );
+		$expires = strtotime( (string) ( $claim['expires_at'] ?? '' ) );
+		return false !== $observed && false !== $expires
+			&& $observed <= time() + 60 && $observed >= time() - 900
+			&& $expires > time() && $expires <= $observed + 900;
 	}
 
 	private static function validate_operational_claim( $claim, array $context ) {

@@ -1,3 +1,12 @@
+# 2.0.2 — File 01 cross-file contract convergence (DRAFT; source only; 2026-11-22)
+
+- XF-001: Health now demands valid, supported-state manifests and optional readiness; File00 runtime version symbols cannot impersonate the claim-provider hook.
+- XF-002: The File01 event manifest enumerates all 20 observed File01-owned emitted event identities (including conditional owner registration/deactivation).
+- XF-003: File25 is an independent visual health observer, File26 an optional dependency reported by the Dependency Resolver; no search or visual owner is moved into File01.
+- XF-004: Outbox status `sent` means local WordPress dispatch only; consumer receipt/remote delivery remains separately unverified and requires owner acceptance.
+- Added 65 focused PHP source assertions and a 32-module/273-assertion contract matrix.
+- Software version moves to 2.0.2; schema remains 1.2.0, contract remains 2.0.0. No automatic DB reseeding is claimed; staged activation/reconciliation and exact deployed parity remain pending.
+
 ## 2026-11-14 V12.3 File 01 telemetry sensitive-label mitigation (Draft source candidate)
 
 - Pre-fix Run #940 proved eight synthetic credential-labelled values retained in disposable WordPress metric options and serialized data. No real patient or credential material used.

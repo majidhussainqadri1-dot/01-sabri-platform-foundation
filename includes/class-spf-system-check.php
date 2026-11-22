@@ -139,18 +139,48 @@ final class SPF_System_Check {
 
 	private static function integration_checks() {
 		$checks = array();
+		// Health checks are advisory and never create File 00 authorization.
+		// Require an actual adapter, a coherent registered owner manifest and
+		// the same optional-dependency availability rules used by readiness().
 		$providers = array(
-			'file00' => array( 'module'=>'file-00','available'=>has_filter('spf_file00_authorization_claim') || defined('SMC_VERSION') || function_exists('smc_membership_contract'),'message'=>'File 00 versioned authorization claims are unavailable; sensitive operations remain fail-closed.' ),
-			'file20' => array( 'module'=>'file-20','available'=>function_exists('sabri_shell_register_route') || has_action('sabri_shell_register_provider'),'message'=>'File 20 shell provider is unavailable; no public route cutover is authorized.' ),
-			'file21' => array( 'module'=>'file-21','available'=>has_filter('spf_owner_reconciliation_plan'),'message'=>'File 21 legacy reconciliation planning adapter is unavailable.' ),
-			'file24' => array( 'module'=>'file-24','available'=>has_filter('spf_verify_file24_purge_assurance') || has_filter('spf_verify_backup_restore_evidence'),'message'=>'File 24/assurance evidence adapters are unavailable.' ),
-			'file25' => array( 'module'=>'file-25','available'=>has_action('sabri_public_ui_register_component') || has_filter('sabri_public_ui_component_contract'),'message'=>'File 25 visual component contract is unavailable; File 01 exposes no replacement public UI.' ),
+			'file00' => array( 'module'=>'file-00','available'=> (bool) has_filter('spf_file00_authorization_claim'),'message'=>'File 00 claim provider or a structurally ready manifest is unavailable; sensitive actions remain fail-closed.' ),
+			'file20' => array( 'module'=>'file-20','available'=>function_exists('sabri_shell_register_route') || (bool) has_action('sabri_shell_register_provider'),'message'=>'File 20 shell provider is unavailable; no public route cutover is authorized.' ),
+			'file21' => array( 'module'=>'file-21','available'=>(bool) has_filter('spf_owner_reconciliation_plan'),'message'=>'File 21 reversible owner reconciliation adapter is unavailable.' ),
+			'file24' => array( 'module'=>'file-24','available'=>(bool) has_filter('spf_verify_file24_purge_assurance') || (bool) has_filter('spf_verify_backup_restore_evidence'),'message'=>'File 24 assurance evidence adapters are unavailable.' ),
+			// File 25 is a presentation-only observation, not a File 01 dependency.
+			'file25' => array( 'module'=>'file-25','available'=>(bool) has_action('sabri_public_ui_register_component') || (bool) has_filter('sabri_public_ui_component_contract'),'message'=>'File 25 visual component contract is unavailable; File 01 exposes no replacement public UI.' ),
 		);
+		$optional = array();
+		$foundation = SPF_Dependency_Resolver::readiness( 'file-01' );
+		foreach ( (array) ( $foundation['optional_dependencies'] ?? array() ) as $dependency ) {
+			if ( is_array( $dependency ) && is_string( $dependency['module_key'] ?? null ) ) {
+				$optional[ $dependency['module_key'] ] = $dependency;
+			}
+		}
 		foreach ( $providers as $code => $provider ) {
 			$manifest = SPF_Registry::get_module( $provider['module'] );
-			$registered = is_array($manifest) && !in_array($manifest['state'],array('unregistered','retired','suspended'),true);
-			$ok = $provider['available'] && $registered;
-			$checks[] = self::check( $code.'_contract', $ok, $ok?($manifest['contract_version']??'registered'):($provider['available']?'adapter-without-manifest':'unavailable'), $provider['message'], 'warning' );
+			$state = is_array($manifest) && is_string($manifest['state']??null) ? $manifest['state'] : 'unregistered';
+			$valid = is_array($manifest) && true === ($manifest['manifest_valid']??false)
+				&& SPF_Registry::valid_semver($manifest['software_version']??null)
+				&& SPF_Registry::valid_semver($manifest['contract_version']??null)
+				&& in_array($state,array('registered','compatible','active'),true);
+			// File 25 is not in the Foundation optional dependencies. It is
+			// still observed for presentational health, but cannot give authority.
+			$dependency = $optional[$provider['module']] ?? null;
+			$optional_ok = null === $dependency || true === ($dependency['available']??false);
+			$ok = (bool) $provider['available'] && $valid && $optional_ok;
+			$value = $ok ? 'adapter-and-manifest-ready' : (
+				! $provider['available'] ? 'adapter-unavailable' : (
+					! is_array($manifest) ? 'manifest-missing' : (
+						! ($manifest['manifest_valid']??false) ? 'manifest-invalid' : (
+							! in_array($state,array('registered','compatible','active'),true) ? 'manifest-'.$state : (
+								! $optional_ok ? 'dependency-incompatible' : 'version-invalid'
+							)
+						)
+					)
+				)
+			);
+			$checks[] = self::check( $code.'_contract', $ok, $value, $provider['message'], 'warning' );
 		}
 		$catalog = SPF_Installer::canonical_module_catalog();
 		$registered_keys = array_column( SPF_Registry::list_modules(array('limit'=>200)), 'module_key' );

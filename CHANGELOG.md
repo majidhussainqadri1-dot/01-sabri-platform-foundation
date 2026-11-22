@@ -1,3 +1,33 @@
+## 2026-11-14 V12.3 File 01 telemetry sensitive-label mitigation (Draft source candidate)
+
+- Pre-fix Run #940 proved eight synthetic credential-labelled values retained in disposable WordPress metric options and serialized data. No real patient or credential material used.
+- Expanded compact-key sensitive-label suppression in the existing bounded telemetry path; preserves prior numeric/name and canonical-label guards. Independent File 24/privacy and Live exporter acceptance still required.
+
+## 2026-11-14 V12.3 FR-001 authorized amendment-chain fixture (repository candidate only)
+
+- Added 7 synthetic WordPress/MySQL assertions and fixed WP-CLI test-scope error observed in Run #937. Exact-case Run #938 passed 4/4.
+- Date-scoped V12.3 grade changed from source-only S to disposable runtime R for FR-001, with no independent semantic/Hostinger/Live acceptance and no change to real Founder governance.
+- File 01 runtime source not modified by this evidence-only change.
+
+## 2026-11-14 V12.3 telemetry label provenance hardening (Draft PR only)
+
+- Negative runtime Run #935 proved silent normalized label collisions and loss of the 13th label: 3 invalid label maps, 6 rejection/no-write assertions.
+- Reject colliding/noncanonical/oversized label keys and >12 entries before telemetry option writes. Sensitive label-key omission remains in force; no privilege, DB, or deployment action.
+- Source-only; operational monitoring, real File 24 assurance and Live acceptance remain pending.
+
+## 2026-11-14 V12.3 telemetry finite-value and canonical-identity rejection (Draft PR only)
+
+- Added five negative telemetry cases and five no-buffer-mutation assertions in disposable WordPress/MySQL testing. Pre-fix Run #933 demonstrated nonfinite/invalid metric acceptance and mutated buffers.
+- Restrict File 01 metric names to existing canonical strings <=80 bytes, and reject non-finite numeric values, NaN, Infinity and overflow input before locks/option writes. The fix does not alter WordPress schema, external ownership, or deploy code.
+- Operational acceptance and exact deployed Hostinger parity remain independent No-Go gates.
+
+## 2026-11-14 V12.3 requirements-baseline reconciliation (Draft PR only)
+
+- Record the Founder-governing V12.3 plan separately from historic V12 and the old File 01 planning ID. This is source/release-policy traceability only; software/schema/contract constants are unchanged.
+- Add explicit release-handoff regression assertions for V12.3 source identity and M11/UX-13/QA-24/CEN-REL-001 acceptance boundaries.
+- Add the 43-row evidence ledger with independent semantic, companion, staging and live gates still open. Live read-only access was blocked (disconnected Jetpack and WPVibe HTTP 530), so no production root-cause or resolution is asserted.
+- A separate follow-up, after negative regression assertions, tightens **source-level release evidence**: staged requires a freeze receipt and deployed requires explicit true parity, matching the pre-existing evidence template. Disposable WordPress fixtures were updated. There is no DB migration, production deployment or File 24 independent attestation. No Live defect resolution is claimed.
+
 # Changelog
 
 ## 2.0.1 — Live-first reconciliation safety patch (2026-08-11)

@@ -625,6 +625,32 @@ final class SPF_Installer {
 		);
 	}
 
+	/** Bounded, versioned File 01-owned event names; companion events are owner-defined. */
+	public static function file01_event_catalog() {
+		return array(
+			'FeatureFlagChanged.v1',
+			'FeatureFlagExpired.v1',
+			'FoundationAmendmentApproved.v1',
+			'FoundationContractDeprecated.v1',
+			'FoundationContractRegistered.v1',
+			'FoundationHealthChanged.v1',
+			'FoundationLegacyReconciled.v1',
+			'FoundationLegacyReconciliationRolledBack.v1',
+			'FoundationModuleActivated.v1',
+			'FoundationModuleDeactivated.v1',
+			'FoundationModuleRegistered.v1',
+			'FoundationPrivacyErasureCompleted.v1',
+			'FoundationReleaseRecorded.v1',
+			'FoundationReleaseStateChanged.v1',
+			'FoundationRepairCompleted.v1',
+			'FoundationRouteMapped.v1',
+			'FoundationSchemaMigrated.v1',
+			'ModuleActivated.v1',
+			'ModuleDeactivated.v1',
+			'ReleaseApproved.v1',
+		);
+	}
+
 	public static function file01_manifest() {
 		return array(
 			'module_key'       => 'file-01',
@@ -646,7 +672,7 @@ final class SPF_Installer {
 			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle', 'event_backbone', 'feature_flags', 'policy_as_code', 'amendment_impact_simulation', 'architecture_lint', 'spec_code_traceability', 'developer_service_catalog', 'golden_path_scaffolder', 'contract_compatibility_lab', 'event_schema_registry', 'config_drift_detection', 'release_train_planning', 'progressive_delivery', 'slo_error_budget_gate', 'platform_digital_twin', 'bounded_self_heal', 'chaos_harness', 'telemetry_context', 'governance_snapshots', 'ai_governance_advisory' ),
 			'commands'         => array( 'RegisterFoundationManifest.v1', 'RegisterFoundationContract.v1', 'MapFoundationRoute.v1', 'TransitionFoundationRelease.v1' ),
 			'queries'          => array( 'GetFoundationReadiness.v1', 'ListFoundationContracts.v1', 'GetFoundationStatus.v1' ),
-			'events'           => array( 'FoundationModuleActivated.v1', 'FoundationModuleDeactivated.v1', 'FoundationContractDeprecated.v1', 'FoundationHealthChanged.v1', 'FoundationReleaseStateChanged.v1', 'ReleaseApproved.v1' ),
+			'events'           => self::file01_event_catalog(),
 			'routes'           => array( '/platform-system-check/', '/platform-foundation/status/' ),
 			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
 			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),

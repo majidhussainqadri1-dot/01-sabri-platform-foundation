@@ -8,8 +8,8 @@
     "component": {
       "type": "application",
       "name": "Sabri Platform Foundation",
-      "version": "2.0.1",
-      "purl": "pkg:wordpress/sabri-platform-foundation@2.0.1"
+      "version": "2.0.2",
+      "purl": "pkg:wordpress/sabri-platform-foundation@2.0.2"
     }
   },
   "components": [
@@ -34,7 +34,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:wordpress/sabri-platform-foundation@2.0.1",
+      "ref": "pkg:wordpress/sabri-platform-foundation@2.0.2",
       "dependsOn": []
     }
   ]

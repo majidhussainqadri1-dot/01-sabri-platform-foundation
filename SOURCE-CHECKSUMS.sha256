@@ -60,7 +60,7 @@ c1ec4659f841727e767731af8a83c5f4028ed936a87ab63f89afdd6c0370926a  ./includes/cla
 b7913b0c4c1498432754fa934c236587ef3222897a4dba6516136909e884d547  ./includes/class-spf-rest.php
 6cd7f37d046608bcb121b15bf2fad1b599637da0eff9e2f4c49c56a65cc430e2  ./includes/class-spf-runtime.php
 f7e158615d5c6419e525f7b4c374fc09a00be782858d622ea5abbc1bbc5a38d8  ./includes/class-spf-system-check.php
-b2f1cfb25729259bfa2163248c17afe91f18b70a89cf18b3aac28adb82b4ecee  ./qa/run-tests.sh
+da7a4eefd2f926643ef617d485528d7f41eeab258e5f452c4a3ff3e15f0c2ace  ./qa/run-tests.sh
 75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 0825957278f279c9677ff550beed2254d3588b20868c4bb0108d5a9c9edaeac9  ./qa/wp-fourteenth-ten-round-smoke.php
@@ -94,5 +94,7 @@ d1830e1e727993792abee70b1a16f282a7828ef689e7b385d64e37524034b1bc  ./tests/tenth-
 32c441898bed0021564a6e7f175fdf52c6828d14a9dd72932fb83d0435efc376  ./tests/thirteenth-ten-round-review-tests.php
 12115d5c5d5ea131c7ceaa8df4652d5e5df43b2b42dd4d19d456b95d96c26232  ./tests/twelfth-ten-round-review-tests.php
 1dab3824c56fa8a62d162c9379f44a41b8186d98305017b936b2574f43cd33c7  ./tests/unit-tests.php
+61fa03aef4e7fb53bbf986ed8ca8029607f307e4aa0a1ef863f43e3d5d14b065  ./tests/v12-three-gaps-tests.php
 aa7d62f7c86b09a0092640487a311bce606bf1ead20049a35392d90d67d2b488  ./tools/build-package.sh
+d9774e0a67269826116702d1ca571862bead29a3ae77c13974b960054e0f9e4d  ./tools/v12-traceability-audit.php
 46d7d6f98025cd3c0c218a2d1a9290d6b78c6158d87ee887e89336943fba749b  ./uninstall.php

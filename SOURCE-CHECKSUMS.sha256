@@ -60,7 +60,7 @@ c1ec4659f841727e767731af8a83c5f4028ed936a87ab63f89afdd6c0370926a  ./includes/cla
 b7913b0c4c1498432754fa934c236587ef3222897a4dba6516136909e884d547  ./includes/class-spf-rest.php
 6cd7f37d046608bcb121b15bf2fad1b599637da0eff9e2f4c49c56a65cc430e2  ./includes/class-spf-runtime.php
 f7e158615d5c6419e525f7b4c374fc09a00be782858d622ea5abbc1bbc5a38d8  ./includes/class-spf-system-check.php
-bde39484f63d5e0a3aacc6ad4675a200e191a91411a08b38e2bb51a59fae2c42  ./qa/run-tests.sh
+b2f1cfb25729259bfa2163248c17afe91f18b70a89cf18b3aac28adb82b4ecee  ./qa/run-tests.sh
 75a0e5830f1248c81a0d20ee1949c711b560c6b2ff46e3045c363735042cd87f  ./qa/wp-cross-file-reconciliation-smoke.php
 509307c3f77769883378efa2a8f30d1848be36d01abcf9314fc3b3fb61900824  ./qa/wp-eleventh-ten-round-smoke.php
 0825957278f279c9677ff550beed2254d3588b20868c4bb0108d5a9c9edaeac9  ./qa/wp-fourteenth-ten-round-smoke.php

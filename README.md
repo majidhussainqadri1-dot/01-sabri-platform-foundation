@@ -1,4 +1,4 @@
-# File 01 — Sabri Platform Foundation 2.0.1
+# File 01 — Sabri Platform Foundation 2.0.2 (cross-file source candidate)
 
 This repository implements **File 01-B**, the governance/runtime foundation defined by `SSH-F01-PLAN-2026-v1.0`, the Definitive Master Plan v3.0, the approved Future Foundation v2.0 enhancement set, and later Founder-approved harmonization.
 
@@ -10,7 +10,7 @@ The auditable repository-only 43-ID evidence and remaining gates are documented 
 
 ## V12 working baseline (planning, not deployment)
 
-`SSH MASTER 12` is the governing requirements baseline for subsequent File 01 development. This source branch remains software 2.0.1 / schema 1.2.0 / contract 2.0.0; adopting V12 does not prove that every V12 requirement is implemented or that staging/live code matches this repository. Changes follow requirement-to-test traceability and separate live-reality verification.
+`SSH MASTER 12` is the governing requirements baseline for subsequent File 01 development. This source branch is a proposed software 2.0.2 / schema 1.2.0 / contract 2.0.0; adopting V12 does not prove that every V12 requirement is implemented or that staging/live code matches this repository. Changes follow requirement-to-test traceability and separate live-reality verification.
 
 ## Canonical boundary
 
@@ -18,11 +18,15 @@ File 01 owns the 00–26 governance catalog, module/contract/route registries, d
 
 ## Release truth
 
-The current repository candidate is **software 2.0.1**, **schema 1.2.0**, **contract 2.0.0**, and **Future Foundation 2.0.0**. Software, schema and contract versions are intentionally distinct. Historical 1.1.x/1.2.0/2.0.0 review records remain historical evidence and must not be treated as the current package identity.
+The current draft repository candidate is **software 2.0.2**, **schema 1.2.0**, **contract 2.0.0**, and **Future Foundation 2.0.0**. Software, schema and contract versions are intentionally distinct. Historical 1.1.x/1.2.0/2.0.0 review records remain historical evidence and must not be treated as the current package identity.
 
-Version 2.0.1 is a reconciliation-safety patch discovered from live System Check evidence. It closes a Safe Repair bypass so `spf_page_map` and `spf_founder_user_id` can no longer be removed outside the guarded `SPF_Reconciler` workflow. Legacy route cutover remains fail-closed until canonical File 20/File 21 owner plans are accepted and version-matched reversible receipts are returned. Real WordPress/MySQL cross-file QA pins exact File 20/File 21 candidate SHAs and proves guarded plan → apply → quarantine → rollback behavior.
+The previous deployed-observed Version 2.0.1 included a reconciliation-safety patch discovered from live System Check evidence. It closes a Safe Repair bypass so `spf_page_map` and `spf_founder_user_id` can no longer be removed outside the guarded `SPF_Reconciler` workflow. Legacy route cutover remains fail-closed until canonical File 20/File 21 owner plans are accepted and version-matched reversible receipts are returned. Real WordPress/MySQL cross-file QA pins exact File 20/File 21 candidate SHAs and proves guarded plan → apply → quarantine → rollback behavior.
 
 The current source implements versioned/machine-readable 00–26 governance and rollback-aware reconciliation; event schema/version/idempotency/replay/dead-letter/reconciliation with durable privacy classification; fail-closed feature activation requiring dependency readiness plus independently verified migration, health, rollback and gate evidence; and the approved Future Foundation enhancements.
+
+## File 01 cross-file fix 2.0.2 (not yet deployed)
+
+This source-only candidate preserves the v2.0.1 runtime schema and File 01 contract version while correcting structurally false-positive provider health for unavailable/degraded/invalid companion manifests. File00 requires a current declared authorization-adapter hook and an owner manifest; the claim provider is still subject to File00 native authentication and claim validation on each protected operation. The 20 File01-emitted event identities are declared explicitly, and outbox `sent` is defined as local WordPress dispatch only, not a foreign consumer commit or external delivery acknowledgement. Read `docs/FILE01-CROSS-FILE-INTEGRATION-MATRIX-2026-11-22.json` for all 32 companion boundaries and zero inferred joint-staging acceptance. No schema change, no Release Approval, no automatic migration, and no Hostinger deployment follows from this draft code.
 
 ## Security and reliability highlights
 

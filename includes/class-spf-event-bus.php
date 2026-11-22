@@ -119,8 +119,10 @@ final class SPF_Event_Bus {
 			$processed['recovered'] = (int) $recovered;
 			$limit = max( 1, min( 100, absint( $limit ) ) );
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE status IN ('pending','retry') AND available_at<=%s ORDER BY id ASC LIMIT %d", $now, $limit ), ARRAY_A );
-			if ( ! empty( $wpdb->last_error ) ) {
-				return new WP_Error( 'spf_outbox_select_failed', __( 'The outbox dispatch query failed.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+			if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+				// A silent null/false wpdb read is not an empty outbox. Never
+				// report successful dispatch when durable rows were not read.
+				return new WP_Error( 'spf_outbox_select_failed', __( 'The outbox dispatch query failed or returned an invalid result.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
 			}
 			foreach ( $rows as $row ) {
 				$lease_until = gmdate( 'Y-m-d H:i:s', time() + 600 );
@@ -220,7 +222,10 @@ final class SPF_Event_Bus {
 			if ( '' === $safe_key || $raw_key !== $safe_key || array_key_exists( $safe_key, $result ) ) {
 				return new WP_Error( 'spf_event_payload_key_invalid', __( 'Event payload keys must already be unique canonical keys.', 'sabri-platform-foundation' ) );
 			}
-			if ( preg_match( '/(^|_)(password|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private_key|api_key|encryption_key)($|_)/i', $safe_key ) ) {
+			// File 01's durable outbox is not an approved personal/clinical data store.
+			// Preserve the structure of operational events while redacting sensitive
+			// field families, including common direct identifiers and clinical notes.
+			if ( preg_match( '/(^|_)(password|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private|api|encryption|email|mail|phone|telephone|mobile|address|name|firstname|lastname|surname|birth|dob|dateofbirth|ip|ssn|passport|card|credit|medical|clinical|diagnosis|prescription|therapy|note|notes|content|body|location|latitude|longitude|geolocation|device|session|user|actor)($|_)/i', $safe_key ) ) {
 				$result[ $safe_key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
 				$nested = self::sanitize_payload( $value, $depth + 1 );

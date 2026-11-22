@@ -211,6 +211,13 @@ final class SPF_Authorization {
 			return current_user_can( self::CAP_VIEW ) || current_user_can( self::CAP_MANAGE );
 		}
 		$object_ref = self::object_reference( $object );
+		// Standalone File 01 permits only this exact scoped health operation.
+		// File 00, when present, remains the sole authority for structured claims.
+		if ( 'run_system_check' === $action ) {
+			return array( 'object_id' => 'system-check' ) === $object_ref
+				&& self::CAP_MANAGE === $required
+				&& current_user_can( self::CAP_MANAGE );
+		}
 		$object_key = sanitize_key( $object_ref['module_key'] ?? $object_ref['owner_module'] ?? $object_ref['object_id'] ?? '' );
 		if ( $object_key && 'file-01' !== $object_key ) {
 			return false;

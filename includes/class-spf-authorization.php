@@ -145,7 +145,10 @@ final class SPF_Authorization {
 		if ( ! is_bool( $claim['allowed'] ) || true !== $claim['allowed'] ) {
 			return false;
 		}
-		if ( ! SPF_Registry::valid_semver( (string) $claim['claim_version'] ) || version_compare( (string) $claim['claim_version'], '1.0.0', '<' ) ) {
+		// SemVer build metadata never changes precedence: PHP version_compare()
+		// incorrectly treats 1.0.0+build.2 as older than stable 1.0.0.
+		$claim_precedence = SPF_Registry::compare_semver( (string) $claim['claim_version'], '1.0.0' );
+		if ( null === $claim_precedence || $claim_precedence < 0 ) {
 			return false;
 		}
 		$claim_id = trim( (string) $claim['claim_id'] );
@@ -211,6 +214,13 @@ final class SPF_Authorization {
 			return current_user_can( self::CAP_VIEW ) || current_user_can( self::CAP_MANAGE );
 		}
 		$object_ref = self::object_reference( $object );
+		// Standalone File 01 permits only this exact scoped health operation.
+		// File 00, when present, remains the sole authority for structured claims.
+		if ( 'run_system_check' === $action ) {
+			return array( 'object_id' => 'system-check' ) === $object_ref
+				&& self::CAP_MANAGE === $required
+				&& current_user_can( self::CAP_MANAGE );
+		}
 		$object_key = sanitize_key( $object_ref['module_key'] ?? $object_ref['owner_module'] ?? $object_ref['object_id'] ?? '' );
 		if ( $object_key && 'file-01' !== $object_key ) {
 			return false;

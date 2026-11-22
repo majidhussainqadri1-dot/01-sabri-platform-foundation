@@ -618,7 +618,11 @@ final class SPF_Governance {
 			if ( '' === $key || strlen( $raw_key ) > 128 || $raw_key !== $key || array_key_exists( $key, $out ) ) {
 				return new WP_Error( 'spf_governance_evidence_key_noncanonical', __( 'Governance evidence keys must already be unique canonical keys of at most 128 bytes; silent normalization is forbidden.', 'sabri-platform-foundation' ), array( 'status'=>422 ) );
 			}
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message_body|payment|identity_document/i', $raw_key ) ) {
+			// Release and amendment evidence is retained as JSON, not merely hashed.
+			// Never persist direct identifiers or operational secrets in that
+			// immutable governance envelope. Structured release identifiers,
+			// checksums, owner keys and test/approval flags remain unchanged.
+			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message_body|payment|identity_document|credential|private|passport|national_id|bank_account|card_number|api_key|encryption_key|session_id|device_id|user_agent|(^|_)(email|phone|telephone|mobile|address|ip_address|birth_date|date_of_birth|dob|ssn|full_name|first_name|last_name|surname)($|_)/i', $raw_key ) ) {
 				$out[ $key ] = '[redacted]';
 			} elseif ( is_array( $v ) ) {
 				$nested = self::sanitize_evidence( $v, $depth + 1 );

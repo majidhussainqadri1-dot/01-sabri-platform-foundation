@@ -7,6 +7,7 @@ printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 
 php tests/unit-tests.php
+php tests/file01-live-parity-regression.php
 php tests/future-foundation-tests.php
 php tests/third-ten-round-review-tests.php
 php tests/fourth-ten-round-review-tests.php

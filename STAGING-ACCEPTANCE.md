@@ -1,13 +1,13 @@
-# Hostinger Staging Acceptance — File 01 2.0.1
+# Hostinger Staging Acceptance — File 01 2.0.2
 
-This is the evidence checklist for the **2.0.1** staging candidate. Each item requires dated evidence, operator, result and evidence location. A repository/CI claim is never a substitute for the exact deployed staging state.
+This is the evidence checklist for the **2.0.2** staging candidate. Each item requires dated evidence, operator, result and evidence location. A repository/CI claim is never a substitute for the exact deployed staging state.
 
 ## Candidate contract identity
 
-- Software version: `2.0.1`
+- Software version: `2.0.2`
 - Database/schema version: `1.2.0`
 - Contract version: `2.0.0`
-- Canonical installable package name: `01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip`
+- Canonical installable package name: `01-sabri-platform-foundation-2.0.2-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip`
 - Exact repository head and package SHA-256: capture from the final successful GitHub Actions artifact used for deployment; do not infer them from `main`, an older PR run or a filename.
 
 ## Staging Reality Freeze — capture before changing anything
@@ -28,7 +28,7 @@ If the exact deployed source/package cannot be verified, record: **“Exact depl
 - [ ] Verify exact deployed ZIP checksum and internal `SOURCE-MANIFEST.sha256` against the exact GitHub artifact selected for staging.
 - [ ] Create full database/files backup and prove restore in isolated staging.
 - [ ] Fresh WordPress installation and activation; no public pages/posts/shell/feed created.
-- [ ] Upgrade every supported historical File 01 software path to `2.0.1` with structured backup evidence; verify schema `1.2.0`, compensation and idempotency.
+- [ ] Upgrade every supported historical File 01 software path to `2.0.2` with structured backup evidence; verify schema `1.2.0`, compensation and idempotency.
 - [ ] Activate/deactivate/reactivate idempotently; schedules and Administrator bootstrap caps remain correct.
 - [ ] Validate all 14 InnoDB tables, indexes, charset/collation and UTC timestamps.
 - [ ] File 00 structured claims: view/manage/release/Founder/purge role boundaries and suspended/revoked/stale cases.
@@ -47,3 +47,7 @@ If the exact deployed source/package cannot be verified, record: **“Exact depl
 - [ ] Founder functional, security, privacy, copy and staging acceptance.
 
 No unchecked item may be silently represented as complete. `Staging-Accepted`, `Live-Deployed` and `Operational` remain separate evidence states.
+
+## Cross-file 2.0.2 proof (pending)
+
+Verify degraded/missing/invalid File00/20/21/24 status, genuine File00 claim-authorized object operations, File25 non-dependency observer, File26 optional resolver status, all 20 File01 event names in the stored manifest after authorized activation, and File19 subscriber acknowledgements independently. The `sent` outbox state means local hook completion only. Matrix: `docs/FILE01-CROSS-FILE-INTEGRATION-MATRIX-2026-11-22.json`. Do not install conditional CF modules without their separate Founder approvals.

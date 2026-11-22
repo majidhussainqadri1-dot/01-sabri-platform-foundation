@@ -2,6 +2,16 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_Event_Bus {
+	/** This outbox certifies local action invocation, never downstream delivery/ACK. */
+	public static function delivery_semantics() {
+		return array(
+			'sent' => 'local_wordpress_action_completed',
+			'consumer_receipt_verified' => false,
+			'consumer_commit_proof_required' => true,
+			'provider_delivery_claim_allowed' => false,
+		);
+	}
+
 	public static function publish( $event_name, $aggregate_type, $aggregate_id, array $payload, $version = 1, $dedupe_key = '', $privacy_class = 'internal' ) {
 		global $wpdb;
 		$raw_event_name = (string) $event_name;

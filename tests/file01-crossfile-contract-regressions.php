@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Independent isolated harness. Does not assert actual companion installation.
 define('ABSPATH', '/tmp');
-define('SPF_VERSION', '2.0.1');
+define('SPF_VERSION', '2.0.2');
 define('SPF_CONTRACT_VERSION', '2.0.0');
 define('SMC_VERSION', '1.2.44'); // Presence of this symbol MUST NOT authorize File 00.
 function __(string $s, $domain = ''): string { return $s; }

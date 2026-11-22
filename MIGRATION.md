@@ -1,6 +1,6 @@
-# Migration — supported historical software to 2.0.1 (schema 1.2.0)
+# Migration — supported historical software to 2.0.2 (schema 1.2.0)
 
-Software, schema and contract versions are distinct. The current candidate is software `2.0.1`, schema `1.2.0`, contract `2.0.0`; do not describe an upgrade to schema 1.2.0 as a software 1.2.0 release.
+Software, schema and contract versions are distinct. The current candidate is software `2.0.2`, schema `1.2.0`, contract `2.0.0`; do not describe an upgrade to schema 1.2.0 as a software 1.2.0 release.
 
 1. Freeze the exact staging reality before change: deployed plugin/package/checksum, database/schema version, migration/options state, relevant table shape/counts, runtime logs/configuration and active companion versions.
 2. Create and independently verify a complete database/files backup and restore proof before an upgrade.
@@ -14,3 +14,7 @@ Software, schema and contract versions are distinct. The current candidate is so
 10. After upgrade, capture exact deployed software/package checksum, schema version and migration state; compare them with the selected GitHub artifact before any Staging-Accepted decision.
 
 Production cutover remains prohibited until `STAGING-ACCEPTANCE.md` is fully evidenced and Founder-approved.
+
+## Software-only File 01 2.0.2 manifest refresh
+
+This is a software-only change; database schema remains 1.2.0. A normal same-schema `maybe_upgrade()` checks schema integrity and does **not** auto-run `seed_governance()`. The expanded File01 20-name event catalog therefore requires a governed staging reactivation/re-registration under the normal activation/owner-evidence gates, with pre/post registry manifest audit and rollback. Never claim a live manifest changed solely because the PHP candidate was published.

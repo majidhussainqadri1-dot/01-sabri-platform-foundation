@@ -1,10 +1,10 @@
 {
   "release_id": "generated-at-record-time",
-  "software_version": "2.0.1",
+  "software_version": "2.0.2",
   "schema_version": "1.2.0",
   "contract_version": "2.0.0",
   "commit_sha": "replace-with-exact-40-or-64-character-sha",
-  "package_name": "01-sabri-platform-foundation-2.0.1-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip",
+  "package_name": "01-sabri-platform-foundation-2.0.2-FUTURE-FOUNDATION-SUPERSET-CANDIDATE.zip",
   "checksum_sha256": "replace-with-64-character-sha256",
   "initial_status": "planned",
   "reality_freeze": {

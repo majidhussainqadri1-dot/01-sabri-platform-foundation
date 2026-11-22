@@ -190,7 +190,9 @@ final class SPF_Idempotency {
 		$out = array();
 		foreach ( array_slice( $data, 0, 100, true ) as $key => $value ) {
 			$key = substr( sanitize_key( (string) $key ), 0, 128 );
-			if ( preg_match( '/password|token|secret|cookie|nonce|authorization|patient|message|payment|identity|document|key/i', $key ) ) {
+			// Error replay envelopes are persisted for idempotency and can outlive
+			// the request. Never retain direct personal identifiers in error data.
+			if ( preg_match( '/password|token|secret|cookie|nonce|authorization|patient|message|payment|identity|document|key|credential|passport|national_id|bank_account|(^|_)(email|phone|telephone|mobile|address|ip_address|date_of_birth|birth_date|dob|ssn|full_name|first_name|last_name|surname)($|_)/i', $key ) ) {
 				$out[ $key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
 				$out[ $key ] = self::safe_error_data( $value, $depth + 1 );

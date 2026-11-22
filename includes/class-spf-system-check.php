@@ -82,6 +82,7 @@ final class SPF_System_Check {
 		$writable = $upload_path && ( function_exists('wp_is_writable') ? wp_is_writable($upload_path) : is_writable($upload_path) );
 		$checks[] = self::check( 'uploads_writable', $writable, $writable?'writable':'not-writable', 'Uploads directory is not writable.', 'warning' );
 
+		$checks = array_merge( $checks, self::source_registry_checks() );
 		$checks = array_merge( $checks, self::integration_checks() );
 		$checks = array_merge( $checks, self::queue_checks() );
 		$checks = array_merge( $checks, self::privacy_checks() );
@@ -111,8 +112,11 @@ final class SPF_System_Check {
 		if ( $persist ) {
 			$stored = self::persist( $result );
 			if ( is_wp_error( $stored ) ) {
-				$result['overall_status'] = 'fail';
-				$result['checks'][] = self::check( 'health_persistence', false, 'failed', 'Health result could not be persisted atomically.', 'fail' );
+				// A failed health write is a failed operation, not a successfully
+				// completed System Check with an ephemeral JSON-only warning.
+				// Admin post-actions and REST both understand WP_Error; do not
+				// send the operator a false "system_check_complete" redirect.
+				return new WP_Error( 'spf_health_persist_failed', __( 'The System Check ran, but its mandatory health, audit and event record could not be persisted. No successful completion is claimed.', 'sabri-platform-foundation' ), array( 'status' => 503 ) );
 			}
 		}
 		return $result;
@@ -135,6 +139,38 @@ final class SPF_System_Check {
 		return is_array( $decoded ) && JSON_ERROR_NONE === json_last_error()
 			? $decoded
 			: new WP_Error( 'spf_health_latest_corrupt', __( 'The latest File 01 health record is corrupt and cannot be treated as valid evidence.', 'sabri-platform-foundation' ) );
+	}
+
+	/**
+	 * Same-schema software updates do not rewrite stored manifest/option truth.
+	 * Detect stale ownership/event catalog evidence without attempting an
+	 * implicit, unaudited or irreversible production registry mutation.
+	 */
+	private static function source_registry_checks() {
+		$stored = (string) get_option( SPF_Installer::VERSION_OPTION, '0.0.0' );
+		$stored_valid = SPF_Registry::valid_semver( $stored );
+		$software_ok = $stored_valid && hash_equals( SPF_VERSION, $stored );
+		$checks = array(
+			self::check( 'installed_software_version', $software_ok, $stored_valid ? $stored : 'invalid-version', 'Stored File 01 software identity differs from this executable; approved release reconciliation is required.', 'warning' ),
+		);
+		$actual = SPF_Registry::get_module( 'file-01' );
+		$expected = SPF_Installer::file01_manifest();
+		$actual_events = is_array( $actual ) && is_array( $actual['events'] ?? null ) ? array_values( $actual['events'] ) : array();
+		$expected_events = array_values( $expected['events'] );
+		sort( $actual_events, SORT_STRING );
+		sort( $expected_events, SORT_STRING );
+		$manifest_ok = is_array( $actual ) && true === ( $actual['manifest_valid'] ?? false )
+			&& 'active' === ( $actual['state'] ?? '' )
+			&& hash_equals( SPF_VERSION, (string) ( $actual['software_version'] ?? '' ) )
+			&& hash_equals( SPF_CONTRACT_VERSION, (string) ( $actual['contract_version'] ?? '' ) )
+			&& $actual_events === $expected_events;
+		$checks[] = self::check(
+			'foundation_manifest_current', $manifest_ok,
+			$manifest_ok ? 'version-and-' . count( $expected_events ) . '-events-verified' : 'operator-reconciliation-required',
+			'The installed File 01 manifest, software version or event catalog differs from this source; stage authorized re-registration before release acceptance.',
+			'warning'
+		);
+		return $checks;
 	}
 
 	private static function integration_checks() {

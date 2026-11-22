@@ -37,7 +37,7 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $future = SPF_Future_Foundation::status();
-$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['implementation_present_count'] ?? 0 ) && 0 === (int) ( $future['coded_count'] ?? 0 ) && false === ( $future['coded_completion_verified'] ?? true ), 'Future Foundation 18-feature catalog is incomplete.' );
 $assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
 
 $unauthorized = SPF_Governance::record_release( [
@@ -79,7 +79,7 @@ $verified = SPF_Governance::transition_release( $rid, 'verified', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>2,'expected_record_version'=>2 ] );
 $assert( is_array( $verified ) && 3 === $verified['sequence_no'], 'built→verified failed.' );
 $staged = SPF_Governance::transition_release( $rid, 'staged', [
-	'staging_environment'=>'disposable-ci','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
+	'staging_environment'=>'disposable-ci','staging_reality_freeze'=>'isolated WordPress/MySQL CI fixture only; external Hostinger acceptance not asserted','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
 	'rollback_rehearsal'=>true,'browser_accessibility_rtl'=>'CI does not substitute Hostinger acceptance','founder_acceptance_pending'=>'yes',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>3,'expected_record_version'=>3 ] );
 $assert( is_array( $staged ) && 4 === $staged['sequence_no'], 'verified→staged failed.' );

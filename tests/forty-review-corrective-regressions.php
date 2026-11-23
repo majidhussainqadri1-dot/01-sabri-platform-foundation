@@ -64,6 +64,7 @@ $wpdb->silentNull=false;$wpdb->silentCounts=true;$c=priv('SPF_System_Check','que
 probe('HEALTH-count-silent-null',($codes['outbox_dead_letters']??null)==='pass'&&($codes['outbox_backlog']??null)==='pass','null count silently yields pass');
 $wpdb->silentCounts=false;$wpdb->inserts=[];SPF_Audit::record_required('synthetic_test','foundation_event','synthetic.person@example.test','success',['purpose'=>'synthetic']);$last=end($wpdb->inserts);
 probe('AUDIT-object-id-PII',($last['data']['object_id']??null)==='synthetic.person@example.test','synthetic identifier persisted in immutable audit object_id');
+$wpdb->inserts=[];$ok=SPF_Audit::record_required('synthetic_test','foundation_contract','spf.registry@2.0.0','success',['purpose'=>'synthetic']);$last=end($wpdb->inserts);probe('AUDIT-contract-version-positive',is_wp_error($ok)||($last['data']['object_id']??null)!=='spf.registry@2.0.0','canonical internal contract key@SemVer must remain admissible for activation');
 $wpdb->inserts=[];$wpdb->updates=[];$r=SPF_Platform_Engineering::record_metric('availability',0.9,['bucket'=>'synthetic.person@example.test']);$metrics=get_option(SPF_Platform_Engineering::METRIC_OPTION);
 probe('TELEMETRY-value-PII',true===$r&&($metrics[0]['labels']['bucket']??null)==='synthetic.person@example.test','synthetic identifier persisted as neutral-key metric label');
 $ai=priv('SPF_Governance_Control_Plane','sanitize_advisory_input',['email'=>'synthetic.person@example.test']);

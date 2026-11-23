@@ -19,6 +19,9 @@ final class SPF_Platform_Engineering {
 		$contracts = SPF_Registry::list_contracts( array( 'limit' => 200 ) );
 		$routes = SPF_Registry::list_routes();
 		$readiness = SPF_Dependency_Resolver::all_readiness();
+		foreach ( array( $modules,$contracts,$routes,$readiness ) as $lookup ) {
+			if ( is_wp_error( $lookup ) ) { return $lookup; }
+		}
 		$readiness_by_key = array();
 		foreach ( $readiness as $item ) {
 			if ( is_array( $item ) && ! empty( $item['module_key'] ) ) { $readiness_by_key[ sanitize_key( $item['module_key'] ) ] = $item; }
@@ -577,7 +580,11 @@ final class SPF_Platform_Engineering {
 				continue;
 			}
 			if ( is_scalar( $label ) ) {
-				$safe_labels[ $raw_key ] = substr( sanitize_text_field( (string) $label ), 0, 80 );
+				$raw_label = (string) $label;
+				// No email, phone, IP, free-text or high-cardinality subject label values.
+				if ( strlen( $raw_label ) > 64 || ! preg_match( '/^[a-z0-9][a-z0-9_-]*$/D', $raw_label )
+					|| preg_match( '/^[0-9]{9,}$/D', $raw_label ) ) { continue; }
+				$safe_labels[ $raw_key ] = $raw_label;
 			}
 		}
 		$lock_name='future-metrics';$lock=SPF_Runtime::acquire_lock($lock_name,60);if(is_wp_error($lock)){return $lock;}

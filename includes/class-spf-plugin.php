@@ -129,8 +129,13 @@ final class SPF_Plugin {
 
 	public function status_dto() {
 		$releases = SPF_Governance::list_releases( 1 );
-		$latest_release = $releases ? $releases[0] : array();
-		$release_status = $latest_release ? $latest_release['status'] : 'not-recorded';
+		$release_read_ok = is_array( $releases );
+		$latest_release = $release_read_ok && ! empty( $releases ) ? $releases[0] : array();
+		$release_status = ! $release_read_ok ? 'read-failed' : ( $latest_release ? $latest_release['status'] : 'not-recorded' );
+		$modules = SPF_Registry::list_modules( array( 'limit'=>200 ) );
+		$contracts = SPF_Registry::list_contracts( array( 'limit'=>200 ) );
+		$routes = SPF_Registry::list_routes();
+		$registries_ok = is_array( $modules ) && is_array( $contracts ) && is_array( $routes );
 		$schema = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
 		$health = SPF_System_Check::latest();
 		$operational_context = array(
@@ -143,7 +148,7 @@ final class SPF_Plugin {
 		// A historical immutable release record is NOT proof that this exact
 		// active source/package is deployed. Never inherit a prior version's
 		// CI, staging or deployment claims across an upgrade or rollback.
-		$release_current = is_array( $latest_release ) && ! empty( $latest_release )
+		$release_current = $release_read_ok && $registries_ok && is_array( $latest_release ) && ! empty( $latest_release )
 			&& hash_equals( SPF_VERSION, (string) ( $latest_release['software_version'] ?? '' ) )
 			&& hash_equals( SPF_SCHEMA_VERSION, (string) $schema )
 			&& hash_equals( (string) $schema, (string) ( $latest_release['schema_version'] ?? '' ) )
@@ -165,8 +170,9 @@ final class SPF_Plugin {
 			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
 			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),
 			'upgrade_state'=>get_option('spf_upgrade_state',array('status'=>'not-required')),
-			'module_count'=>count(SPF_Registry::list_modules(array('limit'=>200))),'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
-			'contract_count'=>count(SPF_Registry::list_contracts(array('limit'=>200))),'route_count'=>count(SPF_Registry::list_routes()),
+			'module_count'=>is_array( $modules ) ? count( $modules ) : null,'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
+			'contract_count'=>is_array( $contracts ) ? count( $contracts ) : null,'route_count'=>is_array( $routes ) ? count( $routes ) : null,
+			'registry_read_verified'=>$registries_ok,'release_read_verified'=>$release_read_ok,
 			'latest_health'=>$health,'legacy_state'=>get_option('spf_reconciliation_state',array('status'=>'not_run')),'latest_release_status'=>$release_status,
 			'future_foundation'=>SPF_Future_Foundation::status(),
 			'completion_statuses'=>array(

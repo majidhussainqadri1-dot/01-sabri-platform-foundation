@@ -13,6 +13,8 @@ php tests/file01-crossfile-matrix-tests.php
 php tests/event-payload-privacy.php
 php tests/governance-privacy.php
 php tests/idempotency-error-privacy.php
+php tests/forty-review-corrective-regressions.php
+php tests/forty-review-privacy-consistency.php
 php tests/outbox-db-failure.php
 php tests/privacy-export.php
 php tests/registry-drift.php

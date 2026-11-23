@@ -28,7 +28,9 @@ final class SPF_Dependency_Resolver {
 
 	public static function all_readiness() {
 		$result = array();
-		foreach ( SPF_Registry::list_modules( array( 'limit' => 100 ) ) as $module ) {
+		$modules = SPF_Registry::list_modules( array( 'limit' => 100 ) );
+		if ( is_wp_error( $modules ) ) { return $modules; }
+		foreach ( $modules as $module ) {
 			$result[] = self::readiness( $module['module_key'] );
 		}
 		return $result;

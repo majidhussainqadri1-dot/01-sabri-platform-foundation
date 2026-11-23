@@ -338,7 +338,11 @@ final class SPF_Registry {
 	public static function list_modules( array $filters = array() ) {
 		global $wpdb;
 		$limit = max( 1, min( 200, absint( $filters['limit'] ?? 100 ) ) );
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'modules' ) . ' ORDER BY owner_file,module_key LIMIT %d', $limit ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			return new WP_Error( 'spf_module_list_query_failed', __( 'Module registry could not be read safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
 		return array_map( array( __CLASS__, 'module_dto' ), $rows );
 	}
 
@@ -379,13 +383,21 @@ final class SPF_Registry {
 		$sql = 'SELECT * FROM ' . SPF_Installer::table( 'contracts' ) . ' WHERE ' . implode( ' AND ', $where ) . ' ORDER BY contract_key,contract_version LIMIT %d OFFSET %d';
 		$params[] = $limit;
 		$params[] = $offset;
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ), ARRAY_A );
-		return array_map( array( __CLASS__, 'contract_dto' ), is_array( $rows ) ? $rows : array() );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			return new WP_Error( 'spf_contract_list_query_failed', __( 'Contract registry could not be read safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
+		return array_map( array( __CLASS__, 'contract_dto' ), $rows );
 	}
 
 	public static function list_routes() {
 		global $wpdb;
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . SPF_Installer::table( 'routes' ) . ' ORDER BY route_path LIMIT %d', 200 ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			return new WP_Error( 'spf_route_list_query_failed', __( 'Route registry could not be read safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
 		return array_map( array( __CLASS__, 'route_dto' ), $rows );
 	}
 

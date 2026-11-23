@@ -394,7 +394,7 @@ final class SPF_Governance {
 		global $wpdb;
 		$table = SPF_Installer::table( 'flags' );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=%s ORDER BY id ASC LIMIT 100", SPF_Runtime::now_mysql() ), ARRAY_A );
-		if ( ! empty( $wpdb->last_error ) ) {
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
 			return new WP_Error( 'spf_flag_expiry_query_failed', __( 'Expired feature flags could not be queried safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
 		}
 		if ( $expected_snapshot ) {
@@ -466,13 +466,19 @@ final class SPF_Governance {
 
 	public static function get_release( $release_id ) {
 		global $wpdb;
+		$wpdb->last_error = '';
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM '.SPF_Installer::table('releases').' WHERE release_id=%s', $release_id ), ARRAY_A );
-		if ( ! $row ) {
-			return null;
+		if ( ! empty( $wpdb->last_error ) || ( null !== $row && ! is_array( $row ) ) ) {
+			return new WP_Error( 'spf_release_query_failed', __( 'Release evidence could not be read safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
 		}
+		if ( null === $row ) { return null; }
 		$row['evidence'] = json_decode( $row['evidence_json'], true );
 		unset( $row['evidence_json'] );
+		$wpdb->last_error = '';
 		$states = $wpdb->get_results( $wpdb->prepare( 'SELECT sequence_no,status,evidence_json,evidence_hash,actor_id,created_at FROM '.SPF_Installer::table('release_states').' WHERE release_id=%s ORDER BY sequence_no', $release_id ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $states ) ) {
+			return new WP_Error( 'spf_release_history_query_failed', __( 'Release state history could not be read safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
 		foreach ( $states as &$state ) {
 			$state['evidence'] = json_decode( $state['evidence_json'], true );
 			unset( $state['evidence_json'] );
@@ -484,13 +490,21 @@ final class SPF_Governance {
 	public static function list_releases( $limit = 50 ) {
 		global $wpdb;
 		$limit = max( 1, min( 100, absint( $limit ) ) );
-		return $wpdb->get_results( $wpdb->prepare( 'SELECT release_id,software_version,commit_sha,package_name,checksum_sha256,schema_version,status,record_version,approved_at,deployed_at,created_at,updated_at FROM '.SPF_Installer::table('releases').' ORDER BY id DESC LIMIT %d', $limit ), ARRAY_A );
+		$wpdb->last_error = '';
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT release_id,software_version,commit_sha,package_name,checksum_sha256,schema_version,status,record_version,approved_at,deployed_at,created_at,updated_at FROM '.SPF_Installer::table('releases').' ORDER BY id DESC LIMIT %d', $limit ), ARRAY_A );
+		return ! empty( $wpdb->last_error ) || ! is_array( $rows )
+			? new WP_Error( 'spf_release_list_query_failed', __( 'Release registry could not be queried safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) )
+			: $rows;
 	}
 
 	public static function list_amendments( $limit = 100 ) {
 		global $wpdb;
 		$limit = max( 1, min( 200, absint( $limit ) ) );
+		$wpdb->last_error = '';
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM '.SPF_Installer::table('amendments').' ORDER BY effective_at DESC LIMIT %d', $limit ), ARRAY_A );
+		if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+			return new WP_Error( 'spf_amendment_list_query_failed', __( 'Amendment registry could not be queried safely.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+		}
 		foreach ( $rows as &$row ) {
 			$row['decision'] = json_decode( $row['decision_json'], true );
 			unset( $row['decision_json'] );
@@ -536,6 +550,13 @@ final class SPF_Governance {
 		foreach ( $requirements[ $state ] ?? array() as $field ) {
 			if ( ! array_key_exists( $field, $evidence ) || ! self::has_meaningful_evidence_value( $evidence[ $field ] ) ) {
 				return new WP_Error( 'spf_release_evidence_incomplete', sprintf( __( 'Release state %1$s requires meaningful evidence field %2$s.', 'sabri-platform-foundation' ), $state, $field ), array( 'status' => 422 ) );
+			}
+		}
+		// Never mistake a nonempty failure/pending note for a positive release gate.
+		foreach ( array( 'security_review','test_summary','cross_file_contracts','browser_accessibility_rtl','monitoring_window','staging_reality_freeze' ) as $gate_field ) {
+			if ( isset( $evidence[ $gate_field ] ) && is_string( $evidence[ $gate_field ] )
+				&& preg_match( '/^\s*(?:failed?|failure|not[\s_-]*tested|not[\s_-]*verified|unverified|incomplete|missing|unknown|pending|skipped|rejected|declined|blocked|false|no)\b/i', $evidence[ $gate_field ] ) ) {
+				return new WP_Error( 'spf_release_evidence_failed', __( 'A negative or unverified release gate cannot establish readiness.', 'sabri-platform-foundation' ), array( 'status'=>422, 'field'=>$gate_field ) );
 			}
 		}
 		foreach ( array( 'reproducible_build','source_commit_verified','package_checksum_verified','zero_unresolved_critical_high','fresh_install','deployment_parity','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready' ) as $boolean_field ) {
@@ -622,7 +643,8 @@ final class SPF_Governance {
 			// Never persist direct identifiers or operational secrets in that
 			// immutable governance envelope. Structured release identifiers,
 			// checksums, owner keys and test/approval flags remain unchanged.
-			if ( preg_match( '/password|token|secret|authorization|cookie|nonce|patient|message_body|payment|identity_document|credential|private|passport|national_id|bank_account|card_number|api_key|encryption_key|session_id|device_id|user_agent|(^|_)(email|phone|telephone|mobile|address|ip_address|birth_date|date_of_birth|dob|ssn|full_name|first_name|last_name|surname)($|_)/i', $raw_key ) ) {
+			$compact_key = str_replace( array( '_', '-' ), '', $key );
+			if ( preg_match( '/password|passwd|passphrase|token|secret|authorization|cookie|nonce|patient|messagebody|payment|identity|document|credential|private|passport|nationalid|bankaccount|cardnumber|apikey|encryptionkey|sessionid|deviceid|useragent|email|phone|telephone|mobile|address|ipaddress|ipaddr|birth|dob|ssn|fullname|firstname|lastname|surname/i', $compact_key ) ) {
 				$out[ $key ] = '[redacted]';
 			} elseif ( is_array( $v ) ) {
 				$nested = self::sanitize_evidence( $v, $depth + 1 );

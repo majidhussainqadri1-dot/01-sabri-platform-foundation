@@ -227,7 +227,8 @@ final class SPF_Governance_Control_Plane {
 	}
 
 	public static function lint_runtime_architecture() {
-		return self::lint_architecture( self::runtime_inventory() );
+		$inventory = self::runtime_inventory();
+		return is_wp_error( $inventory ) ? $inventory : self::lint_architecture( $inventory );
 	}
 
 	/**
@@ -726,7 +727,7 @@ final class SPF_Governance_Control_Plane {
 				}
 				$key_text = (string) $safe_key;
 				if ( preg_match( '/(patient|clinical|name|address|message|content|prompt|email|phone|token|secret|password|credential|cookie|authorization|document|government|national[_-]?id)/i', $key_text ) ) {
-					$out[ $safe_key ] = array( 'redacted' => true, 'value_hash' => SPF_Runtime::hash( $item ) );
+					$out[ $safe_key ] = array( 'redacted' => true );
 					continue;
 				}
 				$out[ $safe_key ] = self::sanitize_advisory_input( $item, $depth + 1, $key_text );
@@ -744,7 +745,9 @@ final class SPF_Governance_Control_Plane {
 
 	private static function runtime_inventory() {
 		$modules = array();
-		foreach ( SPF_Registry::list_modules( array( 'limit' => 200 ) ) as $module ) {
+		$source_modules = SPF_Registry::list_modules( array( 'limit' => 200 ) );
+		if ( is_wp_error( $source_modules ) ) { return $source_modules; }
+		foreach ( $source_modules as $module ) {
 			if ( ! is_array( $module ) ) {
 				continue;
 			}
@@ -771,9 +774,11 @@ final class SPF_Governance_Control_Plane {
 				$shell_owners[] = $key;
 			}
 		}
+		$routes = SPF_Registry::list_routes();
+		if ( is_wp_error( $routes ) ) { return $routes; }
 		return array(
 			'modules' => $modules,
-			'routes'  => SPF_Registry::list_routes(),
+			'routes'  => $routes,
 			'global_shell_owners' => array_values( array_unique( $shell_owners ) ),
 		);
 	}

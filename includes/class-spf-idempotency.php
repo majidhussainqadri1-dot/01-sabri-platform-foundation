@@ -114,7 +114,10 @@ final class SPF_Idempotency {
 		}
 		if ( is_wp_error( $result ) ) {
 			$finalized = self::finalize_error( $scope_hash, $token, $result );
-			return is_wp_error( $finalized ) ? $finalized : $result;
+			if ( is_wp_error( $finalized ) ) { return $finalized; }
+			$data = $result->get_error_data();
+			$status = is_array( $data ) && isset( $data['status'] ) ? absint( $data['status'] ) : 400;
+			return new WP_Error( sanitize_key( $result->get_error_code() ), __( 'The foundation request failed; consult its error code.', 'sabri-platform-foundation' ), array( 'status'=>$status ) );
 		}
 		$response = array( 'success'=>true, 'result'=>$result, 'trace_id'=>SPF_Audit::trace_id() );
 		$updated = $wpdb->update(
@@ -149,7 +152,7 @@ final class SPF_Idempotency {
 			'success' => false,
 			'error' => array(
 				'code' => sanitize_key( $error->get_error_code() ),
-				'message' => sanitize_text_field( $error->get_error_message() ),
+				'message' => __( 'The foundation request failed; consult its error code.', 'sabri-platform-foundation' ),
 				'data' => self::safe_error_data( $data ),
 			),
 		);
@@ -177,7 +180,7 @@ final class SPF_Idempotency {
 			$data = is_array( $error['data'] ?? null ) ? $error['data'] : array();
 			$data['status'] = absint( $row['response_status'] ?: 400 );
 			$data['idempotent_replay'] = true;
-			return new WP_Error( sanitize_key( $error['code'] ?? 'spf_replayed_failure' ), sanitize_text_field( $error['message'] ?? __( 'The original request failed.', 'sabri-platform-foundation' ) ), $data );
+			return new WP_Error( sanitize_key( $error['code'] ?? 'spf_replayed_failure' ), __( 'The foundation request failed; consult its error code.', 'sabri-platform-foundation' ), self::safe_error_data( $data ) );
 		}
 		$payload['idempotent_replay'] = true;
 		return rest_ensure_response( $payload );
@@ -192,12 +195,17 @@ final class SPF_Idempotency {
 			$key = substr( sanitize_key( (string) $key ), 0, 128 );
 			// Error replay envelopes are persisted for idempotency and can outlive
 			// the request. Never retain direct personal identifiers in error data.
-			if ( preg_match( '/password|token|secret|cookie|nonce|authorization|patient|message|payment|identity|document|key|credential|passport|national_id|bank_account|(^|_)(email|phone|telephone|mobile|address|ip_address|date_of_birth|birth_date|dob|ssn|full_name|first_name|last_name|surname)($|_)/i', $key ) ) {
+			$compact_key = str_replace( array( '_', '-' ), '', $key );
+			if ( preg_match( '/password|passwd|passphrase|token|secret|cookie|nonce|authorization|patient|message|payment|identity|document|key|credential|passport|nationalid|bankaccount|email|phone|telephone|mobile|address|ipaddress|ipaddr|birth|dob|ssn|fullname|firstname|lastname|surname/i', $compact_key ) ) {
 				$out[ $key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
 				$out[ $key ] = self::safe_error_data( $value, $depth + 1 );
+			} elseif ( is_string( $value ) ) {
+				// Error data is not a free-text archive; only opaque operational codes.
+				$safe = sanitize_text_field( $value );
+				$out[ $key ] = preg_match( '/^[a-z0-9_.:-]{1,80}$/D', $safe ) && ! preg_match( '/^\d{9,}$/D', $safe ) ? $safe : '[redacted]';
 			} elseif ( is_scalar( $value ) || null === $value ) {
-				$out[ $key ] = is_string( $value ) ? substr( sanitize_text_field( $value ), 0, 500 ) : $value;
+				$out[ $key ] = $value;
 			}
 		}
 		return $out;

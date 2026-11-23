@@ -17,6 +17,9 @@ final class SPF_System_Check {
 		$trace = SPF_Audit::trace_id();
 		$checks = array();
 
+		$environment = function_exists( 'wp_get_environment_type' ) ? (string) wp_get_environment_type() : 'unknown';
+		$environment_valid = in_array( $environment, array( 'production','staging','development','local' ), true );
+		$checks[] = self::check( 'environment_type', $environment_valid, $environment_valid ? $environment : 'unknown', 'The WordPress environment type is not configured or recognized.', 'warning' );
 		$checks[] = self::check( 'php_version', version_compare( PHP_VERSION, '8.1.0', '>=' ), PHP_VERSION, 'PHP 8.1 or newer is required.', 'fail' );
 		$wp_version = get_bloginfo( 'version' );
 		$checks[] = self::check( 'wordpress_version', version_compare( $wp_version, '6.0', '>=' ), $wp_version, 'WordPress 6.0 or newer is required.', 'fail' );
@@ -81,6 +84,17 @@ final class SPF_System_Check {
 		$upload_path = isset( $upload['basedir'] ) ? $upload['basedir'] : '';
 		$writable = $upload_path && ( function_exists('wp_is_writable') ? wp_is_writable($upload_path) : is_writable($upload_path) );
 		$checks[] = self::check( 'uploads_writable', $writable, $writable?'writable':'not-writable', 'Uploads directory is not writable.', 'warning' );
+		// CF-04 / File 24 remain canonical owners; File 01 only reads a fresh,
+		// redacted provider-capability receipt, never credentials or storage paths.
+		$storage = apply_filters( 'spf_object_storage_capability_evidence', null, array( 'environment'=>$environment, 'purpose'=>'system_check' ) );
+		$observed = is_array( $storage ) ? strtotime( (string) ( $storage['observed_at'] ?? '' ) ) : false;
+		$expires = is_array( $storage ) ? strtotime( (string) ( $storage['expires_at'] ?? '' ) ) : false;
+		$provider = is_array( $storage ) ? (string) ( $storage['provider_id'] ?? '' ) : '';
+		$storage_ok = is_array( $storage ) && true === ( $storage['verified'] ?? false )
+			&& preg_match( '/^[a-z0-9_-]{1,64}$/D', $provider )
+			&& false !== $observed && $observed >= time() - 900 && $observed <= time() + 60
+			&& false !== $expires && $expires > time() && $expires <= $observed + 900;
+		$checks[] = self::check( 'object_storage_provider_capability', $storage_ok, $storage_ok ? 'provider-capability-verified' : 'provider-unverified', 'Object-storage provider capabilities lack fresh independent evidence; filesystem upload writability does not prove object-store availability.', 'warning' );
 
 		$checks = array_merge( $checks, self::source_registry_checks() );
 		$checks = array_merge( $checks, self::integration_checks() );
@@ -97,8 +111,10 @@ final class SPF_System_Check {
 		$checks[] = self::check( 'upgrade_state', !in_array($upgrade_state['status']??'',array('authorization_required','backup_evidence_required','invalid_schema_version','downgrade_blocked','schema_integrity_required','rolled_back','rollback_incomplete'),true), sanitize_key($upgrade_state['status']??'not-required'), 'Schema upgrade requires operator/backup evidence, has invalid stored version evidence, or was rolled back.', 'warning' );
 
 		$latest_release = SPF_Governance::list_releases( 1 );
-		$release_status = $latest_release ? $latest_release[0]['status'] : 'not-recorded';
-		$checks[] = self::check( 'release_evidence_record', (bool)$latest_release, $release_status, 'No immutable File 01 release-evidence record is registered.', 'warning' );
+		$release_read_ok = is_array( $latest_release );
+		$release_status = ! $release_read_ok ? 'read-failed' : ( $latest_release ? $latest_release[0]['status'] : 'not-recorded' );
+		$checks[] = self::check( 'release_evidence_query', $release_read_ok, $release_read_ok?'verified':'read-failed', 'Release registry query failed; release approval cannot be evaluated.', 'fail' );
+		$checks[] = self::check( 'release_evidence_record', $release_read_ok && (bool)$latest_release, $release_status, 'No immutable File 01 release-evidence record is registered.', 'warning' );
 		$checks[] = self::check( 'staging_accepted', 'approved'===$release_status || 'deployed'===$release_status, $release_status, 'Staging deployment alone is not acceptance; Founder-approved staging acceptance has not been recorded.', 'warning' );
 
 		$overall = self::overall( $checks );
@@ -219,7 +235,12 @@ final class SPF_System_Check {
 			$checks[] = self::check( $code.'_contract', $ok, $value, $provider['message'], 'warning' );
 		}
 		$catalog = SPF_Installer::canonical_module_catalog();
-		$registered_keys = array_column( SPF_Registry::list_modules(array('limit'=>200)), 'module_key' );
+		$registered = SPF_Registry::list_modules( array( 'limit'=>200 ) );
+		if ( is_wp_error( $registered ) ) {
+			$checks[] = self::check( 'owner_manifests_query', false, 'read-failed', 'Module manifests could not be queried safely.', 'fail' );
+			return $checks;
+		}
+		$registered_keys = array_column( $registered, 'module_key' );
 		$missing = array_values(array_filter(array_column($catalog,'module_key'),static fn($key)=>!in_array($key,$registered_keys,true)));
 		$checks[] = self::check( 'owner_manifests', empty($missing), empty($missing)?'all-owner-manifests-registered':(count($missing).'-owner-manifests-pending'), 'Canonical catalog entries are not runtime manifests; each owner must register a real versioned manifest.', 'warning' );
 		return $checks;
@@ -232,9 +253,9 @@ final class SPF_System_Check {
 			return array(self::check('outbox',false,'missing','Outbox table is missing.','fail'));
 		}
 		$pending_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
-		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox health query failed.','fail'));}
+		if(!empty($wpdb->last_error) || ! preg_match('/^(0|[1-9][0-9]*)$/D',(string)$pending_raw)){return array(self::check('outbox_query',false,'query-failed','Outbox health query failed.','fail'));}
 		$dead_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='dead'"); // phpcs:ignore
-		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox dead-letter query failed.','fail'));}
+		if(!empty($wpdb->last_error) || ! preg_match('/^(0|[1-9][0-9]*)$/D',(string)$dead_raw)){return array(self::check('outbox_query',false,'query-failed','Outbox dead-letter query failed.','fail'));}
 		$oldest_raw=$wpdb->get_var("SELECT MIN(created_at) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
 		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox age query failed.','fail'));}
 		$pending=(int)$pending_raw;

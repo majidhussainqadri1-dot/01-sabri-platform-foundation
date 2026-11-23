@@ -176,7 +176,8 @@ $e1 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'v
 $e2 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'b', [ 'value'=>1 ], 1, 'same-caller-key', 'internal' );
 $e3 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'value'=>999 ], 1, 'same-caller-key', 'internal' );
 $e_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$outbox} WHERE event_name='EleventhReview.One.v1'" );
-$assert( true === $e1 && true === $e2 && true === $e3 && 2 === $e_count, 'Explicit event dedupe key is not safely identity-scoped/idempotent.' );
+$e4 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'value'=>1 ], 1, 'same-caller-key', 'internal' );
+$assert( true === $e1 && true === $e2 && is_wp_error( $e3 ) && 'spf_event_dedupe_conflict' === $e3->get_error_code() && true === $e4 && 2 === $e_count, 'Explicit event dedupe must accept identical replays and reject changed payloads.' );
 
 update_option( SPF_Installer::SCHEMA_OPTION, '1.0.0', false );
 add_filter( 'spf_verify_migration_backup_evidence', static function ( $claim, array $context ) {

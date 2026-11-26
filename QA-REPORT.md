@@ -37,3 +37,10 @@ File01 report-only head 9e14ecf9fbcf33afe818c44af33a53983fba70a7: WordPress/MySQ
 File00 head 81e9b60af792f89a08e218daa2fe0d663374ec20: 12/13 workflows green, four-owner consent and isolated restore passed; fifth-owner activation rejected because WP-CLI had no authenticated current actor and File01 correctly requires activate_plugins. File00 test harness corrected at f2470bf69a83a9dad7a174c52f21b50a6fe64cc9 to assert and use the disposable Founder --user=1. No File01 guard changed. Fresh CI needed.
 
 Former staging hostname sabrisocialstaging.sabrihomeopathy.com returned HTTP 530 via WPVibe; failing hop/cause unknown. No security bypass. No Hostinger backup or custom ZIP installation tool found in current connector discovery. No site changes.
+
+### Final observed QA disposition — 2026-11-26
+
+- File00 tested head f2470bf69a83a9dad7a174c52f21b50a6fe64cc9: 12/13 workflows successful; run 45733369532 failed at the five-owner Founder activation preflight even with explicit --user=1. Four-owner real WordPress consent and isolated database/file restore passed again. The log does not isolate current actor identity, canonical Founder identity or activate_plugins capability; diagnose each independently before any corrective product change. Six-action source correction remains unaccepted in the actual File01 consumer. No security guard weakened.
+- File01 tested head 7cc57d5c400cd7b4e5fab58ad7c360380f21840f: run 45733409385 completed SUCCESS, 4/4 jobs including both PHP source checks, actual WordPress/MySQL and deterministic packaging. Report checksum mismatch corrected.
+- Exact-head review records: File00 6067192687; File01 6067188427. This closing note changes documentation only, not either tested product runtime. New documentation HEAD must not be conflated with the tested HEAD.
+- Production mutation zero; File00 installation blocked; full Hostinger backup/staging access, exact live artifact parity, five-owner authorization, independent requirement acceptance, and live re-test remain outstanding. No release approval or merge.

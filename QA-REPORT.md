@@ -29,3 +29,11 @@ File00 PR66 baseline 2239fb8aad19100da9c59bbb23d5e42832b49c6d: 13/13 green, synt
 ### Hold
 
 No live backup/restore, staging access, custom package installation or exact artifact checksum available through current connection. No merge/deploy. Complete Hostinger backup, staged restore, approved role policy, all-owner acceptance and fresh independent review remain gates. Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
+
+### Exact-head QA follow-up
+
+File01 report-only head 9e14ecf9fbcf33afe818c44af33a53983fba70a7: WordPress/MySQL QA passed, PHP 8.1/8.3 source suites reached checksum validation then failed at line 22 because this report changed without recalculating its recorded hash. Corrected the single QA-REPORT.md checksum atomically with this report. No product code change or weakened checksum gate.
+
+File00 head 81e9b60af792f89a08e218daa2fe0d663374ec20: 12/13 workflows green, four-owner consent and isolated restore passed; fifth-owner activation rejected because WP-CLI had no authenticated current actor and File01 correctly requires activate_plugins. File00 test harness corrected at f2470bf69a83a9dad7a174c52f21b50a6fe64cc9 to assert and use the disposable Founder --user=1. No File01 guard changed. Fresh CI needed.
+
+Former staging hostname sabrisocialstaging.sabrihomeopathy.com returned HTTP 530 via WPVibe; failing hop/cause unknown. No security bypass. No Hostinger backup or custom ZIP installation tool found in current connector discovery. No site changes.

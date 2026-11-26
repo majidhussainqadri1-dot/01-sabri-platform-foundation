@@ -122,7 +122,21 @@ final class SPF_Installer {
 			update_option( 'spf_upgrade_state', array( 'status'=>'invalid_schema_version', 'stored_version'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
 			return new WP_Error( 'spf_schema_version_invalid', __( 'The stored File 01 schema version is malformed; schema upgrade is blocked pending reconciliation.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
 		}
-		if ( version_compare( $current, SPF_SCHEMA_VERSION, '>=' ) ) {
+		$schema_precedence = SPF_Registry::compare_semver( (string) $current, SPF_SCHEMA_VERSION );
+		if ( $schema_precedence > 0 ) {
+			// The database claims a newer schema than this source knows. Never
+			// silently treat a repository/runtime downgrade as an accepted upgrade.
+			update_option( 'spf_upgrade_state', array( 'status'=>'downgrade_blocked', 'from'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'checked_at'=>SPF_Runtime::now_mysql() ), false );
+			return new WP_Error( 'spf_schema_downgrade_blocked', __( 'Stored File 01 schema is newer than this runtime; verify deployed code and migration parity before continuing.', 'sabri-platform-foundation' ), array( 'status'=>409 ) );
+		}
+		if ( 0 === $schema_precedence ) {
+			// wp_options is not schema evidence: columns, indexes and engines
+			// must be independently verified before reporting "up to date".
+			$verified = self::verify_schema();
+			if ( is_wp_error( $verified ) ) {
+				update_option( 'spf_upgrade_state', array( 'status'=>'schema_integrity_required', 'from'=>(string)$current, 'to'=>SPF_SCHEMA_VERSION, 'verification_code'=>$verified->get_error_code(), 'checked_at'=>SPF_Runtime::now_mysql() ), false );
+				return new WP_Error( 'spf_schema_integrity_required', __( 'File 01 schema version matches, but actual database schema verification failed; operator investigation is required.', 'sabri-platform-foundation' ), array( 'status'=>409, 'verification_code'=>$verified->get_error_code() ) );
+			}
 			return true;
 		}
 		if ( ! SPF_Authorization::can( 'run_schema_upgrade', array( 'module_key' => 'file-01', 'from' => $current, 'to' => SPF_SCHEMA_VERSION ), array( 'purpose' => 'schema_upgrade' ) ) ) {
@@ -611,6 +625,32 @@ final class SPF_Installer {
 		);
 	}
 
+	/** Bounded, versioned File 01-owned event names; companion events are owner-defined. */
+	public static function file01_event_catalog() {
+		return array(
+			'FeatureFlagChanged.v1',
+			'FeatureFlagExpired.v1',
+			'FoundationAmendmentApproved.v1',
+			'FoundationContractDeprecated.v1',
+			'FoundationContractRegistered.v1',
+			'FoundationHealthChanged.v1',
+			'FoundationLegacyReconciled.v1',
+			'FoundationLegacyReconciliationRolledBack.v1',
+			'FoundationModuleActivated.v1',
+			'FoundationModuleDeactivated.v1',
+			'FoundationModuleRegistered.v1',
+			'FoundationPrivacyErasureCompleted.v1',
+			'FoundationReleaseRecorded.v1',
+			'FoundationReleaseStateChanged.v1',
+			'FoundationRepairCompleted.v1',
+			'FoundationRouteMapped.v1',
+			'FoundationSchemaMigrated.v1',
+			'ModuleActivated.v1',
+			'ModuleDeactivated.v1',
+			'ReleaseApproved.v1',
+		);
+	}
+
 	public static function file01_manifest() {
 		return array(
 			'module_key'       => 'file-01',
@@ -632,12 +672,12 @@ final class SPF_Installer {
 			'capabilities'     => array( 'registry', 'contracts', 'foundational_routes', 'dependency_readiness', 'system_check', 'release_evidence', 'legacy_reconciliation', 'safe_repair', 'privacy_lifecycle', 'event_backbone', 'feature_flags', 'policy_as_code', 'amendment_impact_simulation', 'architecture_lint', 'spec_code_traceability', 'developer_service_catalog', 'golden_path_scaffolder', 'contract_compatibility_lab', 'event_schema_registry', 'config_drift_detection', 'release_train_planning', 'progressive_delivery', 'slo_error_budget_gate', 'platform_digital_twin', 'bounded_self_heal', 'chaos_harness', 'telemetry_context', 'governance_snapshots', 'ai_governance_advisory' ),
 			'commands'         => array( 'RegisterFoundationManifest.v1', 'RegisterFoundationContract.v1', 'MapFoundationRoute.v1', 'TransitionFoundationRelease.v1' ),
 			'queries'          => array( 'GetFoundationReadiness.v1', 'ListFoundationContracts.v1', 'GetFoundationStatus.v1' ),
-			'events'           => array( 'FoundationModuleActivated.v1', 'FoundationModuleDeactivated.v1', 'FoundationContractDeprecated.v1', 'FoundationHealthChanged.v1', 'FoundationReleaseStateChanged.v1', 'ReleaseApproved.v1' ),
+			'events'           => self::file01_event_catalog(),
 			'routes'           => array( '/platform-system-check/', '/platform-foundation/status/' ),
 			'data_classes'     => array( 'operational', 'governance', 'audit', 'privacy_request' ),
 			'health'           => array( 'callback' => 'spf_foundation_status', 'contract' => 'FoundationHealth.v1' ),
 			'source'           => 'SSH-F01-PLAN-2026-v1.0',
-			'governing_sources'=> array( 'SSH-F01-PLAN-2026-v1.0', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0' ),
+			'governing_sources'=> array( 'Sabri Website Master Plan V12.3 (2026-11-13; governing requirements baseline, not deployment or runtime Founder approval)', 'SSH-F01-PLAN-2026-v1.0 (historical technical plan)', 'File 01 Future Foundation 18 Enhancements v2.0', 'Continuous Value / Third Central Plan v1.0', 'Sabri-Website-Master-Plan-v12.docx (historical superseded requirements baseline; not deployed proof)' ),
 		);
 	}
 

@@ -53,32 +53,100 @@ final class SPF_Privacy {
 			'idempotency'      => array( 'user_column' => 'actor_id', 'fields' => array( 'id','action_name','status','created_at','updated_at' ) ),
 			'privacy_requests' => array( 'user_column' => 'user_id',  'fields' => array( 'id','request_id','request_type','status','purpose','legal_basis','requested_at','completed_at' ) ),
 		);
-		$all = array();
+		// Count only, then fetch the current 100-row page. Reading all rows
+		// from all four tables on every privacy-export page is unbounded and
+		// can silently return an incomplete export after a database failure.
+		$counts = array();
+		$total = 0;
 		foreach ( $rowspec as $name => $spec ) {
 			$table = SPF_Installer::table( $name );
 			if ( ! SPF_Runtime::table_exists( $table ) ) {
-				continue;
+				return new WP_Error( 'spf_privacy_export_table_missing', __( 'File 01 cannot verify a complete privacy export because an owned table is missing.', 'sabri-platform-foundation' ) );
 			}
-			$column = $spec['user_column'];
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$column}=%d ORDER BY id ASC", $user->ID ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- allowlisted table/column.
-			foreach ( $rows as $row ) {
-				$all[] = array( 'name' => $name, 'fields' => $spec['fields'], 'row' => $row );
+			$column = $spec['user_column']; // Fixed internal allowlist, not user input.
+			$wpdb->last_error = '';
+			$count_raw = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$column}=%d", $user->ID ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( '' !== (string) $wpdb->last_error || ! is_numeric( $count_raw ) || (int) $count_raw < 0 ) {
+				return new WP_Error( 'spf_privacy_export_count_failed', __( 'File 01 privacy-export row counts could not be verified.', 'sabri-platform-foundation' ) );
+			}
+			$counts[ $name ] = (int) $count_raw;
+			$total += (int) $count_raw;
+		}
+		// Independent HTTP pages cannot share a transaction. Persist a short-lived
+		// per-subject row-inventory signature, and fail rather than silently skip
+		// rows when counts or high-water IDs change between pages.
+		$export_snapshot_key = null;
+		if ( function_exists( 'get_transient' ) && function_exists( 'set_transient' ) && function_exists( 'wp_salt' ) ) {
+			$highwater = array();
+			foreach ( $rowspec as $name => $spec ) {
+				$table = SPF_Installer::table( $name );
+				$column = $spec['user_column'];
+				$wpdb->last_error = '';
+				$max_id = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id),0) FROM {$table} WHERE {$column}=%d", $user->ID ) );
+				if ( ! empty( $wpdb->last_error ) || ! is_numeric( $max_id ) ) {
+					return new WP_Error( 'spf_privacy_export_snapshot_failed', __( 'Privacy export source inventory could not be verified.', 'sabri-platform-foundation' ) );
+				}
+				$highwater[ $name ] = (string) $max_id;
+			}
+			$export_snapshot_key = 'spf_privacy_export_' . substr( hash_hmac( 'sha256', (string)$user->ID, wp_salt('auth') ), 0, 32 );
+			$fingerprint = SPF_Runtime::hash( array( 'counts'=>$counts, 'highwater'=>$highwater ) );
+			if ( 1 === $page ) {
+				if ( ! set_transient( $export_snapshot_key, $fingerprint, 15 * MINUTE_IN_SECONDS ) ) {
+					return new WP_Error( 'spf_privacy_export_snapshot_failed', __( 'Privacy export page consistency could not be initialized.', 'sabri-platform-foundation' ) );
+				}
+			} elseif ( ! hash_equals( (string) get_transient( $export_snapshot_key ), $fingerprint ) ) {
+				return new WP_Error( 'spf_privacy_export_changed', __( 'Privacy export rows changed between pages; restart the export to avoid a silent omission.', 'sabri-platform-foundation' ) );
 			}
 		}
-		$total = count( $all );
-		foreach ( array_slice( $all, $offset, $limit ) as $item ) {
-			$data = array();
-			foreach ( $item['fields'] as $field ) {
-				if ( array_key_exists( $field, $item['row'] ) ) {
-					$data[] = array( 'name' => $field, 'value' => (string) $item['row'][ $field ] );
+		$skip = $offset;
+		foreach ( $rowspec as $name => $spec ) {
+			$count = $counts[ $name ];
+			if ( $skip >= $count ) {
+				$skip -= $count;
+				continue;
+			}
+			$take = min( $limit - count( $items ), $count - $skip );
+			if ( $take < 1 ) {
+				break;
+			}
+			$table = SPF_Installer::table( $name );
+			$column = $spec['user_column'];
+			$fields = implode( ',', $spec['fields'] ); // Fixed, non-user-selectable column inventory.
+			$wpdb->last_error = '';
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$fields} FROM {$table} WHERE {$column}=%d ORDER BY id ASC LIMIT %d OFFSET %d", $user->ID, $take, $skip ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+				return new WP_Error( 'spf_privacy_export_page_failed', __( 'A bounded File 01 privacy-export page could not be read.', 'sabri-platform-foundation' ) );
+			}
+			foreach ( $rows as $row ) {
+				$data = array();
+				foreach ( $spec['fields'] as $field ) {
+					if ( array_key_exists( $field, $row ) ) {
+						$data[] = array( 'name' => $field, 'value' => (string) $row[ $field ] );
+					}
+				}
+				$items[] = array(
+					'group_id'    => 'sabri-platform-foundation-' . $name,
+					'group_label' => ucwords( str_replace( '_', ' ', $name ) ),
+					'item_id'     => $name . '-' . $row['id'],
+					'data'        => $data,
+				);
+			}
+			$skip = 0;
+			if ( count( $items ) >= $limit ) {
+				break;
+			}
+		}
+		if ( $export_snapshot_key ) {
+			foreach ( $rowspec as $name => $spec ) {
+				$table = SPF_Installer::table( $name );
+				$column = $spec['user_column'];
+				$wpdb->last_error = '';
+				$current_count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$column}=%d", $user->ID ) );
+				$current_max = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id),0) FROM {$table} WHERE {$column}=%d", $user->ID ) );
+				if ( ! empty( $wpdb->last_error ) || (string)$current_count !== (string)$counts[ $name ] || (string)$current_max !== $highwater[ $name ] ) {
+					return new WP_Error( 'spf_privacy_export_changed', __( 'Privacy export rows changed during page retrieval; restart the export.', 'sabri-platform-foundation' ) );
 				}
 			}
-			$items[] = array(
-				'group_id'    => 'sabri-platform-foundation-' . $item['name'],
-				'group_label' => ucwords( str_replace( '_', ' ', $item['name'] ) ),
-				'item_id'     => $item['name'] . '-' . $item['row']['id'],
-				'data'        => $data,
-			);
 		}
 		return array( 'data' => $items, 'done' => ( $offset + $limit ) >= $total );
 	}

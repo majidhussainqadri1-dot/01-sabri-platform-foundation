@@ -44,7 +44,12 @@ final class SPF_Repair {
 			}
 		}
 		if ( SPF_Runtime::table_exists( SPF_Installer::table( 'routes' ) ) ) {
-			foreach ( SPF_Registry::list_routes() as $route ) {
+			$routes = SPF_Registry::list_routes();
+			if ( is_wp_error( $routes ) ) {
+				$blockers[] = array( 'code'=>'route_registry_read_failed', 'defect_code'=>$routes->get_error_code() );
+				$routes = array();
+			}
+			foreach ( $routes as $route ) {
 				if ( 'file-01' === $route['owner_module'] && $route['page_id'] && ! get_post( $route['page_id'] ) ) {
 					$actions[] = array( 'action' => 'clear_missing_owned_page_reference', 'target' => $route['route_key'], 'record_version' => $route['record_version'] );
 				}

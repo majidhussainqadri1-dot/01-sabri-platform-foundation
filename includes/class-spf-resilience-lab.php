@@ -331,6 +331,32 @@ final class SPF_Resilience_Lab {
 		);
 	}
 
+	/**
+	 * Structural receipt verification only. An independent observer must ALSO
+	 * attest the actual fault and recovery in run_chaos; a hook's execution
+	 * or a self-issued receipt never proves injection.
+	 */
+	public static function verify_chaos_receipt( $receipt, $scenario, $challenge ) {
+		if ( ! is_array( $receipt ) || ! is_string( $scenario ) || ! is_string( $challenge )
+			|| ! preg_match( '/^[a-f0-9]{32}$/D', $challenge )
+			|| ! isset( self::chaos_scenarios()[ $scenario ] )
+			|| ( $receipt['scenario'] ?? null ) !== $scenario
+			|| ! is_string( $receipt['challenge'] ?? null )
+			|| ! hash_equals( $challenge, $receipt['challenge'] )
+			|| ! is_string( $receipt['adapter'] ?? null )
+			|| ! preg_match( '/^[a-z0-9][a-z0-9_-]{2,63}$/D', $receipt['adapter'] )
+			|| true !== ( $receipt['fault_observed'] ?? false )
+			|| true !== ( $receipt['recovery_observed'] ?? false )
+			|| ! is_string( $receipt['fault_evidence_sha256'] ?? null )
+			|| ! is_string( $receipt['recovery_evidence_sha256'] ?? null )
+			|| ! preg_match( '/^[a-f0-9]{64}$/D', $receipt['fault_evidence_sha256'] )
+			|| ! preg_match( '/^[a-f0-9]{64}$/D', $receipt['recovery_evidence_sha256'] )
+			|| hash_equals( $receipt['fault_evidence_sha256'], $receipt['recovery_evidence_sha256'] ) ) {
+			return false;
+		}
+		return true;
+	}
+
 	public static function run_chaos( $scenario, array $context = array() ) {
 		$scenario = sanitize_key( $scenario );
 		$catalog = self::chaos_scenarios();
@@ -352,16 +378,41 @@ final class SPF_Resilience_Lab {
 			'injected'         => false,
 			'simulation_only'  => ! $enabled,
 			'fail_closed'      => ! in_array( $environment, $safe_environments, true ),
+			'injection_attempted'=>false,
+			'effect_verified' => false,
+			'recovery_verified' => false,
+			'injection_outcome' => $enabled ? 'not_executed' : 'disabled',
+			'evidence_hash' => '',
 		);
 		if ( $enabled ) {
-			do_action( 'spf_chaos_inject_' . $scenario, self::sanitize_chaos_context( $context ) );
-			$result['injected'] = true;
-			$result['simulation_only'] = false;
+			// An event hook alone is not proof of a real fault. The bounded
+			// adapter and independent observer must return matching receipts.
+			$challenge = bin2hex( random_bytes( 16 ) );
+			$safe_context = self::sanitize_chaos_context( $context );
+			$result['injection_attempted'] = true;
+			$result['simulation_only'] = false; // A hook may have real effects.
+			do_action( 'spf_chaos_inject_' . $scenario, $safe_context, $challenge );
+			$receipt = apply_filters( 'spf_chaos_fault_observation_receipt', null, $scenario, $safe_context, $challenge );
+			$structured = self::verify_chaos_receipt( $receipt, $scenario, $challenge );
+			$independent = $structured && true === apply_filters(
+				'spf_chaos_independent_observation_verified', false, $receipt, $scenario, $challenge
+			);
+			$result['injected'] = $independent;
+			$result['effect_verified'] = $independent;
+			$result['recovery_verified'] = $independent;
+			$result['injection_outcome'] = $independent ? 'fault_and_recovery_verified' : 'unverified_no_success_claim';
+			if ( $independent ) {
+				$result['evidence_hash'] = SPF_Runtime::hash( array(
+					'scenario'=>$scenario, 'challenge'=>$challenge, 'adapter'=>$receipt['adapter'],
+					'fault_evidence_sha256'=>$receipt['fault_evidence_sha256'],
+					'recovery_evidence_sha256'=>$receipt['recovery_evidence_sha256'],
+				) );
+			}
 		}
 		if ( function_exists( 'get_option' ) ) {
 			$log = get_option( self::CHAOS_OPTION, array() );
 			$log = is_array( $log ) ? $log : array();
-			$log[] = array( 'scenario'=>$scenario, 'environment'=>$result['environment'], 'injected'=>$result['injected'], 'time'=>SPF_Runtime::now_mysql() );
+			$log[] = array( 'scenario'=>$scenario, 'environment'=>$result['environment'], 'injection_attempted'=>$result['injection_attempted'], 'injected'=>$result['injected'], 'effect_verified'=>$result['effect_verified'], 'recovery_verified'=>$result['recovery_verified'], 'evidence_hash'=>$result['evidence_hash'], 'time'=>SPF_Runtime::now_mysql() );
 			$expected = array_slice( $log, -100 );
 			update_option( self::CHAOS_OPTION, $expected, false );
 			$persisted = get_option( self::CHAOS_OPTION, array() );

@@ -129,8 +129,13 @@ final class SPF_Plugin {
 
 	public function status_dto() {
 		$releases = SPF_Governance::list_releases( 1 );
-		$latest_release = $releases ? $releases[0] : array();
-		$release_status = $latest_release ? $latest_release['status'] : 'not-recorded';
+		$release_read_ok = is_array( $releases );
+		$latest_release = $release_read_ok && ! empty( $releases ) ? $releases[0] : array();
+		$release_status = ! $release_read_ok ? 'read-failed' : ( $latest_release ? $latest_release['status'] : 'not-recorded' );
+		$modules = SPF_Registry::list_modules( array( 'limit'=>200 ) );
+		$contracts = SPF_Registry::list_contracts( array( 'limit'=>200 ) );
+		$routes = SPF_Registry::list_routes();
+		$registries_ok = is_array( $modules ) && is_array( $contracts ) && is_array( $routes );
 		$schema = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
 		$health = SPF_System_Check::latest();
 		$operational_context = array(
@@ -140,27 +145,84 @@ final class SPF_Plugin {
 			'health' => $health,
 			'health_hash' => is_array( $health ) ? SPF_Runtime::hash( $health ) : '',
 		);
-		$operational_claim = apply_filters( 'spf_operational_acceptance_status', null, $operational_context );
-		$operational = self::validate_operational_claim( $operational_claim, $operational_context );
+		// A historical immutable release record is NOT proof that this exact
+		// active source/package is deployed. Never inherit a prior version's
+		// CI, staging or deployment claims across an upgrade or rollback.
+		$release_current = $release_read_ok && $registries_ok && is_array( $latest_release ) && ! empty( $latest_release )
+			&& hash_equals( SPF_VERSION, (string) ( $latest_release['software_version'] ?? '' ) )
+			&& hash_equals( SPF_SCHEMA_VERSION, (string) $schema )
+			&& hash_equals( (string) $schema, (string) ( $latest_release['schema_version'] ?? '' ) )
+			&& hash_equals( SPF_VERSION, (string) get_option( SPF_Installer::VERSION_OPTION, '' ) );
+		$parity_context = array(
+			'release_id' => (string) ( $latest_release['release_id'] ?? '' ),
+			'package_checksum' => (string) ( $latest_release['checksum_sha256'] ?? '' ),
+			'source_commit' => (string) ( $latest_release['commit_sha'] ?? '' ),
+			'software_version' => SPF_VERSION,
+			'schema_version' => (string) $schema,
+			'release_status' => $release_status,
+		);
+		$parity_claim = $release_current && 'deployed' === $release_status
+			? apply_filters( 'spf_deployed_artifact_parity_evidence', null, $parity_context ) : null;
+		$live_verified = $release_current && self::validate_deployment_parity_claim( $parity_claim, $parity_context );
+		$operational_claim = $live_verified ? apply_filters( 'spf_operational_acceptance_status', null, $operational_context ) : null;
+		$operational = $live_verified && self::validate_operational_claim( $operational_claim, $operational_context );
 		return array(
 			'file'=>'01-B','plan_id'=>SPF_PLAN_ID,'software_version'=>SPF_VERSION,'schema_version'=>$schema,
 			'contract_version'=>get_option(SPF_Installer::CONTRACT_OPTION,SPF_CONTRACT_VERSION),'activation_state'=>get_option('spf_activation_state',array('status'=>'unknown')),
 			'upgrade_state'=>get_option('spf_upgrade_state',array('status'=>'not-required')),
-			'module_count'=>count(SPF_Registry::list_modules(array('limit'=>200))),'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
-			'contract_count'=>count(SPF_Registry::list_contracts(array('limit'=>200))),'route_count'=>count(SPF_Registry::list_routes()),
+			'module_count'=>is_array( $modules ) ? count( $modules ) : null,'catalog_count'=>count(SPF_Installer::canonical_module_catalog()),
+			'contract_count'=>is_array( $contracts ) ? count( $contracts ) : null,'route_count'=>is_array( $routes ) ? count( $routes ) : null,
+			'registry_read_verified'=>$registries_ok,'release_read_verified'=>$release_read_ok,
 			'latest_health'=>$health,'legacy_state'=>get_option('spf_reconciliation_state',array('status'=>'not_run')),'latest_release_status'=>$release_status,
 			'future_foundation'=>SPF_Future_Foundation::status(),
 			'completion_statuses'=>array(
 				'specified'=>true,
 				'coded'=>true,
-				'packaged'=>in_array($release_status,array('built','verified','staged','approved','deployed'),true),
-				'automated_qa_green'=>in_array($release_status,array('verified','staged','approved','deployed'),true),
-				'staging_accepted'=>in_array($release_status,array('approved','deployed'),true),
-				'live_deployed'=>'deployed'===$release_status,
+				'packaged'=>$release_current && in_array($release_status,array('built','verified','staged','approved','deployed'),true),
+				'automated_qa_green'=>$release_current && in_array($release_status,array('verified','staged','approved','deployed'),true),
+				'staging_accepted'=>$release_current && in_array($release_status,array('approved','deployed'),true),
+				'release_record_says_deployed'=>'deployed'===$release_status,
+				'live_deployed'=>$live_verified,
 				'operational'=>$operational,
 			),
 			'ownership_boundary'=>'No public shell, feed, profile, identity, Security Center, notification truth or search-truth ownership.',
 		);
+	}
+
+	/**
+	 * Verify fresh, independently observed installed-package parity. A stored
+	 * release transition or a previous source commit cannot satisfy this gate.
+	 */
+	private static function validate_deployment_parity_claim( $claim, array $context ) {
+		if ( 'deployed' !== ( $context['release_status'] ?? '' ) || ! is_array( $claim ) || true !== ( $claim['verified'] ?? false ) ) {
+			return false;
+		}
+		$checksum = strtolower( (string) ( $context['package_checksum'] ?? '' ) );
+		$source = strtolower( (string) ( $context['source_commit'] ?? '' ) );
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $checksum ) || ! preg_match( '/^[a-f0-9]{40,64}$/', $source ) ) {
+			return false;
+		}
+		$identity = array(
+			'release_id' => (string) ( $context['release_id'] ?? '' ),
+			'package_checksum' => $checksum,
+			'source_commit' => $source,
+			'software_version' => (string) ( $context['software_version'] ?? '' ),
+			'schema_version' => (string) ( $context['schema_version'] ?? '' ),
+		);
+		foreach ( $identity as $key => $expected ) {
+			$actual = (string) ( $claim[ $key ] ?? '' );
+			if ( '' === $expected || ! hash_equals( $expected, in_array( $key, array( 'package_checksum','source_commit' ), true ) ? strtolower( $actual ) : $actual ) ) {
+				return false;
+			}
+		}
+		if ( 'production' !== ( $claim['environment'] ?? '' ) || '' === trim( (string) ( $claim['verifier'] ?? '' ) ) ) {
+			return false;
+		}
+		$observed = strtotime( (string) ( $claim['observed_at'] ?? '' ) );
+		$expires = strtotime( (string) ( $claim['expires_at'] ?? '' ) );
+		return false !== $observed && false !== $expires
+			&& $observed <= time() + 60 && $observed >= time() - 900
+			&& $expires > time() && $expires <= $observed + 900;
 	}
 
 	private static function validate_operational_claim( $claim, array $context ) {

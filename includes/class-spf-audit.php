@@ -67,7 +67,9 @@ final class SPF_Audit {
 			if (
 				'' === $action_name || '' === $object_type || '' === $result_code ||
 				$raw_action !== $action_name || $raw_object_type !== $object_type || $raw_object_id !== $object_id || $raw_result !== $result_code || $raw_purpose !== $purpose ||
-				strlen( $action_name ) > 128 || strlen( $object_type ) > 64 || strlen( $object_id ) > 191 || strlen( $result_code ) > 64 || strlen( $purpose ) > 191
+				strlen( $action_name ) > 128 || strlen( $object_type ) > 64 || strlen( $object_id ) > 191 || strlen( $result_code ) > 64 || strlen( $purpose ) > 191 ||
+				( str_contains( $object_id, '@' ) && ! ( 'foundation_contract' === $object_type && preg_match( '/^[A-Za-z0-9_.-]+@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?$/D', $object_id ) ) ) || preg_match( '~https?://|[\r\n<>]~i', $object_id ) ||
+				filter_var( $object_id, FILTER_VALIDATE_IP ) || preg_match( '/^\+?[0-9][0-9(). -]{8,}$/D', $object_id )
 			) {
 				return new WP_Error( 'spf_audit_record_invalid', __( 'Mandatory audit identities and purpose must already be canonical and within their bounded storage envelope; silent normalization or truncation is forbidden.', 'sabri-platform-foundation' ) );
 			}

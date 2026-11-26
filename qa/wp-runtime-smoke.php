@@ -10,7 +10,7 @@ $assert = static function ( bool $condition, string $message ) use ( &$assertion
 $admin = get_user_by( 'login', 'admin' );
 wp_set_current_user( $admin ? $admin->ID : 1 );
 
-$assert( defined( 'SPF_VERSION' ) && '2.0.1' === SPF_VERSION, 'Plugin version mismatch.' );
+$assert( defined( 'SPF_VERSION' ) && '2.0.2' === SPF_VERSION, 'Plugin version mismatch.' );
 $assert( '1.2.0' === get_option( SPF_Installer::SCHEMA_OPTION ), 'Schema version mismatch after activation.' );
 $assert( '2.0.0' === get_option( SPF_Installer::CONTRACT_OPTION ), 'Contract version mismatch after activation.' );
 $schema = SPF_Installer::verify_schema();
@@ -37,7 +37,7 @@ $assert( false === get_option( 'spf_founder_user_id', false ), 'Unsafe legacy Fo
 $assert( false === get_option( 'spf_page_map', false ), 'Legacy route map exists on fresh activation.' );
 
 $future = SPF_Future_Foundation::status();
-$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['coded_count'] ?? 0 ), 'Future Foundation 18-feature catalog is incomplete.' );
+$assert( 18 === (int) ( $future['feature_count'] ?? 0 ) && 18 === (int) ( $future['implementation_present_count'] ?? 0 ) && 0 === (int) ( $future['coded_count'] ?? 0 ) && false === ( $future['coded_completion_verified'] ?? true ), 'Future Foundation 18-feature catalog is incomplete.' );
 $assert( empty( $future['ai_autonomous_changes'] ) && empty( $future['ai_autonomous_approval'] ), 'AI governance boundary is not advisory-only.' );
 
 $unauthorized = SPF_Governance::record_release( [
@@ -79,7 +79,7 @@ $verified = SPF_Governance::transition_release( $rid, 'verified', [
 ], [ 'purpose'=>'release_transition','expected_sequence'=>2,'expected_record_version'=>2 ] );
 $assert( is_array( $verified ) && 3 === $verified['sequence_no'], 'built→verified failed.' );
 $staged = SPF_Governance::transition_release( $rid, 'staged', [
-	'staging_environment'=>'disposable-ci','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
+	'staging_environment'=>'disposable-ci','staging_reality_freeze'=>'isolated WordPress/MySQL CI fixture only; external Hostinger acceptance not asserted','fresh_install'=>true,'upgrade_test'=>true,'cross_file_contracts'=>'stubbed owner contracts','backup_restore_test'=>true,
 	'rollback_rehearsal'=>true,'browser_accessibility_rtl'=>'CI does not substitute Hostinger acceptance','founder_acceptance_pending'=>'yes',
 ], [ 'purpose'=>'release_transition','expected_sequence'=>3,'expected_record_version'=>3 ] );
 $assert( is_array( $staged ) && 4 === $staged['sequence_no'], 'verified→staged failed.' );
@@ -176,7 +176,8 @@ $e1 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'v
 $e2 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'b', [ 'value'=>1 ], 1, 'same-caller-key', 'internal' );
 $e3 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'value'=>999 ], 1, 'same-caller-key', 'internal' );
 $e_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$outbox} WHERE event_name='EleventhReview.One.v1'" );
-$assert( true === $e1 && true === $e2 && true === $e3 && 2 === $e_count, 'Explicit event dedupe key is not safely identity-scoped/idempotent.' );
+$e4 = SPF_Event_Bus::publish( 'EleventhReview.One.v1', 'review_probe', 'a', [ 'value'=>1 ], 1, 'same-caller-key', 'internal' );
+$assert( true === $e1 && true === $e2 && is_wp_error( $e3 ) && 'spf_event_dedupe_conflict' === $e3->get_error_code() && true === $e4 && 2 === $e_count, 'Explicit event dedupe must accept identical replays and reject changed payloads.' );
 
 update_option( SPF_Installer::SCHEMA_OPTION, '1.0.0', false );
 add_filter( 'spf_verify_migration_backup_evidence', static function ( $claim, array $context ) {

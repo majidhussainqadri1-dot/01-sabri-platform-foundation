@@ -7,6 +7,21 @@ printf 'PHP syntax\n'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find . -type f -name '*.php' -not -path './build/*' -not -path './dist/*' -print0)
 
 php tests/unit-tests.php
+php tests/file01-live-parity-regression.php
+php tests/file01-crossfile-contract-regressions.php
+php tests/file01-crossfile-matrix-tests.php
+php tests/event-payload-privacy.php
+php tests/governance-privacy.php
+php tests/idempotency-error-privacy.php
+php tests/forty-review-corrective-regressions.php
+php tests/forty-review-privacy-consistency.php
+php tests/outbox-db-failure.php
+php tests/privacy-export.php
+php tests/registry-drift.php
+php tests/release-truth.php
+php tests/system-check-persistence.php
+php tests/v12-three-gaps-tests.php
+php tools/v12-traceability-audit.php
 php tests/future-foundation-tests.php
 php tests/third-ten-round-review-tests.php
 php tests/fourth-ten-round-review-tests.php
@@ -28,6 +43,8 @@ php tests/security-tests.php
 php tests/contract-tests.php
 
 printf 'Source checksum manifest\n'
+php tools/validate-source-checksums.php --self-test
+php tools/validate-source-checksums.php
 sha256sum --check SOURCE-CHECKSUMS.sha256
 printf 'Closed-world source inventory\n'
 actual_inventory="$(mktemp)"

@@ -43,7 +43,7 @@ $assert( substr_count($purge, 'self::persist_receipt( $receipt )') >= 3, 'Round 
 $assert( str_contains($purge, '$restored = $wpdb->query') && str_contains($purge, '! SPF_Runtime::table_exists( SPF_Installer::table( $name ) )'), 'Round 8: purge compensation restore is not query/read-back verified.' );
 $assert( str_contains($purge, 'spf_purge_transient_cleanup_failed') && str_contains($purge, '$transient_cleanup = self::delete_owned_transients()'), 'Round 9: purge transient cleanup errors can still be ignored.' );
 $assert( str_contains($reconciler, 'spf_reconciliation_snapshot_persistence_failed') && str_contains($reconciler, 'The applied reconciliation state could not be durably verified.'), 'Round 10: reconciliation recovery/apply state persistence is not verified.' );
-$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, "'fresh_install','upgrade_test','backup_restore_test','rollback_rehearsal','smoke_test','rollback_ready'"), 'Round 11: release evidence validation is not fail-closed for unknown states and true boolean gates.' );
+$assert( str_contains($governance, 'spf_release_state_invalid') && str_contains($governance, "'staging_reality_freeze'") && str_contains($governance, "'fresh_install'") && str_contains($governance, "'upgrade_test'") && str_contains($governance, "'backup_restore_test'") && str_contains($governance, "'rollback_rehearsal'") && str_contains($governance, "'smoke_test'") && str_contains($governance, "'rollback_ready'"), 'Round 11: release evidence validation is not fail-closed for unknown states and true boolean gates.' );
 $assert( str_contains($system, 'spf_health_latest_query_failed') && str_contains($system, 'spf_health_latest_corrupt'), 'Round 12: latest health evidence can still fail/corrupt as a silent null.' );
 
 // 13-80: independent closure lenses on corrected source.
@@ -92,7 +92,7 @@ $assert( str_contains($system, 'audit_chain') && str_contains($system, 'SPF_Audi
 $assert( str_contains($system, 'privacy_requests_query') && str_contains($system, 'privacy_holds_query'), 'Round 55: privacy health database errors can appear green.' );
 $assert( str_contains($system, 'schema_version_current'), 'Round 56: System Check omits schema-version drift.' );
 $assert( str_contains($plugin, "'operational'=>\$operational") && str_contains($plugin, "'deployed' !== ( \$context['release_status'] ?? '' )") && str_contains($plugin, 'deployed_package_checksum'), 'Round 57: operational completion can be asserted before deployment or without exact deployed-package binding.' );
-$assert( str_contains($plugin, "'staging_accepted'=>in_array") && str_contains($plugin, "array('approved','deployed')") && ! str_contains($plugin, "array('staged','approved','deployed')"), 'Round 58: Staging-Accepted still collapses the merely-staged state.' );
+$assert( str_contains($plugin, "'staging_accepted'=>\$release_current && in_array") && str_contains($plugin, "array('approved','deployed')") && ! str_contains($plugin, "array('staged','approved','deployed')"), 'Round 58: Staging-Accepted still collapses the merely-staged state.' );
 $assert( str_contains($future, 'spf_future_foundation_tick') && str_contains($future, 'spf_five_minutes'), 'Round 59: Future Foundation periodic health tick is not scheduled at five minutes.' );
 $assert( str_contains($future, 'wp_unschedule_event'), 'Round 60: Future Foundation cron lifecycle lacks deactivation cleanup.' );
 $assert( str_contains($rest, 'permission_callback') || str_contains($plugin, 'permission_callback'), 'Round 61: restricted REST surfaces lack permission callbacks.' );
@@ -114,7 +114,7 @@ $assert( str_contains($governance, 'expected_version_required') && str_contains(
 $assert( str_contains($reconciler, 'owner_rollback_completed') && str_contains($reconciler, 'spf_reconciliation_rollback_checkpoint_failed'), 'Round 77: owner rollback can be repeated after local-restore retry.' );
 $assert( str_contains($reconciler, 'reconciliation_compensation_incomplete'), 'Round 78: reconciliation compensation failure can be hidden.' );
 $assert( str_contains($uninstall, 'wp_unschedule_event') && str_contains($uninstall, 'delete_option'), 'Round 79: uninstall does not clean File 01 schedules/options.' );
-$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.1' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.1 / 1.2.0 / 2.0.0.' );
+$assert( str_contains($main, "define( 'SPF_VERSION', '2.0.2' )") && str_contains($main, "define( 'SPF_SCHEMA_VERSION', '1.2.0' )") && str_contains($main, "define( 'SPF_CONTRACT_VERSION', '2.0.0' )"), 'Round 80: current software/schema/contract identity drifted from File 01 2.0.2 / 1.2.0 / 2.0.0.' );
 
 if ( 80 !== $assertions ) {
     $failures[] = "Review harness itself executed {$assertions} assertions instead of 80.";

@@ -2,6 +2,16 @@
 defined( 'ABSPATH' ) || exit;
 
 final class SPF_Event_Bus {
+	/** This outbox certifies local action invocation, never downstream delivery/ACK. */
+	public static function delivery_semantics() {
+		return array(
+			'sent' => 'local_wordpress_action_completed',
+			'consumer_receipt_verified' => false,
+			'consumer_commit_proof_required' => true,
+			'provider_delivery_claim_allowed' => false,
+		);
+	}
+
 	public static function publish( $event_name, $aggregate_type, $aggregate_id, array $payload, $version = 1, $dedupe_key = '', $privacy_class = 'internal' ) {
 		global $wpdb;
 		$raw_event_name = (string) $event_name;
@@ -16,6 +26,8 @@ final class SPF_Event_Bus {
 			! $event_name || $raw_event_name !== $event_name || strlen( $event_name ) > 191 ||
 			! $aggregate_type || $raw_aggregate_type !== $aggregate_type || strlen( $aggregate_type ) > 64 ||
 			! $aggregate_id || $raw_aggregate_id !== $aggregate_id || strlen( $aggregate_id ) > 191 ||
+			str_contains( $aggregate_id, '@' ) || preg_match( '~https?://|[\r\n<>]~i', $aggregate_id ) ||
+			filter_var( $aggregate_id, FILTER_VALIDATE_IP ) || preg_match( '/^\+?[0-9][0-9(). -]{8,}$/D', $aggregate_id ) ||
 			$version < 1 || $version > 65535
 		) {
 			return new WP_Error( 'spf_invalid_event', __( 'Event identity fields must already be canonical and within their bounded contract envelope.', 'sabri-platform-foundation' ) );
@@ -51,7 +63,14 @@ final class SPF_Event_Bus {
 				return new WP_Error( 'spf_event_dedupe_lookup_failed', __( 'Existing event idempotency state could not be verified.', 'sabri-platform-foundation' ) );
 			}
 			if ( is_string( $legacy_match ) && '' !== $legacy_match ) {
-				return true;
+				$wpdb->last_error = '';
+				$old_payload = $wpdb->get_var( $wpdb->prepare(
+					'SELECT payload_json FROM ' . SPF_Installer::table( 'outbox' ) . ' WHERE event_id=%s LIMIT 1', $legacy_match
+				) );
+				if ( ! empty( $wpdb->last_error ) || ! is_string( $old_payload ) ) {
+					return new WP_Error( 'spf_event_dedupe_lookup_failed', __( 'Existing event payload could not be verified.', 'sabri-platform-foundation' ) );
+				}
+				return hash_equals( $old_payload, $payload_json ) ? true : new WP_Error( 'spf_event_dedupe_conflict', __( 'The event idempotency identity already contains a different payload.', 'sabri-platform-foundation' ) );
 			}
 		} else {
 			$dedupe_key = hash( 'sha256', $event_name . '|' . $version . '|' . $aggregate_type . '|' . $aggregate_id . '|' . $privacy_class . '|' . $payload_json );
@@ -70,7 +89,20 @@ final class SPF_Event_Bus {
 		$insert_error = (string) $wpdb->last_error;
 		$wpdb->suppress_errors( $previous_suppress );
 		if ( false === $inserted && false !== stripos( $insert_error, 'duplicate' ) ) {
-			return true;
+			$wpdb->last_error = '';
+			$existing = $wpdb->get_row( $wpdb->prepare(
+				'SELECT event_name,event_version,aggregate_type,aggregate_id,privacy_class,payload_json FROM ' . SPF_Installer::table( 'outbox' ) . ' WHERE dedupe_key=%s LIMIT 1', $dedupe_key
+			), ARRAY_A );
+			if ( ! empty( $wpdb->last_error ) || ! is_array( $existing ) ) {
+				return new WP_Error( 'spf_event_dedupe_lookup_failed', __( 'A duplicate event could not be verified safely.', 'sabri-platform-foundation' ) );
+			}
+			$same = (string)( $existing['event_name']??'' ) === $event_name
+				&& (int)( $existing['event_version']??0 ) === $version
+				&& (string)( $existing['aggregate_type']??'' ) === $aggregate_type
+				&& (string)( $existing['aggregate_id']??'' ) === $aggregate_id
+				&& (string)( $existing['privacy_class']??'' ) === $privacy_class
+				&& hash_equals( (string)( $existing['payload_json']??'' ), $payload_json );
+			return $same ? true : new WP_Error( 'spf_event_dedupe_conflict', __( 'The event idempotency identity already contains a different payload.', 'sabri-platform-foundation' ) );
 		}
 		return false === $inserted ? new WP_Error( 'spf_event_store_failed', __( 'The event could not be stored.', 'sabri-platform-foundation' ) ) : true;
 	}
@@ -109,8 +141,10 @@ final class SPF_Event_Bus {
 			$processed['recovered'] = (int) $recovered;
 			$limit = max( 1, min( 100, absint( $limit ) ) );
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE status IN ('pending','retry') AND available_at<=%s ORDER BY id ASC LIMIT %d", $now, $limit ), ARRAY_A );
-			if ( ! empty( $wpdb->last_error ) ) {
-				return new WP_Error( 'spf_outbox_select_failed', __( 'The outbox dispatch query failed.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
+			if ( ! empty( $wpdb->last_error ) || ! is_array( $rows ) ) {
+				// A silent null/false wpdb read is not an empty outbox. Never
+				// report successful dispatch when durable rows were not read.
+				return new WP_Error( 'spf_outbox_select_failed', __( 'The outbox dispatch query failed or returned an invalid result.', 'sabri-platform-foundation' ), array( 'status'=>503 ) );
 			}
 			foreach ( $rows as $row ) {
 				$lease_until = gmdate( 'Y-m-d H:i:s', time() + 600 );
@@ -210,7 +244,11 @@ final class SPF_Event_Bus {
 			if ( '' === $safe_key || $raw_key !== $safe_key || array_key_exists( $safe_key, $result ) ) {
 				return new WP_Error( 'spf_event_payload_key_invalid', __( 'Event payload keys must already be unique canonical keys.', 'sabri-platform-foundation' ) );
 			}
-			if ( preg_match( '/(^|_)(password|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private_key|api_key|encryption_key)($|_)/i', $safe_key ) ) {
+			// File 01's durable outbox is not an approved personal/clinical data store.
+			// Preserve the structure of operational events while redacting sensitive
+			// field families, including common direct identifiers and clinical notes.
+			$compact_key = str_replace( array( '_', '-' ), '', $safe_key );
+			if ( preg_match( '/password|passwd|passphrase|token|secret|authorization|cookie|nonce|patient|message|payment|identity|document|credential|private|apikey|encryption|email|mail|phone|telephone|mobile|address|name|surname|birth|dob|ipaddress|ipaddr|ssn|passport|card|credit|medical|clinical|diagnosis|prescription|therapy|note|content|body|location|latitude|longitude|geolocation|device|session|user|actor/i', $compact_key ) ) {
 				$result[ $safe_key ] = '[redacted]';
 			} elseif ( is_array( $value ) ) {
 				$nested = self::sanitize_payload( $value, $depth + 1 );

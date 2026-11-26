@@ -17,6 +17,9 @@ final class SPF_System_Check {
 		$trace = SPF_Audit::trace_id();
 		$checks = array();
 
+		$environment = function_exists( 'wp_get_environment_type' ) ? (string) wp_get_environment_type() : 'unknown';
+		$environment_valid = in_array( $environment, array( 'production','staging','development','local' ), true );
+		$checks[] = self::check( 'environment_type', $environment_valid, $environment_valid ? $environment : 'unknown', 'The WordPress environment type is not configured or recognized.', 'warning' );
 		$checks[] = self::check( 'php_version', version_compare( PHP_VERSION, '8.1.0', '>=' ), PHP_VERSION, 'PHP 8.1 or newer is required.', 'fail' );
 		$wp_version = get_bloginfo( 'version' );
 		$checks[] = self::check( 'wordpress_version', version_compare( $wp_version, '6.0', '>=' ), $wp_version, 'WordPress 6.0 or newer is required.', 'fail' );
@@ -81,7 +84,19 @@ final class SPF_System_Check {
 		$upload_path = isset( $upload['basedir'] ) ? $upload['basedir'] : '';
 		$writable = $upload_path && ( function_exists('wp_is_writable') ? wp_is_writable($upload_path) : is_writable($upload_path) );
 		$checks[] = self::check( 'uploads_writable', $writable, $writable?'writable':'not-writable', 'Uploads directory is not writable.', 'warning' );
+		// CF-04 / File 24 remain canonical owners; File 01 only reads a fresh,
+		// redacted provider-capability receipt, never credentials or storage paths.
+		$storage = apply_filters( 'spf_object_storage_capability_evidence', null, array( 'environment'=>$environment, 'purpose'=>'system_check' ) );
+		$observed = is_array( $storage ) ? strtotime( (string) ( $storage['observed_at'] ?? '' ) ) : false;
+		$expires = is_array( $storage ) ? strtotime( (string) ( $storage['expires_at'] ?? '' ) ) : false;
+		$provider = is_array( $storage ) ? (string) ( $storage['provider_id'] ?? '' ) : '';
+		$storage_ok = is_array( $storage ) && true === ( $storage['verified'] ?? false )
+			&& preg_match( '/^[a-z0-9_-]{1,64}$/D', $provider )
+			&& false !== $observed && $observed >= time() - 900 && $observed <= time() + 60
+			&& false !== $expires && $expires > time() && $expires <= $observed + 900;
+		$checks[] = self::check( 'object_storage_provider_capability', $storage_ok, $storage_ok ? 'provider-capability-verified' : 'provider-unverified', 'Object-storage provider capabilities lack fresh independent evidence; filesystem upload writability does not prove object-store availability.', 'warning' );
 
+		$checks = array_merge( $checks, self::source_registry_checks() );
 		$checks = array_merge( $checks, self::integration_checks() );
 		$checks = array_merge( $checks, self::queue_checks() );
 		$checks = array_merge( $checks, self::privacy_checks() );
@@ -92,12 +107,14 @@ final class SPF_System_Check {
 
 		$upgrade_state = get_option( 'spf_upgrade_state', array( 'status'=>'not-required' ) );
 		$schema_current = get_option( SPF_Installer::SCHEMA_OPTION, '0.0.0' );
-		$checks[] = self::check( 'schema_version_current', SPF_Registry::valid_semver((string)$schema_current) && version_compare($schema_current,SPF_SCHEMA_VERSION,'>='), sanitize_text_field((string)$schema_current), 'Schema upgrade is pending or blocked.', 'fail' );
-		$checks[] = self::check( 'upgrade_state', !in_array($upgrade_state['status']??'',array('authorization_required','backup_evidence_required','invalid_schema_version','rolled_back','rollback_incomplete'),true), sanitize_key($upgrade_state['status']??'not-required'), 'Schema upgrade requires operator/backup evidence, has invalid stored version evidence, or was rolled back.', 'warning' );
+		$checks[] = self::check( 'schema_version_current', SPF_Registry::valid_semver((string)$schema_current) && 0 === SPF_Registry::compare_semver((string)$schema_current,SPF_SCHEMA_VERSION), sanitize_text_field((string)$schema_current), 'Schema upgrade is pending or blocked.', 'fail' );
+		$checks[] = self::check( 'upgrade_state', !in_array($upgrade_state['status']??'',array('authorization_required','backup_evidence_required','invalid_schema_version','downgrade_blocked','schema_integrity_required','rolled_back','rollback_incomplete'),true), sanitize_key($upgrade_state['status']??'not-required'), 'Schema upgrade requires operator/backup evidence, has invalid stored version evidence, or was rolled back.', 'warning' );
 
 		$latest_release = SPF_Governance::list_releases( 1 );
-		$release_status = $latest_release ? $latest_release[0]['status'] : 'not-recorded';
-		$checks[] = self::check( 'release_evidence_record', (bool)$latest_release, $release_status, 'No immutable File 01 release-evidence record is registered.', 'warning' );
+		$release_read_ok = is_array( $latest_release );
+		$release_status = ! $release_read_ok ? 'read-failed' : ( $latest_release ? $latest_release[0]['status'] : 'not-recorded' );
+		$checks[] = self::check( 'release_evidence_query', $release_read_ok, $release_read_ok?'verified':'read-failed', 'Release registry query failed; release approval cannot be evaluated.', 'fail' );
+		$checks[] = self::check( 'release_evidence_record', $release_read_ok && (bool)$latest_release, $release_status, 'No immutable File 01 release-evidence record is registered.', 'warning' );
 		$checks[] = self::check( 'staging_accepted', 'approved'===$release_status || 'deployed'===$release_status, $release_status, 'Staging deployment alone is not acceptance; Founder-approved staging acceptance has not been recorded.', 'warning' );
 
 		$overall = self::overall( $checks );
@@ -111,8 +128,11 @@ final class SPF_System_Check {
 		if ( $persist ) {
 			$stored = self::persist( $result );
 			if ( is_wp_error( $stored ) ) {
-				$result['overall_status'] = 'fail';
-				$result['checks'][] = self::check( 'health_persistence', false, 'failed', 'Health result could not be persisted atomically.', 'fail' );
+				// A failed health write is a failed operation, not a successfully
+				// completed System Check with an ephemeral JSON-only warning.
+				// Admin post-actions and REST both understand WP_Error; do not
+				// send the operator a false "system_check_complete" redirect.
+				return new WP_Error( 'spf_health_persist_failed', __( 'The System Check ran, but its mandatory health, audit and event record could not be persisted. No successful completion is claimed.', 'sabri-platform-foundation' ), array( 'status' => 503 ) );
 			}
 		}
 		return $result;
@@ -137,23 +157,90 @@ final class SPF_System_Check {
 			: new WP_Error( 'spf_health_latest_corrupt', __( 'The latest File 01 health record is corrupt and cannot be treated as valid evidence.', 'sabri-platform-foundation' ) );
 	}
 
+	/**
+	 * Same-schema software updates do not rewrite stored manifest/option truth.
+	 * Detect stale ownership/event catalog evidence without attempting an
+	 * implicit, unaudited or irreversible production registry mutation.
+	 */
+	private static function source_registry_checks() {
+		$stored = (string) get_option( SPF_Installer::VERSION_OPTION, '0.0.0' );
+		$stored_valid = SPF_Registry::valid_semver( $stored );
+		$software_ok = $stored_valid && hash_equals( SPF_VERSION, $stored );
+		$checks = array(
+			self::check( 'installed_software_version', $software_ok, $stored_valid ? $stored : 'invalid-version', 'Stored File 01 software identity differs from this executable; approved release reconciliation is required.', 'warning' ),
+		);
+		$actual = SPF_Registry::get_module( 'file-01' );
+		$expected = SPF_Installer::file01_manifest();
+		$actual_events = is_array( $actual ) && is_array( $actual['events'] ?? null ) ? array_values( $actual['events'] ) : array();
+		$expected_events = array_values( $expected['events'] );
+		sort( $actual_events, SORT_STRING );
+		sort( $expected_events, SORT_STRING );
+		$manifest_ok = is_array( $actual ) && true === ( $actual['manifest_valid'] ?? false )
+			&& 'active' === ( $actual['state'] ?? '' )
+			&& hash_equals( SPF_VERSION, (string) ( $actual['software_version'] ?? '' ) )
+			&& hash_equals( SPF_CONTRACT_VERSION, (string) ( $actual['contract_version'] ?? '' ) )
+			&& $actual_events === $expected_events;
+		$checks[] = self::check(
+			'foundation_manifest_current', $manifest_ok,
+			$manifest_ok ? 'version-and-' . count( $expected_events ) . '-events-verified' : 'operator-reconciliation-required',
+			'The installed File 01 manifest, software version or event catalog differs from this source; stage authorized re-registration before release acceptance.',
+			'warning'
+		);
+		return $checks;
+	}
+
 	private static function integration_checks() {
 		$checks = array();
+		// Health checks are advisory and never create File 00 authorization.
+		// Require an actual adapter, a coherent registered owner manifest and
+		// the same optional-dependency availability rules used by readiness().
 		$providers = array(
-			'file00' => array( 'module'=>'file-00','available'=>has_filter('spf_file00_authorization_claim') || defined('SMC_VERSION') || function_exists('smc_membership_contract'),'message'=>'File 00 versioned authorization claims are unavailable; sensitive operations remain fail-closed.' ),
-			'file20' => array( 'module'=>'file-20','available'=>function_exists('sabri_shell_register_route') || has_action('sabri_shell_register_provider'),'message'=>'File 20 shell provider is unavailable; no public route cutover is authorized.' ),
-			'file21' => array( 'module'=>'file-21','available'=>has_filter('spf_owner_reconciliation_plan'),'message'=>'File 21 legacy reconciliation planning adapter is unavailable.' ),
-			'file24' => array( 'module'=>'file-24','available'=>has_filter('spf_verify_file24_purge_assurance') || has_filter('spf_verify_backup_restore_evidence'),'message'=>'File 24/assurance evidence adapters are unavailable.' ),
-			'file25' => array( 'module'=>'file-25','available'=>has_action('sabri_public_ui_register_component') || has_filter('sabri_public_ui_component_contract'),'message'=>'File 25 visual component contract is unavailable; File 01 exposes no replacement public UI.' ),
+			'file00' => array( 'module'=>'file-00','available'=> (bool) has_filter('spf_file00_authorization_claim'),'message'=>'File 00 claim provider or a structurally ready manifest is unavailable; sensitive actions remain fail-closed.' ),
+			'file20' => array( 'module'=>'file-20','available'=>function_exists('sabri_shell_register_route') || (bool) has_action('sabri_shell_register_provider'),'message'=>'File 20 shell provider is unavailable; no public route cutover is authorized.' ),
+			'file21' => array( 'module'=>'file-21','available'=>(bool) has_filter('spf_owner_reconciliation_plan'),'message'=>'File 21 reversible owner reconciliation adapter is unavailable.' ),
+			'file24' => array( 'module'=>'file-24','available'=>(bool) has_filter('spf_verify_file24_purge_assurance') || (bool) has_filter('spf_verify_backup_restore_evidence'),'message'=>'File 24 assurance evidence adapters are unavailable.' ),
+			// File 25 is a presentation-only observation, not a File 01 dependency.
+			'file25' => array( 'module'=>'file-25','available'=>(bool) has_action('sabri_public_ui_register_component') || (bool) has_filter('sabri_public_ui_component_contract'),'message'=>'File 25 visual component contract is unavailable; File 01 exposes no replacement public UI.' ),
 		);
+		$optional = array();
+		$foundation = SPF_Dependency_Resolver::readiness( 'file-01' );
+		foreach ( (array) ( $foundation['optional_dependencies'] ?? array() ) as $dependency ) {
+			if ( is_array( $dependency ) && is_string( $dependency['module_key'] ?? null ) ) {
+				$optional[ $dependency['module_key'] ] = $dependency;
+			}
+		}
 		foreach ( $providers as $code => $provider ) {
 			$manifest = SPF_Registry::get_module( $provider['module'] );
-			$registered = is_array($manifest) && !in_array($manifest['state'],array('unregistered','retired','suspended'),true);
-			$ok = $provider['available'] && $registered;
-			$checks[] = self::check( $code.'_contract', $ok, $ok?($manifest['contract_version']??'registered'):($provider['available']?'adapter-without-manifest':'unavailable'), $provider['message'], 'warning' );
+			$state = is_array($manifest) && is_string($manifest['state']??null) ? $manifest['state'] : 'unregistered';
+			$valid = is_array($manifest) && true === ($manifest['manifest_valid']??false)
+				&& SPF_Registry::valid_semver($manifest['software_version']??null)
+				&& SPF_Registry::valid_semver($manifest['contract_version']??null)
+				&& in_array($state,array('registered','compatible','active'),true);
+			// File 25 is not in the Foundation optional dependencies. It is
+			// still observed for presentational health, but cannot give authority.
+			$dependency = $optional[$provider['module']] ?? null;
+			$optional_ok = null === $dependency || true === ($dependency['available']??false);
+			$ok = (bool) $provider['available'] && $valid && $optional_ok;
+			$value = $ok ? 'adapter-and-manifest-ready' : (
+				! $provider['available'] ? 'adapter-unavailable' : (
+					! is_array($manifest) ? 'manifest-missing' : (
+						! ($manifest['manifest_valid']??false) ? 'manifest-invalid' : (
+							! in_array($state,array('registered','compatible','active'),true) ? 'manifest-'.$state : (
+								! $optional_ok ? 'dependency-incompatible' : 'version-invalid'
+							)
+						)
+					)
+				)
+			);
+			$checks[] = self::check( $code.'_contract', $ok, $value, $provider['message'], 'warning' );
 		}
 		$catalog = SPF_Installer::canonical_module_catalog();
-		$registered_keys = array_column( SPF_Registry::list_modules(array('limit'=>200)), 'module_key' );
+		$registered = SPF_Registry::list_modules( array( 'limit'=>200 ) );
+		if ( is_wp_error( $registered ) ) {
+			$checks[] = self::check( 'owner_manifests_query', false, 'read-failed', 'Module manifests could not be queried safely.', 'fail' );
+			return $checks;
+		}
+		$registered_keys = array_column( $registered, 'module_key' );
 		$missing = array_values(array_filter(array_column($catalog,'module_key'),static fn($key)=>!in_array($key,$registered_keys,true)));
 		$checks[] = self::check( 'owner_manifests', empty($missing), empty($missing)?'all-owner-manifests-registered':(count($missing).'-owner-manifests-pending'), 'Canonical catalog entries are not runtime manifests; each owner must register a real versioned manifest.', 'warning' );
 		return $checks;
@@ -166,9 +253,9 @@ final class SPF_System_Check {
 			return array(self::check('outbox',false,'missing','Outbox table is missing.','fail'));
 		}
 		$pending_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
-		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox health query failed.','fail'));}
+		if(!empty($wpdb->last_error) || ! preg_match('/^(0|[1-9][0-9]*)$/D',(string)$pending_raw)){return array(self::check('outbox_query',false,'query-failed','Outbox health query failed.','fail'));}
 		$dead_raw=$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status='dead'"); // phpcs:ignore
-		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox dead-letter query failed.','fail'));}
+		if(!empty($wpdb->last_error) || ! preg_match('/^(0|[1-9][0-9]*)$/D',(string)$dead_raw)){return array(self::check('outbox_query',false,'query-failed','Outbox dead-letter query failed.','fail'));}
 		$oldest_raw=$wpdb->get_var("SELECT MIN(created_at) FROM {$table} WHERE status IN ('pending','retry','processing')"); // phpcs:ignore
 		if(!empty($wpdb->last_error)){return array(self::check('outbox_query',false,'query-failed','Outbox age query failed.','fail'));}
 		$pending=(int)$pending_raw;
